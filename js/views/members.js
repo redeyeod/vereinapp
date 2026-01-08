@@ -29,6 +29,10 @@ const MembersView = {
                         <input type="text" id="memberSearch" onkeyup="MembersView.filter()" placeholder="Suchen..." 
                             class="w-full bg-dark-bg border-none rounded-lg pl-9 pr-4 py-2 text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm placeholder-dark-muted transition-shadow">
                     </div>
+                    <!-- Refresh Button -->
+                    <button onclick="MembersView.refreshData()" class="bg-dark-bg hover:bg-dark-hover border border-dark-border text-dark-muted hover:text-white w-10 h-10 rounded-lg flex items-center justify-center transition-colors" title="Liste neu laden">
+                        <i class="fa-solid fa-rotate-right"></i>
+                    </button>
                     ${addButtonHtml}
                 </div>
 
@@ -42,12 +46,28 @@ const MembersView = {
                     <div class="w-16 h-16 bg-dark-bg rounded-full flex items-center justify-center mb-4 text-2xl opacity-50 border border-dark-border">
                         <i class="fa-solid fa-user-slash"></i>
                     </div>
-                    <p class="text-sm">Keine Mitglieder gefunden.</p>
+                    <p class="text-sm font-bold">Keine Mitglieder gefunden.</p>
+                    <p class="text-xs mt-2 opacity-70 max-w-xs">
+                        Falls Sie Mitglieder erstellt haben, prüfen Sie bitte in Supabase, ob für die Tabelle "members" eine <b>RLS-Policy für SELECT</b> existiert.
+                    </p>
                 </div>
             </div>
         `;
         
         this.updateList();
+    },
+
+    async refreshData() {
+        const btn = document.querySelector('button[title="Liste neu laden"] i');
+        if(btn) btn.classList.add('animate-spin');
+        
+        if(typeof Store !== 'undefined') {
+            await Store.fetchTable('members');
+            this.updateList();
+            App.showToast('Liste aktualisiert');
+        }
+        
+        if(btn) btn.classList.remove('animate-spin');
     },
 
     updateList(filter = "") {
@@ -112,8 +132,8 @@ const MembersView = {
         if(!App.can('manage_members')) return;
         if(confirm("Möchten Sie dieses Mitglied wirklich löschen?")) { 
             await Store.remove('members', id); 
-            App.showToast('Mitglied gelöscht'); 
-            this.updateList();
+            // Automatisch neu laden
+            await this.refreshData();
         }
     },
 
@@ -380,11 +400,21 @@ const MembersView = {
             };
             
             await Store.add('members', newMember);
+            await this.refreshData(); // Erzwinge Neuladen
             
             // --- SUCCESS MODAL ---
             const mailSubject = encodeURIComponent("Willkommen im Verein!");
             const mailBody = encodeURIComponent(`Hallo ${firstName},\n\ndein Account wurde erfolgreich angelegt.\n\nDeine Zugangsdaten:\nE-Mail: ${email}\nPasswort: ${generatedPassword}\n\nBitte melde dich an und ändere dein Passwort.\n\nViele Grüße,\nDer Vorstand`);
             const mailtoLink = `mailto:${email}?subject=${mailSubject}&body=${mailBody}`;
+
+            let confirmationWarning = "";
+            if (authData.user && !authData.session && !authData.user.confirmed_at) {
+                confirmationWarning = `<div class="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 mb-4 text-left text-xs text-yellow-200">
+                    <i class="fa-solid fa-triangle-exclamation mr-1"></i> 
+                    <b>Wichtig:</b> Der Login funktioniert erst, wenn die E-Mail bestätigt wurde. 
+                    <br>Tipp: Deaktivieren Sie "Confirm Email" in den Supabase-Einstellungen (Authentication -> Providers -> Email), um sofortigen Login zu erlauben.
+                </div>`;
+            }
 
             const successHtml = `
                 <div class="p-8 text-center">
@@ -394,6 +424,8 @@ const MembersView = {
                     <h3 class="text-2xl font-bold text-white mb-2">Mitglied angelegt!</h3>
                     <p class="text-dark-muted text-sm mb-6">Das Profil wurde erstellt und der Login eingerichtet.</p>
                     
+                    ${confirmationWarning}
+
                     <div class="bg-dark-bg border border-dark-border rounded-xl p-4 mb-6 text-left relative group">
                         <p class="text-xs text-dark-muted uppercase font-bold mb-1">Generiertes Passwort</p>
                         <div class="flex justify-between items-center">
@@ -416,7 +448,6 @@ const MembersView = {
             `;
             
             App.openModal(successHtml);
-            this.updateList();
 
         } catch(err) {
             console.error("Fehler beim Erstellen:", err);
@@ -451,8 +482,8 @@ const MembersView = {
                 status: fd.get('status')
             };
             await Store.update('members', updated);
+            await this.refreshData(); // Erzwinge Neuladen
             App.closeModal();
-            this.updateList();
         }
     }
 };
