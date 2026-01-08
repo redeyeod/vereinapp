@@ -18,22 +18,22 @@ const WorkHoursView = {
         container.innerHTML = `
             <div class="flex justify-between items-center mb-6 fade-in">
                 <h3 class="text-lg md:text-xl font-bold text-white">Arbeitsstunden</h3>
-                <button onclick="WorkHoursView.openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg shadow-blue-900/30 flex items-center">
-                    <i class="fa-solid fa-clock-rotate-left mr-2"></i> <span class="hidden md:inline">Stunden eintragen</span><span class="md:hidden">Neu</span>
+                <button onclick="WorkHoursView.openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg shadow-blue-900/20 flex items-center">
+                    <i class="fa-solid fa-clock-rotate-left mr-2"></i> <span class="hidden md:inline">Stunden eintragen</span><span class="sm:hidden">Neu</span>
                 </button>
             </div>
             
             <div class="space-y-10 fade-in">
                 <!-- 1. Persönlicher Bereich (Für ALLE sichtbar) -->
                 <section>
-                    <h4 class="text-sm font-bold text-dark-muted uppercase tracking-wider mb-4 border-b border-dark-border pb-2">Mein Stundenkonto</h4>
+                    <h4 class="text-sm font-bold text-dark-muted uppercase tracking-wider mb-4 border-b border-dark-border pb-2 text-start">Mein Stundenkonto</h4>
                     ${this.renderMemberView()}
                 </section>
                 
                 <!-- 2. Admin Bereich (Nur für Berechtigte) -->
                 ${canManage ? `
                 <section>
-                    <h4 class="text-sm font-bold text-blue-400 uppercase tracking-wider mb-4 border-b border-blue-500/20 pb-2 mt-8">Verwaltung</h4>
+                    <h4 class="text-sm font-bold text-blue-400 uppercase tracking-wider mb-4 border-b border-blue-500/20 pb-2 mt-8 text-start">Verwaltung</h4>
                     ${this.renderAdminView()}
                 </section>` : ''}
             </div>
@@ -44,8 +44,9 @@ const WorkHoursView = {
     // MITGLIEDER ANSICHT (Persönlich)
     // =========================================================================
     renderMemberView() {
-        const myId = App.state.currentUser ? App.state.currentUser.id : 0;
-        const myEntries = Store.state.work_entries.filter(e => e.memberId === myId);
+        const myId = App.state.currentUser ? App.state.currentUser.id : (localStorage.getItem('vm_current_user_id') || 0);
+        const entries = Store.state.work_entries || [];
+        const myEntries = entries.filter(e => e.memberId == myId);
         
         // Berechne genehmigte Stunden
         const approvedHours = myEntries
@@ -69,7 +70,7 @@ const WorkHoursView = {
                             <i class="fa-solid fa-briefcase"></i>
                         </div>
                         
-                        <div class="relative z-10">
+                        <div class="relative z-10 text-start">
                             <h4 class="text-dark-muted text-xs font-bold uppercase tracking-wider mb-2">Fortschritt</h4>
                             <div class="flex items-end gap-2 mb-4">
                                 <span class="text-4xl md:text-5xl font-bold text-white">${approvedHours}</span>
@@ -99,7 +100,7 @@ const WorkHoursView = {
                             <span class="text-xs text-dark-muted bg-dark-bg px-2 py-0.5 rounded border border-dark-border">${myEntries.length} Einträge</span>
                         </div>
                         
-                        <div class="flex-1 overflow-y-auto max-h-[300px] custom-scrollbar">
+                        <div class="flex-1 overflow-y-auto max-h-[300px] custom-scrollbar text-start">
                             ${myEntries.length === 0 
                                 ? `<div class="p-12 text-center text-dark-muted text-sm flex flex-col items-center opacity-70"><i class="fa-regular fa-calendar-xmark text-3xl mb-2"></i>Noch keine Arbeitsstunden eingetragen.</div>`
                                 : `<div class="divide-y divide-dark-border">
@@ -121,7 +122,7 @@ const WorkHoursView = {
 
         return `
             <div class="p-4 flex items-center justify-between hover:bg-dark-hover/30 transition-colors group">
-                <div class="min-w-0 pr-4">
+                <div class="min-w-0 pr-4 text-start">
                     <p class="text-white font-bold text-sm truncate">${entry.activity}</p>
                     <p class="text-dark-muted text-xs flex items-center gap-3 mt-1">
                         <span><i class="fa-regular fa-calendar mr-1"></i> ${new Date(entry.date).toLocaleDateString()}</span>
@@ -144,22 +145,25 @@ const WorkHoursView = {
     // ADMIN ANSICHT
     // =========================================================================
     renderAdminView() {
+        const entries = Store.state.work_entries || [];
+        const members = Store.state.members || [];
+        
         // Offene Anträge sammeln
-        const pendingEntries = Store.state.work_entries.filter(e => e.status === 'pending');
+        const pendingEntries = entries.filter(e => e.status === 'pending');
         
         // Gesamtstatistik berechnen
-        const memberStats = Store.state.members.map(m => {
-            const hours = Store.state.work_entries
-                .filter(e => e.memberId === m.id && e.status === 'approved')
+        const memberStats = members.map(m => {
+            const hours = entries
+                .filter(e => e.memberId == m.id && e.status === 'approved')
                 .reduce((sum, e) => sum + parseFloat(e.hours), 0);
             return { ...m, hours };
         }).sort((a,b) => a.hours - b.hours); // Wenigste Stunden zuerst
 
         return `
             <div class="space-y-8 pb-10">
-                <!-- 1. Offene Anträge (Posteingang) -->
+                <!-- 1. Offene Anträge -->
                 ${pendingEntries.length > 0 ? `
-                <div>
+                <div class="text-start">
                     <h4 class="text-sm font-bold text-yellow-400 uppercase tracking-wider mb-4 flex items-center">
                         <i class="fa-solid fa-inbox mr-2"></i> Offene Anträge <span class="ml-2 bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded text-xs border border-yellow-500/30">${pendingEntries.length}</span>
                     </h4>
@@ -174,7 +178,7 @@ const WorkHoursView = {
                 }
 
                 <!-- 2. Gesamtübersicht Liste -->
-                <div>
+                <div class="text-start">
                     <div class="flex justify-between items-end mb-4">
                         <h4 class="text-sm font-bold text-dark-muted uppercase tracking-wider">Mitglieder Übersicht</h4>
                         <div class="text-xs text-dark-muted bg-dark-card border border-dark-border px-3 py-1 rounded-lg">
@@ -204,7 +208,7 @@ const WorkHoursView = {
                                             <td class="p-4">
                                                 <div class="flex items-center gap-3">
                                                     <div class="w-8 h-8 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold">
-                                                        ${m.firstName.charAt(0)}${m.lastName.charAt(0)}
+                                                        ${(m.firstName || '?').charAt(0)}${(m.lastName || '?').charAt(0)}
                                                     </div>
                                                     <span class="font-medium">${m.firstName} ${m.lastName}</span>
                                                 </div>
@@ -236,11 +240,11 @@ const WorkHoursView = {
     },
 
     renderApprovalCard(entry) {
-        const member = Store.state.members.find(m => m.id === entry.memberId);
+        const member = Store.state.members.find(m => m.id == entry.memberId);
         const name = member ? `${member.firstName} ${member.lastName}` : 'Unbekannt';
 
         return `
-            <div class="bg-dark-card p-5 rounded-2xl border border-dark-border shadow-md flex flex-col hover:border-yellow-500/30 transition-all">
+            <div class="bg-dark-card p-5 rounded-2xl border border-dark-border shadow-md flex flex-col hover:border-yellow-500/30 transition-all text-start">
                 <div class="flex justify-between items-start mb-3">
                     <div class="flex items-center gap-2">
                         <div class="w-8 h-8 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold">
@@ -278,15 +282,15 @@ const WorkHoursView = {
     // =========================================================================
     
     openMemberDetails(memberId) {
-        const member = Store.state.members.find(m => m.id === memberId);
+        const member = Store.state.members.find(m => m.id == memberId);
         if(!member) return;
 
-        const entries = Store.state.work_entries.filter(e => e.memberId === memberId).sort((a,b) => new Date(b.date) - new Date(a.date));
+        const entries = (Store.state.work_entries || []).filter(e => e.memberId == memberId).sort((a,b) => new Date(b.date) - new Date(a.date));
         const total = entries.filter(e => e.status === 'approved').reduce((sum, e) => sum + parseFloat(e.hours), 0);
 
         const html = `
             <div class="p-6 md:p-8 h-[80vh] flex flex-col">
-                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4">
+                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 text-start">
                     <div>
                         <h3 class="text-xl font-bold text-white">${member.firstName} ${member.lastName}</h3>
                         <p class="text-sm text-blue-400 font-mono font-bold mt-1">${total} / ${this.TARGET_HOURS} Std. genehmigt</p>
@@ -294,7 +298,7 @@ const WorkHoursView = {
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
                 
-                <div class="flex-1 overflow-y-auto custom-scrollbar bg-dark-bg/30 rounded-xl border border-dark-border">
+                <div class="flex-1 overflow-y-auto custom-scrollbar bg-dark-bg/30 rounded-xl border border-dark-border text-start">
                     ${entries.length === 0 
                         ? `<div class="p-8 text-center text-dark-muted text-sm">Keine Einträge vorhanden.</div>`
                         : `<div class="divide-y divide-dark-border">
@@ -306,7 +310,6 @@ const WorkHoursView = {
         `;
         App.openModal(html);
         
-        // Modal Style
         const modalContainer = document.getElementById('modal-content');
         if(modalContainer) {
             modalContainer.classList.remove('max-w-md');
@@ -323,25 +326,26 @@ const WorkHoursView = {
             Store.remove('work_entries', id);
             
             // Views aktualisieren
-            this.render(document.getElementById('content'));
+            setTimeout(() => this.render(document.getElementById('content')), 100);
             
-            // Falls das Admin-Modal offen ist, dieses auch neu laden (etwas komplexer, wir schließen es einfachheitshalber oder laden neu)
-            // Wenn wir im Modal sind, ist es sauberer es neu zu rendern oder zu schließen.
-            // Check ob modal offen:
             const modal = document.getElementById('modal-content');
             if(modal && modal.innerHTML.includes('genehmigt')) {
-                // Wir sind wahrscheinlich im Admin-Detail-Modal -> Schließen und Toast
                 App.closeModal(); 
             }
             App.showToast("Eintrag gelöscht");
         }
     },
 
-    decide(id, status) {
-        const entry = Store.state.work_entries.find(e => e.id === id);
+    async decide(id, status) {
+        const entry = Store.state.work_entries.find(e => e.id == id);
         if(entry) {
-            entry.status = status;
-            Store.save();
+            const updatedEntry = { ...entry, status: status };
+            await Store.update('work_entries', updatedEntry);
+            
+            // Lokales Update
+            const idx = Store.state.work_entries.indexOf(entry);
+            if(idx !== -1) Store.state.work_entries[idx] = updatedEntry;
+
             App.showToast(status === 'approved' ? 'Stunden genehmigt' : 'Antrag abgelehnt');
             this.render(document.getElementById('content'));
         }
@@ -350,30 +354,30 @@ const WorkHoursView = {
     openAddModal() {
         const html = `
             <div class="p-6 md:p-8">
-                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4">
+                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 text-start">
                     <h3 class="text-xl font-bold text-white">Arbeitsstunden erfassen</h3>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
                 
-                <form onsubmit="WorkHoursView.handleSubmit(event)" class="space-y-5">
+                <form onsubmit="WorkHoursView.handleSubmit(event)" class="space-y-5 text-start">
                     <div>
-                        <label class="text-muted">Tätigkeit / Veranstaltung</label>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Tätigkeit / Veranstaltung</label>
                         <input type="text" name="activity" required class="form-input" placeholder="z.B. Thekendienst Prunksitzung">
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="text-muted">Datum</label>
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Datum</label>
                             <input type="date" name="date" required class="form-input dark-date">
                         </div>
                         <div>
-                            <label class="text-muted">Stunden (z.B. 4.5)</label>
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Stunden (z.B. 4.5)</label>
                             <input type="number" name="hours" step="0.5" min="0.5" required class="form-input" placeholder="0.0">
                         </div>
                     </div>
 
                     <div>
-                        <label class="text-muted">Bemerkung (Optional)</label>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Bemerkung (Optional)</label>
                         <textarea name="comment" class="form-input" rows="2" placeholder="Details..."></textarea>
                     </div>
                     
@@ -389,13 +393,13 @@ const WorkHoursView = {
         App.openModal(html);
     },
 
-    handleSubmit(e) {
+    async handleSubmit(e) {
         e.preventDefault();
         const fd = new FormData(e.target);
+        const myId = App.state.currentUser ? App.state.currentUser.id : (localStorage.getItem('vm_current_user_id') || 0);
         
         const newEntry = {
-            id: Date.now(),
-            memberId: App.state.currentUser ? App.state.currentUser.id : 0,
+            memberId: myId,
             activity: fd.get('activity'),
             date: fd.get('date'),
             hours: parseFloat(fd.get('hours')),
@@ -403,9 +407,12 @@ const WorkHoursView = {
             status: 'pending' // Muss erst genehmigt werden
         };
 
-        Store.add('work_entries', newEntry);
+        await Store.add('work_entries', newEntry);
         App.closeModal();
         App.showToast('Antrag erfolgreich eingereicht');
         this.render(document.getElementById('content'));
     }
 };
+
+// WICHTIG: Global verfügbar machen für die neue App.js
+window.WorkHoursView = WorkHoursView;
