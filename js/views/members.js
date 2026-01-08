@@ -113,7 +113,6 @@ const MembersView = {
         if(confirm("Möchten Sie dieses Mitglied wirklich löschen?")) { 
             await Store.remove('members', id); 
             App.showToast('Mitglied gelöscht'); 
-            // Refresh via Store.onUpdate oder manuell
             this.updateList();
         }
     },
@@ -222,7 +221,7 @@ const MembersView = {
                     </div>
                     <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mt-6 mb-3">Kontakt</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Email</label><input type="email" name="email" class="form-input"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Email</label><input type="email" name="email" class="form-input" placeholder="Wichtig für Login"></div>
                         <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Telefon</label><input type="tel" name="phone" class="form-input"></div>
                     </div>
                     <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Geburtsdatum</label><input type="date" name="birthdate" class="form-input dark-date"></div>
@@ -233,11 +232,19 @@ const MembersView = {
                         </select>
                         <input type="text" name="customRole" id="customRoleInput" class="form-input mt-2 hidden" placeholder="Bezeichnung der Rolle eingeben">
                     </div>
-                    <button type="submit" class="btn-primary w-full mt-4">Speichern</button>
+                    
+                    <div class="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 flex gap-3 items-start mt-4">
+                        <i class="fa-solid fa-key text-blue-400 mt-0.5"></i>
+                        <p class="text-xs text-blue-300">Ein sicheres Passwort wird automatisch generiert und im nächsten Schritt angezeigt.</p>
+                    </div>
+
+                    <button type="submit" class="btn-primary w-full mt-2">Mitglied anlegen</button>
                 </form>
             </div>
         `;
         App.openModal(html);
+        const modalContainer = document.getElementById('modal-content');
+        if(modalContainer) modalContainer.classList.add('max-h-[90vh]', 'overflow-y-auto', 'custom-scrollbar');
     },
 
     openEditModal(id) {
@@ -252,7 +259,7 @@ const MembersView = {
         const roleOptions = this.standardRoles.map(r => `<option value="${r}" ${member.role === r ? 'selected' : ''}>${r}</option>`).join('');
 
         const html = `
-            <div class="p-4 md:p-8">
+            <div class="p-4 md:p-8 max-h-[85vh] overflow-y-auto custom-scrollbar">
                 <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 sticky top-0 bg-dark-card z-10">
                     <h3 class="text-lg md:text-xl font-bold text-white">Mitglied bearbeiten</h3>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
@@ -296,6 +303,17 @@ const MembersView = {
             </div>
         `;
         App.openModal(html);
+        const modalContainer = document.getElementById('modal-content');
+        if(modalContainer) modalContainer.classList.add('max-h-[90vh]', 'overflow-y-auto', 'custom-scrollbar');
+    },
+
+    generatePassword() {
+        const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$";
+        let pass = "";
+        for (let i = 0; i < 12; i++) {
+            pass += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return pass;
     },
 
     async handleAdd(e) {
@@ -304,23 +322,67 @@ const MembersView = {
         let role = fd.get('roleSelect');
         if (role === 'custom') role = fd.get('customRole') || 'Mitglied';
 
+        // Passwort generieren
+        const generatedPassword = this.generatePassword();
+        const email = fd.get('email');
+        const firstName = fd.get('firstName');
+
         const newMember = { 
-            firstName: fd.get('firstName'), 
+            firstName: firstName, 
             lastName: fd.get('lastName'),
             street: fd.get('street'),
             houseNumber: fd.get('houseNumber'),
             zip: fd.get('zip'),
             city: fd.get('city'),
-            email: fd.get('email'),
+            email: email,
             phone: fd.get('phone'),
             birthdate: fd.get('birthdate'),
             role: role, 
             status: 'active',
-            groups: [] // JSONB Array in Supabase
+            groups: []
+            // Hinweis: In einem echten Szenario würden wir das Passwort hier NICHT im Klartext speichern,
+            // sondern über eine Edge Function den Auth-User anlegen. 
+            // Für diese Simulation speichern wir es nicht, sondern zeigen es nur an.
         };
         
         await Store.add('members', newMember);
-        App.closeModal(); 
+        
+        // Modal zur Bestätigung & Email Simulation
+        const mailSubject = encodeURIComponent("Willkommen im Verein!");
+        const mailBody = encodeURIComponent(`Hallo ${firstName},\n\ndein Account wurde erfolgreich angelegt.\n\nDeine Zugangsdaten:\nE-Mail: ${email}\nPasswort: ${generatedPassword}\n\nBitte melde dich an und ändere dein Passwort.\n\nViele Grüße,\nDer Vorstand`);
+        const mailtoLink = `mailto:${email}?subject=${mailSubject}&body=${mailBody}`;
+
+        const successHtml = `
+            <div class="p-8 text-center">
+                <div class="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center text-green-500 text-3xl mx-auto mb-4 border border-green-500/20">
+                    <i class="fa-solid fa-check"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-white mb-2">Mitglied angelegt!</h3>
+                <p class="text-dark-muted text-sm mb-6">Das Profil wurde erfolgreich gespeichert.</p>
+                
+                <div class="bg-dark-bg border border-dark-border rounded-xl p-4 mb-6 text-left relative group">
+                    <p class="text-xs text-dark-muted uppercase font-bold mb-1">Generiertes Passwort</p>
+                    <div class="flex justify-between items-center">
+                        <code class="text-blue-400 font-mono text-lg select-all">${generatedPassword}</code>
+                        <button onclick="navigator.clipboard.writeText('${generatedPassword}'); App.showToast('Passwort kopiert')" class="text-dark-muted hover:text-white p-2" title="Kopieren">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                    </div>
+                    <p class="text-[10px] text-red-400 mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Bitte sofort notieren oder versenden!</p>
+                </div>
+
+                <div class="flex gap-3">
+                    <button onclick="App.closeModal()" class="flex-1 py-3 rounded-xl border border-dark-border text-dark-muted hover:text-white transition-colors">
+                        Schließen
+                    </button>
+                    <a href="${mailtoLink}" target="_blank" class="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-envelope"></i> E-Mail senden
+                    </a>
+                </div>
+            </div>
+        `;
+        
+        App.openModal(successHtml);
         this.updateList();
     },
 
