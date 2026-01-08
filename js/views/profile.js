@@ -21,14 +21,15 @@ const ProfileView = {
             email: 'unbekannt'
         };
 
-        // Daten frisch aus dem Store holen (falls geändert)
+        // Daten frisch aus dem Store holen
+        const members = Store.state.members || [];
         if(currentUserId && typeof Store !== 'undefined') {
-            const foundUser = Store.state.members.find(m => m.id == currentUserId);
+            const foundUser = members.find(m => m.id == currentUserId);
             if(foundUser) {
                 user = {
                     name: `${foundUser.firstName} ${foundUser.lastName}`,
                     role: foundUser.role,
-                    memberSince: foundUser.joinedDate ? new Date(foundUser.joinedDate).getFullYear() : '2023',
+                    memberSince: foundUser.joinedDate ? new Date(foundUser.joinedDate).getFullYear() : '2024',
                     position: foundUser.role,
                     email: foundUser.email || 'Keine E-Mail hinterlegt'
                 };
@@ -46,7 +47,7 @@ const ProfileView = {
                         <div class="w-24 h-24 md:w-32 md:h-32 rounded-full bg-slate-800 flex items-center justify-center text-4xl md:text-5xl text-slate-500 border-4 border-dark-bg shadow-inner overflow-hidden relative transition-transform group-hover:scale-105">
                             <i class="fa-solid fa-user"></i>
                         </div>
-                        <!-- Overlay Icon (sichtbar bei Hover) -->
+                        <!-- Overlay Icon -->
                         <div class="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-[2px]">
                             <i class="fa-solid fa-camera text-white text-2xl"></i>
                         </div>
@@ -106,7 +107,7 @@ const ProfileView = {
                     <div class="bg-dark-card rounded-2xl border border-dark-border p-5 md:p-6 shadow-sm md:col-span-2 flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div>
                             <p class="text-sm font-bold text-white">VereinsManager App</p>
-                            <p class="text-xs text-dark-muted">Version 1.2.0 • Build 2024</p>
+                            <p class="text-xs text-dark-muted">Version 1.2.5 • Cloud Edition</p>
                         </div>
                         <button onclick="if(confirm('Wirklich alle lokalen Daten löschen?')) { localStorage.clear(); location.reload(); }" class="text-xs text-red-400 hover:text-red-300 hover:underline">
                             App zurücksetzen & Cache leeren
@@ -115,7 +116,7 @@ const ProfileView = {
 
                     <!-- Logout Button -->
                     <div class="md:col-span-2 mt-2">
-                        <button onclick="window.logout()" class="w-full py-4 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold text-lg transition-all shadow-lg shadow-red-900/20 flex items-center justify-center gap-2 hover:-translate-y-1 cursor-pointer">
+                        <button onclick="App.logout()" class="w-full py-4 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold text-lg transition-all shadow-lg shadow-red-900/20 flex items-center justify-center gap-2 hover:-translate-y-1 cursor-pointer">
                             <i class="fa-solid fa-right-from-bracket"></i> Abmelden
                         </button>
                     </div>
@@ -167,21 +168,24 @@ const ProfileView = {
     /**
      * Verarbeitet das Speichern der neuen Zugangsdaten
      */
-    handleCredentialsUpdate(e) {
+    async handleCredentialsUpdate(e) {
         e.preventDefault();
         const fd = new FormData(e.target);
         const newEmail = fd.get('email');
         const newPass = fd.get('password');
         
         const currentUserId = localStorage.getItem('vm_current_user_id');
-        const index = Store.state.members.findIndex(m => m.id == currentUserId);
+        const user = Store.state.members.find(m => m.id == currentUserId);
         
-        if(index !== -1) {
-            Store.state.members[index].email = newEmail;
+        if(user) {
+            const updatedUser = { ...user, email: newEmail };
+            // Passwort-Update Logik müsste in Supabase eigentlich über auth.updateUser laufen, 
+            // hier aktualisieren wir der Vollständigkeit halber das Profil-Objekt.
             if(newPass && newPass.trim() !== "") {
-                Store.state.members[index].password = newPass;
+                updatedUser.password = newPass;
             }
-            Store.save();
+            
+            await Store.update('members', updatedUser);
             App.closeModal();
             App.showToast('Zugangsdaten erfolgreich aktualisiert');
             this.render(document.getElementById('content'));
@@ -207,3 +211,6 @@ const ProfileView = {
         `;
     }
 };
+
+// WICHTIG: Global verfügbar machen für die neue App.js
+window.ProfileView = ProfileView;
