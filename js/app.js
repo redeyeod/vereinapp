@@ -1,6 +1,6 @@
 /**
  * =============================================================================
- * APP CORE LOGIC (Fixed Global Scope & Modal Transitions)
+ * APP CORE LOGIC (Robust Modal & Global Scope)
  * Steuert Navigation, Login, Berechtigungen und UI
  * =============================================================================
  */
@@ -19,7 +19,7 @@ const App = {
     async init() {
         console.log("App Init gestartet...");
 
-        // 1. Warte auf Store
+        // 1. Warte auf Store (max 2 Sekunden)
         let attempts = 0;
         while (typeof Store === 'undefined' && attempts < 20) {
             await new Promise(r => setTimeout(r, 100));
@@ -27,36 +27,38 @@ const App = {
         }
 
         if (typeof Store === 'undefined') {
-            console.error("Store.js nicht geladen!");
+            console.error("Store.js konnte nicht geladen werden!");
+            this.showToast("Datenmodul fehlt!");
             return;
         }
 
         // 2. Store initialisieren
-        await Store.init();
+        try {
+            await Store.init();
+        } catch (e) {
+            console.error("Store Init fehlgeschlagen", e);
+        }
 
         // 3. Reaktivität: Wenn Daten aus der Cloud kommen -> UI Update
         Store.onUpdate = () => {
+            if (!this.state.currentUser) return;
+            
             this.updateNotificationDot();
             
             const activeTag = document.activeElement ? document.activeElement.tagName : '';
-            // Kein automatischer Refresh während der User tippt (verhindert Cursor-Sprünge)
+            // Kein Refresh während der User schreibt
             if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
-                 if (this.state.currentUser) {
-                     this.router(Store.state.currentView || 'dashboard');
-                 }
+                this.router(Store.state.currentView || 'dashboard');
             }
         };
 
         // 4. Setup
         this.loadCurrentUser();
         this.initTheme();
-        this.injectStyles();
         
-        // 5. Routing Start
-        if (this.state.currentUser || localStorage.getItem('vm_current_user_id')) {
-            const startView = Store.state.currentView || 'dashboard';
-            this.router(startView);
-            this.updateNotificationDot();
+        // 5. Startansicht bestimmen
+        if (this.state.currentUser) {
+            this.router(Store.state.currentView || 'dashboard');
         } else {
             this.showAuthView();
         }
@@ -76,12 +78,12 @@ const App = {
         if(errorDiv) errorDiv.classList.add('hidden');
 
         const fd = new FormData(e.target);
-        const email = fd.get('email');
+        const email = fd.get('email').toLowerCase().trim();
         const password = fd.get('password');
 
         try {
             if (typeof supabase === 'undefined' || typeof CONFIG === 'undefined') {
-                throw new Error("Verbindungsinformationen fehlen.");
+                throw new Error("Konfiguration fehlt.");
             }
             const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
             const { data, error } = await _sb.auth.signInWithPassword({ email, password });
@@ -95,13 +97,15 @@ const App = {
                     });
                     return;
                 }
-                throw new Error("Login fehlgeschlagen. Daten prüfen.");
+                throw new Error("Login fehlgeschlagen. Bitte Daten prüfen.");
             }
 
             localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
-            if (Store.state.members.length === 0) await Store.fetchTable('members');
             
-            let user = Store.state.members.find(m => m.email === email);
+            // Versuche Profildaten zu laden
+            if (Store.fetchTable) await Store.fetchTable('members');
+            
+            let user = Store.state.members.find(m => m.email.toLowerCase() === email);
             if (!user) {
                 user = { id: data.user.id, email: email, firstName: 'User', role: email === 'admin@gmail.com' ? 'Admin' : 'Mitglied' };
             }
@@ -124,7 +128,8 @@ const App = {
 
     loginSuccess(user) {
         if (!user) return;
-        if (user.email === 'admin@gmail.com') user.role = 'Admin';
+        // Admin Force
+        if (user.email.toLowerCase() === 'admin@gmail.com') user.role = 'Admin';
         
         localStorage.setItem('vm_current_user_id', user.id);
         this.state.currentUser = user;
@@ -137,9 +142,8 @@ const App = {
     },
 
     logout() {
-        if(confirm("Abmelden?")) {
-            localStorage.removeItem('vm_current_user_id');
-            localStorage.removeItem('vm_supabase_session');
+        if(confirm("Wirklich abmelden?")) {
+            localStorage.clear();
             location.reload();
         }
     },
@@ -152,8 +156,8 @@ const App = {
             const session = JSON.parse(sessionStr);
             if (!session || !session.user) return;
 
-            const email = session.user.email;
-            let user = Store.state.members.find(m => m.email === email);
+            const email = session.user.email.toLowerCase();
+            let user = Store.state.members.find(m => m.email.toLowerCase() === email);
             
             if(!user) {
                 user = { id: session.user.id, email: email, firstName: 'User', role: email === 'admin@gmail.com' ? 'Admin' : 'Mitglied' };
@@ -163,7 +167,7 @@ const App = {
             this.state.currentUser = user;
             this.updateHeaderUI();
         } catch(e) { 
-            console.error("User Load Error", e); 
+            console.error("User Session Error", e); 
             localStorage.removeItem('vm_supabase_session');
         }
     },
@@ -203,30 +207,15 @@ const App = {
         };
         if(subtitle) subtitle.textContent = titles[viewName] || 'Übersicht';
 
-        // View-Lookup über das globale window Objekt
+        // View-Lookup
         const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
         let viewObj = window[viewObjName];
-
-        // Fallback für manuelle Switch-Logik
-        if(!viewObj) {
-            switch(viewName) {
-                case 'dashboard': viewObj = window.DashboardView; break;
-                case 'members': viewObj = window.MembersView; break;
-                case 'groups': viewObj = window.GroupsView; break;
-                case 'calendar': viewObj = window.CalendarView; break;
-                case 'news': viewObj = window.NewsView; break;
-                case 'documents': viewObj = window.DocsView; break;
-                case 'messenger': viewObj = window.MessengerView; break;
-                case 'profile': viewObj = window.ProfileView; break;
-                case 'workhours': viewObj = window.WorkHoursView; break;
-            }
-        }
 
         if (viewObj && typeof viewObj.render === 'function') {
             viewObj.render(container);
         } else {
-            console.warn(`View "${viewName}" konnte nicht geladen werden.`);
-            if(container) container.innerHTML = `<p class="text-dark-muted">Lade ${viewName}...</p>`;
+            console.warn(`View "${viewName}" (Objekt: ${viewObjName}) nicht gefunden.`);
+            if(container) container.innerHTML = `<div class="p-10 text-center opacity-50"><i class="fa-solid fa-spinner animate-spin text-3xl mb-4"></i><p>Lade ${viewName}...</p></div>`;
         }
     },
 
@@ -234,19 +223,21 @@ const App = {
     can(action) {
         const user = this.state.currentUser;
         if (!user) return false; 
-        if (user.email === 'admin@gmail.com') return true;
+        if (user.email.toLowerCase() === 'admin@gmail.com' || user.role === 'Admin') return true;
 
         const role = user.role || 'Mitglied';
-        const adminRoles = ['1. Vorstand', '2. Vorstand', '3. Vorstand', '4. Vorstand', 'Präsident', 'Vize-Präsident', 'Admin', 'Vorstand'];
+        const adminRoles = ['1. Vorstand', '2. Vorstand', '3. Vorstand', '4. Vorstand', 'Präsident', 'Vize-Präsident', 'Vorstand'];
         const managerRoles = ['Kassenwart', 'Protokollant', 'Trainer', 'Abteilungsleiter'];
 
         if (adminRoles.includes(role)) return true;
 
         const permissions = {
             'manage_workhours': managerRoles.includes(role),
-            'manage_members': false, // Nur Admins (wird oben abgefangen)
-            'manage_groups': role === 'Abteilungsleiter',
-            'manage_news': role === 'Protokollant'
+            'manage_members': false, // Nur Admins (oben geprüft)
+            'manage_groups': role === 'Abteilungsleiter' || managerRoles.includes(role),
+            'manage_news': role === 'Protokollant' || role === 'Schriftführer',
+            'manage_events': adminRoles.includes(role) || role === 'Trainer',
+            'manage_docs': role === 'Schriftführer' || role === 'Vorstand'
         };
 
         return permissions[action] || false;
@@ -258,21 +249,34 @@ const App = {
         document.getElementById('app-view').classList.add('hidden');
     },
 
+    /**
+     * Öffnet ein Modal mit Inhalt
+     */
     openModal(htmlContent) { 
         const overlay = document.getElementById('modal-overlay');
         const content = document.getElementById('modal-content');
+        
         if (overlay && content) {
+            // Reset Animation Classes
+            content.classList.remove('opacity-100', 'scale-100');
+            content.classList.add('opacity-0', 'scale-95');
+            
             content.innerHTML = htmlContent;
             overlay.classList.remove('hidden');
+            overlay.classList.add('flex'); // Sicherstellen, dass es zentriert ist
             
-            // Timeout um die Animation zu triggern (Opacity und Scale)
-            setTimeout(() => {
-                content.classList.remove('opacity-0', 'scale-95');
-                content.classList.add('opacity-100', 'scale-100');
-            }, 10);
+            // Reflow erzwingen
+            void content.offsetWidth;
+            
+            // Animation starten
+            content.classList.remove('opacity-0', 'scale-95');
+            content.classList.add('opacity-100', 'scale-100');
         }
     },
 
+    /**
+     * Schließt das Modal
+     */
     closeModal() { 
         const overlay = document.getElementById('modal-overlay');
         const content = document.getElementById('modal-content');
@@ -282,10 +286,12 @@ const App = {
             content.classList.add('opacity-0', 'scale-95');
         }
 
-        // Warte bis die Animation zu Ende ist (300ms wie im CSS definiert)
         setTimeout(() => {
-            if (overlay) overlay.classList.add('hidden');
-        }, 300);
+            if (overlay) {
+                overlay.classList.add('hidden');
+                overlay.classList.remove('flex');
+            }
+        }, 200);
     },
 
     showToast(message) { 
@@ -297,22 +303,24 @@ const App = {
         } 
     },
 
-    updateNotificationDot() { /* Logik für den roten Punkt am Bell-Icon */ },
-    initTheme() { this.applyTheme(); },
-    toggleTheme() { 
-        this.state.theme = this.state.theme === 'dark' ? 'light' : 'dark'; 
-        localStorage.setItem('vm_theme', this.state.theme); 
-        this.applyTheme(); 
+    updateNotificationDot() {
+        const dot = document.getElementById('notif-dot');
+        if(dot) dot.classList.add('hidden'); // Placeholder
     },
-    applyTheme() {
-        const root = document.documentElement;
-        if (this.state.theme === 'dark') root.classList.add('dark');
-        else root.classList.remove('dark');
+
+    initTheme() {
+        document.documentElement.classList.add('dark');
     },
-    injectStyles() { /* Form-Styles etc. */ }
+
+    injectStyles() {
+        // Nicht mehr nötig, da in index.html definiert
+    }
 };
 
-// WICHTIG: App global verfügbar machen!
+// Global verfügbar machen
 window.App = App;
 
-document.addEventListener('DOMContentLoaded', () => { App.init(); });
+// App starten
+document.addEventListener('DOMContentLoaded', () => { 
+    App.init().catch(err => console.error("App Init Error", err)); 
+});
