@@ -1,6 +1,6 @@
 /**
  * =============================================================================
- * APP CORE LOGIC (Fixed Global Scope)
+ * APP CORE LOGIC (Fixed Global Scope & Modal Transitions)
  * Steuert Navigation, Login, Berechtigungen und UI
  * =============================================================================
  */
@@ -203,9 +203,8 @@ const App = {
         };
         if(subtitle) subtitle.textContent = titles[viewName] || 'Übersicht';
 
-        // View-Lookup über das globale window Objekt (daher muss jede View dort registriert sein)
+        // View-Lookup über das globale window Objekt
         const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
-        // Spezialfall für messenger -> MessengerView etc.
         let viewObj = window[viewObjName];
 
         // Fallback für manuelle Switch-Logik
@@ -245,7 +244,7 @@ const App = {
 
         const permissions = {
             'manage_workhours': managerRoles.includes(role),
-            'manage_members': false,
+            'manage_members': false, // Nur Admins (wird oben abgefangen)
             'manage_groups': role === 'Abteilungsleiter',
             'manage_news': role === 'Protokollant'
         };
@@ -265,12 +264,28 @@ const App = {
         if (overlay && content) {
             content.innerHTML = htmlContent;
             overlay.classList.remove('hidden');
+            
+            // Timeout um die Animation zu triggern (Opacity und Scale)
+            setTimeout(() => {
+                content.classList.remove('opacity-0', 'scale-95');
+                content.classList.add('opacity-100', 'scale-100');
+            }, 10);
         }
     },
 
     closeModal() { 
         const overlay = document.getElementById('modal-overlay');
-        if (overlay) overlay.classList.add('hidden');
+        const content = document.getElementById('modal-content');
+        
+        if (content) {
+            content.classList.remove('opacity-100', 'scale-100');
+            content.classList.add('opacity-0', 'scale-95');
+        }
+
+        // Warte bis die Animation zu Ende ist (300ms wie im CSS definiert)
+        setTimeout(() => {
+            if (overlay) overlay.classList.add('hidden');
+        }, 300);
     },
 
     showToast(message) { 
