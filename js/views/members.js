@@ -1,6 +1,6 @@
 /**
  * =============================================================================
- * MEMBERS VIEW (Debugged & Fixed)
+ * MEMBERS VIEW (Debugged & Fixed v2)
  * Verwaltet Mitglieder und löst ID/RLS Probleme automatisch
  * =============================================================================
  */
@@ -55,7 +55,9 @@ const MembersView = {
         const icon = document.querySelector('button[title="Neu laden"] i');
         if(icon) icon.classList.add('animate-spin');
         
-        await Store.fetchTable('members');
+        if (Store && Store.fetchTable) {
+            await Store.fetchTable('members');
+        }
         this.updateList();
         
         if(icon) icon.classList.remove('animate-spin');
@@ -68,7 +70,7 @@ const MembersView = {
         if(!container) return;
 
         const canManage = App.can('manage_members');
-        const members = Store.state.members || [];
+        const members = (Store.state && Store.state.members) ? Store.state.members : [];
 
         const filtered = members.filter(m => {
             const searchStr = ((m.firstName || '') + ' ' + (m.lastName || '') + ' ' + (m.role || '')).toLowerCase();
@@ -148,7 +150,6 @@ const MembersView = {
                     </div>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors flex-shrink-0 bg-dark-bg/50 rounded-lg"><i class="fa-solid fa-times text-lg md:text-xl"></i></button>
                 </div>
-                <!-- Details -->
                 <div class="space-y-4">
                     <div class="bg-dark-bg p-4 rounded-xl border border-dark-border">
                         <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-3">Email</h4>
@@ -209,6 +210,8 @@ const MembersView = {
             </div>
         `;
         App.openModal(html);
+        const modalContainer = document.getElementById('modal-content');
+        if(modalContainer) modalContainer.classList.add('max-h-[90vh]', 'overflow-y-auto', 'custom-scrollbar');
     },
 
     async handleAdd(e) {
@@ -225,7 +228,7 @@ const MembersView = {
             const email = fd.get('email');
             const generatedPassword = this.generatePassword();
 
-            // 1. Auth User anlegen
+            // 1. Auth User anlegen (Ohne Admin-Logout)
             const tempClient = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, { auth: { persistSession: false } });
             const { data: authData, error: signUpError } = await tempClient.auth.signUp({ email, password: generatedPassword });
 
@@ -244,19 +247,19 @@ const MembersView = {
                 groups: []
             };
             
-            // Direkter Insert-Versuch um Fehler zu fangen
-            // VERSUCH 1: UUID
+            // WICHTIG: Insert mit AKTUELLER Session versuchen (als Admin)
+            // tryInsert nutzt jetzt den authentifizierten Client, falls möglich
             let insertError = await this.tryInsert(newMember);
             
             if (insertError) {
                 console.warn("UUID Insert failed (" + insertError.message + "), trying Auto-ID...");
-                // VERSUCH 2: Auto-ID (falls DB auf Int eingestellt ist)
+                // Fallback: Auto-ID (falls DB auf Int eingestellt ist)
                 delete newMember.id;
                 insertError = await this.tryInsert(newMember);
             }
 
             if (insertError) {
-                throw new Error("DB Speicherfehler: " + insertError.message + " (Prüfe Supabase Policies!)");
+                throw new Error("DB Speicherfehler: " + insertError.message + " (RLS Policy prüfen!)");
             }
             
             // Erfolg!
@@ -286,10 +289,21 @@ const MembersView = {
         }
     },
 
-    // Hilfsfunktion für sicheren Insert
+    // Hilfsfunktion für sicheren Insert (MIT AUTH TOKEN)
     async tryInsert(item) {
         if(typeof supabase === 'undefined') return { message: "Supabase nicht geladen" };
-        const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+        
+        // Wir erstellen einen Client, der explizit das Token des Admins nutzt
+        const sessionStr = localStorage.getItem('vm_supabase_session');
+        const options = sessionStr ? {
+            global: {
+                headers: {
+                    Authorization: `Bearer ${JSON.parse(sessionStr).access_token}`
+                }
+            }
+        } : {};
+
+        const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, options);
         const { error } = await _sb.from('members').insert(item);
         return error;
     },
