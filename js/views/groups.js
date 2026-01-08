@@ -334,7 +334,7 @@ const GroupsView = {
         });
     },
 
-    // --- FIX: Async & Await für sicheres Speichern & Error Handling ---
+    // --- FIX: Partial Update für sicheres Speichern ---
     async addMemberDirect(groupId, memberId) {
         if(!App.can('manage_groups')) return;
         const group = Store.state.groups.find(g => g.id === groupId);
@@ -342,23 +342,33 @@ const GroupsView = {
 
         if (member && group) {
             try {
-                // Arrays initialisieren falls nötig
-                if (!Array.isArray(member.groups)) {
-                    member.groups = [];
-                    if (member.group && member.group !== 'Keine') member.groups.push(member.group);
+                // Lokale Kopie der Gruppen erstellen
+                let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
+                
+                // Legacy check
+                if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
+                    currentGroups.push(member.group);
                 }
-                // Doppelte Einträge verhindern
-                if (!member.groups.includes(group.name)) {
-                    member.groups.push(group.name);
+
+                if (!currentGroups.includes(group.name)) {
+                    currentGroups.push(group.name);
                 }
                 
-                // Aufräumen alter Felder
-                member.group = null; // Falls Spalte existiert, leeren
+                // Optimistisches Update im Store
+                member.groups = currentGroups;
+                member.group = null;
+
+                // Gezieltes Update an die DB senden (nur ID und groups)
+                // Wir senden NICHT das ganze member Objekt, um Konflikte zu vermeiden
+                const updatePayload = {
+                    id: member.id,
+                    groups: currentGroups,
+                    group: null // Legacy leeren
+                };
                 
-                // WICHTIG: Await nutzen, damit die Aktion abgeschlossen wird
-                await Store.update('members', member);
+                await Store.update('members', updatePayload);
                 
-                // Sicherheitshalber neu laden
+                // Refresh
                 if(Store.fetchTable) await Store.fetchTable('members');
 
                 App.closeModal();
@@ -380,13 +390,29 @@ const GroupsView = {
             const member = Store.state.members.find(m => m.id === memberId);
             if(member) {
                 try {
-                    if (Array.isArray(member.groups)) {
-                        member.groups = member.groups.filter(g => g !== group.name);
-                    } else if (member.group === group.name) {
-                        member.group = 'Keine';
-                    }
+                    let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
                     
-                    await Store.update('members', member);
+                    // Legacy Migration beim Löschen
+                    if (member.group === group.name) {
+                         // Nichts tun, wird durch payload genullt
+                    } else if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
+                        currentGroups.push(member.group);
+                    }
+
+                    currentGroups = currentGroups.filter(g => g !== group.name);
+                    
+                    // Optimistisch lokal
+                    member.groups = currentGroups;
+                    member.group = null;
+
+                    // Gezieltes Update
+                    const updatePayload = {
+                        id: member.id,
+                        groups: currentGroups,
+                        group: null
+                    };
+                    
+                    await Store.update('members', updatePayload);
                     if(Store.fetchTable) await Store.fetchTable('members');
                     
                     this.render(document.getElementById('content'));
