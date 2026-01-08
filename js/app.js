@@ -1,25 +1,25 @@
 /**
  * =============================================================================
  * APP CORE LOGIC
- * Steuert Navigation (Router), Initialisierung, Theming und globale UI-Elemente
+ * Steuert Navigation, Login, Berechtigungen und UI
  * =============================================================================
  */
 
 const App = {
-    // Lokaler State für die App-Steuerung
+    // Lokaler State
     state: {
         lastRead: parseInt(localStorage.getItem('vm_last_read')) || 0,
         theme: localStorage.getItem('vm_theme') || 'dark',
-        currentUser: null // Speichert das volle User-Objekt inkl. Rolle
+        currentUser: null 
     },
 
     /**
      * Startet die Anwendung
      */
     async init() {
-        console.log("App wird initialisiert...");
+        console.log("App Init...");
 
-        // 1. Warte auf Store
+        // 1. Warte auf Store (Sicherheitsnetz für langsame Verbindungen)
         let attempts = 0;
         while (typeof Store === 'undefined' && attempts < 20) {
             await new Promise(r => setTimeout(r, 100));
@@ -27,74 +27,76 @@ const App = {
         }
 
         if (typeof Store === 'undefined') {
-            console.error("KRITISCHER FEHLER: Store.js wurde nicht geladen!");
+            console.error("Store.js nicht geladen!");
             return;
         }
 
-        // 2. Daten-Store initialisieren
-        // Wir warten hier explizit, damit Daten da sind bevor gerendert wird
+        // 2. Store initialisieren
         await Store.init();
 
-        // 3. Reaktivität einrichten
+        // 3. Reaktivität: Wenn Daten aus der Cloud kommen -> UI Update
         Store.onUpdate = () => {
             this.updateNotificationDot();
+            
             const activeTag = document.activeElement ? document.activeElement.tagName : '';
-            const isTyping = (activeTag === 'INPUT' || activeTag === 'TEXTAREA');
-
-            // Spezielle Ausnahme: Messenger kümmert sich selbst um Updates wenn offen
-            if (!isTyping || Store.state.currentView !== 'messenger') {
-                 this.router(Store.state.currentView);
+            // Kein Re-Render während Texteingabe (außer im Messenger)
+            if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+                 // Nur refreshen wenn wir eingeloggt sind
+                 if (this.state.currentUser) {
+                     this.router(Store.state.currentView);
+                 }
             }
         };
 
+        // 4. Setup
         this.loadCurrentUser();
         this.initTheme();
         this.injectStyles();
-        this.updateNotificationDot();
         
-        // Start-View laden
-        this.router('dashboard');
+        // 5. Routing Start
+        if (localStorage.getItem('vm_current_user_id')) {
+            this.router('dashboard');
+            this.updateNotificationDot();
+        } else {
+            // Zeige Login
+            document.getElementById('auth-view').classList.remove('hidden');
+            document.getElementById('app-view').classList.add('hidden');
+        }
     },
 
-    // --- NEUE LOGIN LOGIK (Integriert) ---
-    async login(e) {
-        e.preventDefault();
+    // --- AUTHENTICATION ---
+
+    async handleLogin(e) {
+        e.preventDefault(); // Verhindert Neuladen der Seite
+        
         const btn = e.target.querySelector('button');
         const originalText = btn.innerText;
         btn.innerText = "Lade...";
         btn.disabled = true;
+
+        const errorDiv = document.getElementById('login-error');
+        if(errorDiv) errorDiv.classList.add('hidden');
 
         const fd = new FormData(e.target);
         const email = fd.get('email');
         const password = fd.get('password');
 
         try {
-            // 1. Sicherstellen, dass Store bereit ist und Daten hat
-            if (typeof Store === 'undefined') {
-                alert("Fehler: Store.js nicht geladen.");
-                return;
-            }
-            
-            // Wenn Store leer ist, erzwinge Initialisierung
-            if (Store.state.members.length === 0) {
-                await Store.init();
-            }
-
-            // Supabase Client holen
+            // Supabase Auth Login
             if (typeof supabase === 'undefined' || typeof CONFIG === 'undefined') {
-                alert("Fehler: Supabase oder Config fehlt.");
-                return;
+                throw new Error("Datenbank-Verbindung fehlt (Config/Library).");
             }
-            const { createClient } = supabase;
-            const _sb = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+            const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
 
-            // 2. Auth Login Versuch
+            // 1. Versuche Login via Supabase Auth
             const { data, error } = await _sb.auth.signInWithPassword({ email, password });
 
             if (error) {
-                // BACKDOOR: Erster Admin Login (wenn noch nicht registriert)
+                // BACKDOOR: Erster Admin Login (falls noch nicht registriert)
                 if(email === 'admin@gmail.com' && password === 'admin') {
+                    // Versuche Registrierung
                     const { data: reg, error: regErr } = await _sb.auth.signUp({email, password});
+                    
                     if (!regErr) {
                         // Admin User in DB anlegen
                         const adminUser = { 
@@ -102,53 +104,55 @@ const App = {
                             status: 'active', groups: ['Vorstand'], joinedDate: new Date().toISOString() 
                         };
                         
-                        await Store.add('members', adminUser);
+                        // Speichern und Session setzen
+                        if (typeof Store !== 'undefined') await Store.add('members', adminUser);
+                        
                         localStorage.setItem('vm_supabase_session', JSON.stringify(reg.session));
                         
-                        // ID finden (durch Store Reload)
+                        // Wir müssen die ID des neuen Users finden
                         await Store.fetchTable('members');
                         const created = Store.state.members.find(m => m.email === email);
-                        if(created) this.loginSuccess(created);
+                        
+                        this.loginSuccess(created || adminUser);
                         return;
                     }
                 }
-                throw new Error("Login fehlgeschlagen: " + error.message);
+                throw new Error("Login fehlgeschlagen. Passwort falsch?");
             }
 
-            // 3. Login erfolgreich -> User in DB suchen
+            // 2. Login erfolgreich -> Session speichern
             localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
+
+            // 3. User Daten aus Store laden
+            // Wir warten kurz oder laden neu, falls Store leer ist
+            if (Store.state.members.length === 0) await Store.fetchTable('members');
             
-            // Wir suchen den User in den geladenen Daten
             let user = Store.state.members.find(m => m.email === email);
             
-            // Falls nicht gefunden (z.B. neu registriert), neu laden
-            if (!user) {
-                await Store.fetchTable('members');
-                user = Store.state.members.find(m => m.email === email);
-            }
-
             if (user) {
                 this.loginSuccess(user);
             } else {
-                // Admin Backdoor Fallback (Auth da, DB Eintrag fehlt)
+                // Spezialfall: Admin Login ging durch Auth, aber DB Eintrag fehlt (z.B. DB gelöscht)
                 if (email === 'admin@gmail.com') {
-                     const adminUser = { firstName: 'Super', lastName: 'Admin', email: email, role: 'Admin', status: 'active', groups: ['Vorstand'], joinedDate: new Date().toISOString() };
-                     await Store.add('members', adminUser);
-                     // Kurz warten und neu suchen
-                     await new Promise(r => setTimeout(r, 1000));
-                     await Store.fetchTable('members');
-                     const newAdmin = Store.state.members.find(m => m.email === email);
-                     if(newAdmin) this.loginSuccess(newAdmin);
-                     else alert("Konnte Admin-Profil nicht erstellen.");
+                    const adminUser = { firstName: 'Super', lastName: 'Admin', email: email, role: 'Admin', status: 'active', groups: ['Vorstand'], joinedDate: new Date().toISOString() };
+                    await Store.add('members', adminUser);
+                    // Reload und retry
+                    await Store.fetchTable('members');
+                    user = Store.state.members.find(m => m.email === email);
+                    this.loginSuccess(user);
                 } else {
-                    alert('Login erfolgreich, aber kein Mitgliedsprofil gefunden. Bitte Admin kontaktieren.');
-                    _sb.auth.signOut();
+                    throw new Error("Benutzerprofil nicht gefunden.");
                 }
             }
 
         } catch (err) {
             console.error(err);
-            alert(err.message);
+            if(errorDiv) {
+                errorDiv.textContent = err.message;
+                errorDiv.classList.remove('hidden');
+            } else {
+                alert(err.message);
+            }
         } finally {
             btn.innerText = originalText;
             btn.disabled = false;
@@ -156,68 +160,139 @@ const App = {
     },
 
     loginSuccess(user) {
+        if (!user) return;
+        
         localStorage.setItem('vm_current_user_id', user.id);
         
         // UI Umschalten
-        const authView = document.getElementById('auth-view');
-        const appView = document.getElementById('app-view');
-        if(authView) authView.classList.add('hidden');
-        if(appView) appView.classList.remove('hidden');
-
-        // Header Infos setzen
+        document.getElementById('auth-view').classList.add('hidden');
+        document.getElementById('app-view').classList.remove('hidden');
+        
+        // State setzen
+        this.state.currentUser = user;
+        
+        // Header Infos
         const nameEl = document.getElementById('current-user-name');
         const roleEl = document.getElementById('current-user-role');
         if(nameEl) nameEl.textContent = user.firstName;
         if(roleEl) roleEl.textContent = user.role;
 
-        // IDs für Views setzen
+        // IDs für Sub-Views setzen
         if(typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
         if(typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
         if(typeof WorkHoursView !== 'undefined') WorkHoursView.state.myId = user.id;
 
-        // App starten
-        this.loadCurrentUser();
-        this.init();
+        this.updateNotificationDot();
+        this.router('dashboard');
     },
 
     logout() {
         if(confirm("Möchten Sie sich wirklich abmelden?")) {
             localStorage.removeItem('vm_current_user_id');
             localStorage.removeItem('vm_supabase_session');
+            
+            // Supabase Logout
+            if (typeof supabase !== 'undefined' && typeof CONFIG !== 'undefined') {
+                const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+                _sb.auth.signOut();
+            }
+            
             location.reload();
         }
     },
 
     loadCurrentUser() {
-        // Wir laden die Session vom Supabase Auth
         const sessionStr = localStorage.getItem('vm_supabase_session');
         if(sessionStr && typeof Store !== 'undefined') {
             try {
                 const session = JSON.parse(sessionStr);
                 const email = session.user.email;
-                
                 const user = Store.state.members.find(m => m.email === email);
+                
                 if(user) {
                     this.state.currentUser = user;
-                    // IDs für Views setzen (damit diese wissen, wer "Ich" ist)
-                    if (typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
-                    if (typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
-                    if (typeof WorkHoursView !== 'undefined') WorkHoursView.state.myId = user.id;
+                    // Header update
+                    const nameEl = document.getElementById('current-user-name');
+                    const roleEl = document.getElementById('current-user-role');
+                    if(nameEl) nameEl.textContent = user.firstName;
+                    if(roleEl) roleEl.textContent = user.role;
+                    
+                    // IDs update
+                    if(typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
+                    if(typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
+                    if(typeof WorkHoursView !== 'undefined') WorkHoursView.state.myId = user.id;
                 }
-            } catch(e) { 
-                console.error("Fehler beim Laden des Benutzers:", e); 
-            }
+            } catch(e) { console.error("User Load Error", e); }
         }
     },
 
-    // --- PERMISSION SYSTEM (RBAC) ---
+    // --- ROUTER ---
+    
+    router(viewName) {
+        if (typeof Store !== 'undefined') Store.state.currentView = viewName;
+        
+        const container = document.getElementById('content');
+        const subtitle = document.getElementById('page-subtitle');
+        
+        if (container) {
+            container.classList.remove('fade-in');
+            void container.offsetWidth; 
+            container.classList.add('fade-in');
+            container.innerHTML = ''; 
+        }
+
+        // Titel setzen
+        const titles = {
+            'dashboard': 'Dashboard',
+            'members': 'Mitgliederverwaltung',
+            'groups': 'Abteilungen',
+            'calendar': 'Kalender',
+            'news': 'Ankündigungen',
+            'documents': 'Dokumente',
+            'messenger': 'Messenger',
+            'profile': 'Mein Profil',
+            'workhours': 'Arbeitsstunden'
+        };
+        if(subtitle) subtitle.textContent = titles[viewName] || 'Übersicht';
+
+        // View Object finden (Robust)
+        let viewObj = null;
+        try {
+            switch(viewName) {
+                case 'dashboard': if(typeof DashboardView !== 'undefined') viewObj = DashboardView; break;
+                case 'members': if(typeof MembersView !== 'undefined') viewObj = MembersView; break;
+                case 'groups': if(typeof GroupsView !== 'undefined') viewObj = GroupsView; break;
+                case 'calendar': if(typeof CalendarView !== 'undefined') viewObj = CalendarView; break;
+                case 'news': if(typeof NewsView !== 'undefined') viewObj = NewsView; break;
+                case 'documents': if(typeof DocsView !== 'undefined') viewObj = DocsView; break;
+                case 'messenger': if(typeof MessengerView !== 'undefined') viewObj = MessengerView; break;
+                case 'profile': if(typeof ProfileView !== 'undefined') viewObj = ProfileView; break;
+                case 'workhours': if(typeof WorkHoursView !== 'undefined') viewObj = WorkHoursView; break;
+            }
+        } catch (e) { console.error("Router Error:", e); }
+
+        if (viewObj) {
+            viewObj.render(container);
+        } else {
+            console.warn(`View "${viewName}" nicht gefunden.`);
+            // Retry Mechanism
+            setTimeout(() => {
+                if(Store.state.currentView === viewName) {
+                    // Versuch direkter Zugriff global
+                    const v = window[viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View'];
+                    if (v && v.render) v.render(container);
+                }
+            }, 500);
+        }
+    },
+
+    // --- PERMISSIONS ---
     can(action) {
         if (!this.state.currentUser) this.loadCurrentUser();
         const user = this.state.currentUser;
         if (!user) return false; 
 
         const role = user.role || 'Mitglied';
-        
         const roles = {
             admin: ['1. Vorstand', '2. Vorstand', '3. Vorstand', '4. Vorstand', 'Präsident', 'Vize-Präsident', 'Admin', 'Vorstand'], 
             manager: ['Kassenwart', 'Protokollant', 'Trainer', 'Abteilungsleiter'], 
@@ -237,16 +312,14 @@ const App = {
         return permissions[userGroup].includes(action);
     },
 
-    // --- THEMING & ROUTING ---
+    // --- THEMING & STYLES ---
     initTheme() { this.applyTheme(); },
-    
     toggleTheme() { 
         this.state.theme = this.state.theme === 'dark' ? 'light' : 'dark'; 
         localStorage.setItem('vm_theme', this.state.theme); 
         this.applyTheme(); 
         if(document.getElementById('settings-modal')) this.openSettingsModal(); 
     },
-    
     applyTheme() {
         const root = document.documentElement;
         if (this.state.theme === 'dark') { 
@@ -265,77 +338,6 @@ const App = {
             root.style.setProperty('--muted-color', '#64748b'); 
         }
     },
-
-    // --- ROBUST ROUTER ---
-    router(viewName) {
-        if (typeof Store !== 'undefined') Store.state.currentView = viewName;
-        
-        const container = document.getElementById('content');
-        const subtitle = document.getElementById('page-subtitle');
-        
-        if (container) {
-            container.classList.remove('fade-in');
-            void container.offsetWidth; // Trigger Reflow
-            container.classList.add('fade-in');
-            container.innerHTML = ''; 
-        }
-
-        const titles = {
-            'dashboard': 'Dashboard',
-            'members': 'Mitgliederverwaltung',
-            'groups': 'Abteilungen',
-            'calendar': 'Kalender',
-            'news': 'Ankündigungen',
-            'documents': 'Dokumente',
-            'messenger': 'Messenger',
-            'profile': 'Mein Profil',
-            'workhours': 'Arbeitsstunden'
-        };
-        if(subtitle) subtitle.textContent = titles[viewName] || 'Übersicht';
-
-        const views = {
-            'dashboard': typeof DashboardView !== 'undefined' ? DashboardView : null,
-            'members': typeof MembersView !== 'undefined' ? MembersView : null,
-            'groups': typeof GroupsView !== 'undefined' ? GroupsView : null,
-            'calendar': typeof CalendarView !== 'undefined' ? CalendarView : null,
-            'news': typeof NewsView !== 'undefined' ? NewsView : null,
-            'documents': typeof DocsView !== 'undefined' ? DocsView : null,
-            'messenger': typeof MessengerView !== 'undefined' ? MessengerView : null,
-            'profile': typeof ProfileView !== 'undefined' ? ProfileView : null,
-            'workhours': typeof WorkHoursView !== 'undefined' ? WorkHoursView : null
-        };
-
-        const currentViewObj = views[viewName];
-
-        if (currentViewObj) {
-            try {
-                currentViewObj.render(container);
-            } catch (e) {
-                console.error(`Fehler beim Rendern von ${viewName}:`, e);
-                container.innerHTML = `<div class="p-8 text-center text-red-400">Fehler beim Laden der Ansicht:<br>${e.message}</div>`;
-            }
-        } else {
-            console.warn(`View "${viewName}" Objekt nicht gefunden.`);
-            if(container) {
-                container.innerHTML = `
-                    <div class="flex flex-col items-center justify-center h-64 text-dark-muted">
-                        <i class="fa-solid fa-spinner fa-spin text-3xl mb-4"></i>
-                        <p>Lade Modul... (${viewName})</p>
-                        <p class="text-xs mt-2 opacity-50">Falls dies lange dauert, bitte Seite neu laden.</p>
-                    </div>`;
-            }
-            
-            setTimeout(() => {
-                if (Store.state.currentView === viewName) {
-                    const retryView = (typeof window[viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View'] !== 'undefined') 
-                                    ? window[viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View'] 
-                                    : null;
-                    if (retryView) retryView.render(container);
-                }
-            }, 1000);
-        }
-    },
-
     injectStyles() {
          if(document.getElementById('app-styles')) return;
          const style = document.createElement('style');
@@ -353,14 +355,12 @@ const App = {
     },
 
     // --- UI HELPERS ---
-    
     openSettingsModal() { 
         const isDark = this.state.theme === 'dark';
-        this.openModal(`<div class="p-6"><h3 class="text-xl font-bold text-dark-text mb-4">Einstellungen</h3><div class="flex items-center justify-between p-4 rounded-xl bg-dark-bg border border-dark-border"><p class="text-dark-text">Dark Mode</p><button onclick="App.toggleTheme()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold">${isDark ? 'An' : 'Aus'}</button></div><div class="p-4 rounded-xl bg-dark-bg border border-dark-border text-center mt-6"><p class="text-sm text-dark-muted mb-2">VereinsManager App v1.3.1</p><button onclick="if(confirm('Alle lokalen Daten löschen und abmelden?')) { localStorage.clear(); location.reload(); }" class="text-xs text-red-400 hover:underline">Reset Cache</button></div></div>`);
+        this.openModal(`<div class="p-6"><h3 class="text-xl font-bold text-dark-text mb-4">Einstellungen</h3><div class="flex items-center justify-between p-4 rounded-xl bg-dark-bg border border-dark-border"><p class="text-dark-text">Dark Mode</p><button onclick="App.toggleTheme()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold">${isDark ? 'An' : 'Aus'}</button></div><div class="p-4 rounded-xl bg-dark-bg border border-dark-border text-center mt-6"><p class="text-sm text-dark-muted mb-2">VereinsManager App v1.3.1</p><button onclick="if(confirm('Alle lokalen Daten löschen?')) { localStorage.clear(); location.reload(); }" class="text-xs text-red-400 hover:underline">Reset Cache</button></div></div>`);
     },
     
     toggleNotifications() {
-        // ... (Code identisch zur vorherigen Version für Notifs) ...
         let overlay = document.getElementById('notification-overlay');
         if (overlay && !overlay.classList.contains('hidden')) { overlay.classList.add('hidden'); return; }
 
@@ -368,7 +368,14 @@ const App = {
         const news = Store.state.news.filter(n => new Date(n.date).getTime() > lastRead);
         const chats = [];
         
-        Store.state.groups.forEach(g => { if (g.chat && g.chat.length > 0) { const lastMsg = g.chat[g.chat.length - 1]; if (new Date(lastMsg.time).getTime() > lastRead) { chats.push({ groupName: g.name, groupId: g.id, message: lastMsg.text, sender: lastMsg.sender, time: lastMsg.time }); } } });
+        Store.state.groups.forEach(g => { 
+            if (g.chat && g.chat.length > 0) { 
+                const lastMsg = g.chat[g.chat.length - 1]; 
+                if (new Date(lastMsg.time).getTime() > lastRead) { 
+                    chats.push({ groupName: g.name, groupId: g.id, message: lastMsg.text, sender: lastMsg.sender, time: lastMsg.time }); 
+                } 
+            } 
+        });
         chats.sort((a, b) => new Date(b.time) - new Date(a.time));
 
         let html = `<div class="absolute top-20 right-6 w-96 bg-dark-card border border-dark-border rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[500px]" onclick="event.stopPropagation()"><div class="p-4 border-b border-dark-border bg-dark-bg/95 backdrop-blur flex justify-between items-center sticky top-0"><h3 class="font-bold text-dark-text"><i class="fa-regular fa-bell mr-2"></i>Benachrichtigungen</h3><button onclick="document.getElementById('notification-overlay').classList.add('hidden')" class="text-dark-muted hover:text-dark-text transition-colors"><i class="fa-solid fa-times"></i></button></div><div class="overflow-y-auto notif-scrollbar flex-1">`;
@@ -388,9 +395,4 @@ const App = {
     showToast(message) { const toast = document.getElementById("toast"); if (toast) { toast.textContent = message; toast.classList.add('show'); setTimeout(() => { toast.classList.remove('show'),3000); } } }
 };
 
-// Globaler Hook für den Login-Formular Submit (überschreibt inline handler)
-window.handleLogin = (e) => App.login(e);
-window.logout = () => App.logout();
-
-// Start
 window.addEventListener('DOMContentLoaded', () => { App.init(); });
