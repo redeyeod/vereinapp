@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VereinsManager App</title>
     
-    <!-- Supabase & Styles -->
+    <!-- Externe Bibliotheken -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <!-- Tailwind Config -->
+    <!-- Tailwind Konfiguration -->
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -27,28 +27,51 @@
         }
     </script>
 
+    <!-- Basis Styles & Animationen -->
     <style>
         body { font-family: 'Inter', sans-serif; }
+        
+        /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg-color); }
         ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--muted-color); }
+
         .fade-in { animation: fadeIn 0.5s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .bubble-card { background: linear-gradient(145deg, var(--card-color), var(--bg-color)); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: all 0.3s; }
-        .bubble-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2); }
-        #toast { visibility: hidden; min-width: 250px; background-color: #3b82f6; color: #fff; text-align: center; border-radius: 12px; padding: 16px; position: fixed; z-index: 100; left: 50%; bottom: 30px; transform: translateX(-50%); transition: opacity 0.3s, bottom 0.3s; opacity: 0; }
+
+        /* Bubble Card Effect */
+        .bubble-card {
+            background: linear-gradient(145deg, var(--card-color), var(--bg-color));
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .bubble-card:hover {
+            transform: translateY(-5px) scale(1.01);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Toast Notification */
+        #toast { visibility: hidden; min-width: 250px; background-color: #3b82f6; color: #fff; text-align: center; border-radius: 12px; padding: 16px; position: fixed; z-index: 100; left: 50%; bottom: 30px; transform: translateX(-50%); transition: opacity 0.3s, bottom 0.3s; opacity: 0; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
         #toast.show { visibility: visible; opacity: 1; bottom: 50px; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-dark-bg text-dark-text selection:bg-blue-500 selection:text-white transition-colors duration-300">
 
-    <!-- AUTH VIEW -->
+    <!-- ========================================== -->
+    <!-- AUTHENTICATION VIEW (Login Only) -->
+    <!-- ========================================== -->
     <div id="auth-view" class="h-screen flex items-center justify-center p-4 bg-[url('https://images.unsplash.com/photo-1526628953301-3e589a6a8b74?q=80&w=1920')] bg-cover bg-center relative">
+        <!-- Overlay -->
         <div class="absolute inset-0 bg-dark-bg/90 backdrop-blur-sm"></div>
+
         <div class="relative z-10 w-full max-w-md bg-dark-card border border-dark-border p-8 rounded-bubble shadow-2xl fade-in">
             <div class="text-center mb-6">
-                <div class="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-3xl text-white shadow-lg mx-auto mb-4"><i class="fa-solid fa-users-rectangle"></i></div>
+                <div class="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-3xl text-white shadow-lg mx-auto mb-4">
+                    <i class="fa-solid fa-users-rectangle"></i>
+                </div>
                 <h1 class="text-2xl font-bold text-white">VereinsManager</h1>
                 <p class="text-dark-muted text-sm mt-2">Cloud Edition</p>
             </div>
@@ -65,67 +88,137 @@
                     <option value="demo">TSV Musterstadt (Demo)</option>
                     <option value="grokage">GroKaGe Malsch 1929 e.V.</option>
                     <option value="fc_beispiel">1. FC Beispielhausen</option>
+                    <option value="tc_tennis">TC Tennis-Freunde</option>
                 </select>
             </div>
 
             <!-- Login Form -->
             <form id="login-form" class="space-y-4">
-                <div><label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">E-Mail</label><input type="email" name="email" required placeholder="name@verein.de" class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"></div>
-                <div><label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">Passwort</label><input type="password" name="password" required placeholder="••••••••" class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"></div>
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg mt-2">Anmelden</button>
+                <div>
+                    <label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">E-Mail Adresse</label>
+                    <input type="email" name="email" required placeholder="name@verein.de" class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">Passwort</label>
+                    <input type="password" name="password" required placeholder="••••••••" class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-900/30 hover:scale-[1.02] mt-2">
+                    Anmelden
+                </button>
             </form>
-            <div class="text-center mt-4"><p class="text-xs text-dark-muted">Admin-Login: <b>admin@gmail.com</b> / <b>admin</b></p></div>
+            <div class="text-center mt-4">
+                <p class="text-xs text-dark-muted">Admin-Login: <b>admin@gmail.com</b> / <b>admin</b></p>
+            </div>
         </div>
     </div>
 
-    <!-- APP VIEW -->
+    <!-- ========================================== -->
+    <!-- MAIN APP VIEW (Hidden until login) -->
+    <!-- ========================================== -->
     <div id="app-view" class="h-screen flex flex-col overflow-hidden hidden">
+        <!-- Header -->
         <header class="bg-dark-card/50 backdrop-blur-md border-b border-dark-border h-20 flex items-center justify-between px-6 lg:px-10 z-20 shadow-sm sticky top-0 transition-colors duration-300">
+            
+            <!-- Logo / Home Link -->
             <button onclick="App.router('dashboard')" class="flex items-center group">
-                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg mr-3 group-hover:scale-105 transition-transform"><i class="fa-solid fa-users-rectangle"></i></div>
-                <div class="text-left"><h1 class="text-xl font-bold text-blue-500 tracking-tight leading-none group-hover:text-blue-400">VereinApp</h1><p id="page-subtitle" class="text-xs text-dark-muted font-medium">Dashboard</p></div>
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg mr-3 group-hover:scale-105 transition-transform">
+                    <i class="fa-solid fa-users-rectangle"></i>
+                </div>
+                <div class="text-left">
+                    <h1 class="text-xl font-bold text-blue-500 tracking-tight leading-none group-hover:text-blue-400 transition-colors">VereinApp</h1>
+                    <p id="page-subtitle" class="text-xs text-dark-muted font-medium">Dashboard</p>
+                </div>
             </button>
+
+            <!-- Rechte Seite: Messenger, Benachrichtigungen, Settings & Profil -->
             <div class="flex items-center gap-3 sm:gap-6">
-                <button onclick="App.router('workhours')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Arbeitsstunden"><i class="fa-solid fa-briefcase text-xl"></i></button>
-                <button onclick="App.router('messenger')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Messenger"><i class="fa-solid fa-comments text-xl"></i></button>
-                <button onclick="App.toggleNotifications()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Benachrichtigungen"><i class="fa-regular fa-bell text-xl"></i><span id="notif-dot" class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-dark-card animate-pulse hidden"></span></button>
-                <button onclick="App.openSettingsModal()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Einstellungen"><i class="fa-solid fa-gear text-xl"></i></button>
+                
+                <!-- Arbeitsstunden Button -->
+                <button onclick="App.router('workhours')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors focus:outline-none" title="Arbeitsstunden">
+                    <i class="fa-solid fa-briefcase text-xl"></i>
+                </button>
+
+                <!-- Messenger Button -->
+                <button onclick="App.router('messenger')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors focus:outline-none" title="Messenger">
+                    <i class="fa-solid fa-comments text-xl"></i>
+                </button>
+
+                <!-- Notification Bell -->
+                <button onclick="App.toggleNotifications()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors focus:outline-none" title="Benachrichtigungen">
+                    <i class="fa-regular fa-bell text-xl"></i>
+                    <!-- Notification Dot -->
+                    <span id="notif-dot" class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-dark-card animate-pulse hidden"></span>
+                </button>
+
+                <!-- Settings Button -->
+                <button onclick="App.openSettingsModal()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors focus:outline-none" title="Einstellungen">
+                    <i class="fa-solid fa-gear text-xl"></i>
+                </button>
+                
+                <!-- Profil Link -->
                 <button onclick="App.router('profile')" class="flex items-center gap-3 pl-6 border-l border-dark-border group">
-                    <div class="text-right hidden sm:block"><p id="current-user-name" class="text-sm font-bold text-dark-text group-hover:text-blue-400">Gast</p><p id="current-user-role" class="text-xs text-dark-muted">Mitglied</p></div>
-                    <div class="w-10 h-10 rounded-full bg-slate-700 overflow-hidden border-2 border-transparent group-hover:border-blue-500 transition-colors"><div class="w-full h-full flex items-center justify-center bg-slate-800 text-slate-400"><i class="fa-solid fa-user"></i></div></div>
+                    <div class="text-right hidden sm:block">
+                        <p id="current-user-name" class="text-sm font-bold text-dark-text group-hover:text-blue-400 transition-colors">Gast</p>
+                        <p id="current-user-role" class="text-xs text-dark-muted">Mitglied</p>
+                    </div>
+                    <div class="w-10 h-10 rounded-full bg-slate-700 overflow-hidden border-2 border-transparent group-hover:border-blue-500 transition-colors">
+                         <div class="w-full h-full flex items-center justify-center bg-slate-800 text-slate-400">
+                            <i class="fa-solid fa-user"></i>
+                         </div>
+                    </div>
                 </button>
             </div>
         </header>
-        <div id="content" class="flex-1 overflow-y-auto p-4 lg:p-10 relative max-w-7xl mx-auto w-full transition-colors duration-300"></div>
+
+        <!-- Dynamic Content Container -->
+        <div id="content" class="flex-1 overflow-y-auto p-4 lg:p-10 relative max-w-7xl mx-auto w-full transition-colors duration-300">
+            <!-- Content wird hier durch JS injiziert -->
+        </div>
     </div>
 
-    <!-- Modals & Toasts -->
-    <div id="modal-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 transition-opacity duration-300"><div class="bg-dark-card border border-dark-border rounded-bubble shadow-2xl w-full max-w-md transform transition-all scale-95 opacity-0 text-dark-text" id="modal-content"></div></div>
+    <!-- Modal Container -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 transition-opacity duration-300">
+        <div class="bg-dark-card border border-dark-border rounded-bubble shadow-2xl w-full max-w-md transform transition-all scale-95 opacity-0 text-dark-text" id="modal-content">
+            <!-- Modal Inhalt wird durch JS injiziert -->
+        </div>
+    </div>
+
+    <!-- Notification Overlay Container -->
+    <!-- (Wird dynamisch erstellt) -->
+
+    <!-- Toast Notification -->
     <div id="toast">Nachricht gesendet</div>
 
     <!-- ========================================== -->
     <!-- SCRIPTS LOADING (Reihenfolge ist wichtig!) -->
     <!-- ========================================== -->
     
+    <script>
+        function scriptError(src) {
+            console.error("Fehler beim Laden von: " + src);
+            alert("Fehler: Die Datei '" + src + "' wurde nicht gefunden.\nBitte prüfen Sie die Ordnerstruktur!");
+        }
+    </script>
+
     <!-- 1. Config (URL & Key) -->
-    <script src="js/config.js"></script>
+    <script src="js/config.js" onerror="scriptError('js/config.js')"></script>
 
     <!-- 2. Store (Datenbank Verbindung) -->
-    <script src="js/store.js"></script>
+    <script src="js/store.js" onerror="scriptError('js/store.js')"></script>
     
     <!-- 3. Views (Alle Ansichten) -->
-    <script src="js/views/dashboard.js"></script>
-    <script src="js/views/members.js"></script>
-    <script src="js/views/groups.js"></script>
-    <script src="js/views/calendar.js"></script>
-    <script src="js/views/news.js"></script>
-    <script src="js/views/documents.js"></script>
-    <script src="js/views/messenger.js"></script>
-    <script src="js/views/profile.js"></script>
-    <script src="js/views/workhours.js"></script>
+    <script src="js/views/dashboard.js" onerror="scriptError('js/views/dashboard.js')"></script>
+    <script src="js/views/members.js" onerror="scriptError('js/views/members.js')"></script>
+    <script src="js/views/groups.js" onerror="scriptError('js/views/groups.js')"></script>
+    <script src="js/views/calendar.js" onerror="scriptError('js/views/calendar.js')"></script>
+    <script src="js/views/news.js" onerror="scriptError('js/views/news.js')"></script>
+    <script src="js/views/documents.js" onerror="scriptError('js/views/documents.js')"></script>
+    <script src="js/views/messenger.js" onerror="scriptError('js/views/messenger.js')"></script>
+    <script src="js/views/profile.js" onerror="scriptError('js/views/profile.js')"></script>
+    <script src="js/views/workhours.js" onerror="scriptError('js/views/workhours.js')"></script>
 
     <!-- 4. App Core (Startet alles) -->
-    <script src="js/app.js"></script>
+    <script src="js/app.js" onerror="scriptError('js/app.js')"></script>
 
     <!-- 5. Inline Login Logic (Verbindet HTML mit App) -->
     <script>
@@ -133,7 +226,7 @@
         function logout() {
             if(confirm("Möchten Sie sich wirklich abmelden?")) {
                 localStorage.removeItem('vm_current_user_id');
-                // Optional: Supabase Logout falls verwendet
+                // Optional: Supabase Logout
                 // if (typeof Store !== 'undefined' && Store._supabase) Store._supabase.auth.signOut();
                 location.reload();
             }
@@ -165,6 +258,7 @@
                 
                 // Falls Store leer (Ladefehler oder sehr langsam), versuche Supabase direkt
                 if (members.length === 0 && typeof supabase !== 'undefined' && typeof CONFIG !== 'undefined') {
+                    // Quick check
                     const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
                     const { data } = await _sb.from('members').select('*');
                     if (data) members = data;
@@ -183,7 +277,6 @@
 
                 // 2. Admin Backdoor
                 if (email === 'admin@gmail.com' && password === 'admin') {
-                    // Prüfen ob Admin schon in DB
                     let admin = members.find(m => m.email === 'admin@gmail.com');
                     
                     if (!admin) {
@@ -198,8 +291,8 @@
                             groups: ['Vorstand'],
                             joinedDate: new Date().toISOString()
                         };
-                        // In DB speichern
-                        await Store.add('members', admin);
+                        // In DB speichern (Falls möglich)
+                        if(typeof Store !== 'undefined') await Store.add('members', admin);
                     }
                     loginSuccess(admin);
                     return;
@@ -218,23 +311,48 @@
 
         function loginSuccess(user) {
             localStorage.setItem('vm_current_user_id', user.id);
+            initApp(user);
+        }
+
+        function initApp(user) {
             document.getElementById('auth-view').classList.add('hidden');
             document.getElementById('app-view').classList.remove('hidden');
             
-            // App State setzen
-            if (typeof App !== 'undefined') {
-                App.state.currentUser = user;
-                if (typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
-                if (typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
-                
-                // Header füllen
-                const nameEl = document.getElementById('current-user-name');
-                const roleEl = document.getElementById('current-user-role');
-                if(nameEl) nameEl.textContent = user.firstName;
-                if(roleEl) roleEl.textContent = user.role;
+            // Lade-Spinner anzeigen
+            document.getElementById('content').innerHTML = `
+                <div class="flex flex-col items-center justify-center h-full text-dark-muted">
+                    <i class="fa-solid fa-circle-notch fa-spin text-4xl mb-4 text-blue-500"></i>
+                    <p>App wird geladen...</p>
+                </div>
+            `;
+            
+            if(user) {
+                document.getElementById('current-user-name').textContent = user.firstName;
+                document.getElementById('current-user-role').textContent = user.role;
+            }
 
-                // Starten
-                App.init();
+            if (typeof App !== 'undefined') {
+                // IDs setzen
+                if(typeof MessengerView !== 'undefined') MessengerView.state.myId = parseInt(user.id);
+                if(typeof GroupsView !== 'undefined') GroupsView.state.myId = parseInt(user.id);
+                if(typeof WorkHoursView !== 'undefined') WorkHoursView.state.myId = parseInt(user.id);
+                
+                App.state.currentUser = user;
+                
+                // Wir laden den User im App-State neu, damit Berechtigungen (App.can) funktionieren
+                if (typeof App.loadCurrentUser === 'function') App.loadCurrentUser();
+                
+                // Starte Router
+                setTimeout(() => App.init(), 100);
+            } else {
+                console.error("App Objekt nicht gefunden!");
+                document.getElementById('content').innerHTML = `
+                    <div class="p-8 text-center text-red-400 border border-red-500/30 rounded-xl bg-red-500/10 m-4">
+                        <h3 class="text-xl font-bold mb-2">Fehler beim Starten</h3>
+                        <p>Das Hauptskript (js/app.js) wurde nicht geladen.</p>
+                        <p class="text-sm mt-2 opacity-70">Bitte stellen Sie sicher, dass die Datei im richtigen Ordner liegt.</p>
+                    </div>
+                `;
             }
         }
 
@@ -246,21 +364,22 @@
                 const check = setInterval(() => {
                     if (typeof Store !== 'undefined' && Store.state.members.length > 0) {
                         clearInterval(check);
-                        // User suchen (Store hat Daten geladen)
-                        // Beachte: Store.state.members wird durch Store.init() gefüllt
-                        // Wir müssen sicherstellen, dass Store.init() läuft
-                    }
-                }, 100);
-
-                // Init Store sofort starten (passiert auch in App.init, aber für Login-Check gut)
-                if(typeof Store !== 'undefined') {
-                    Store.init().then(() => {
+                        
+                        // User suchen
                         const user = Store.state.members.find(m => m.id == currentUserId);
                         if (user) loginSuccess(user);
                         else {
-                            // Session ungültig (User gelöscht?)
+                           // User nicht gefunden (gelöscht?), ausloggen
                            // localStorage.removeItem('vm_current_user_id');
                         }
+                    }
+                }, 100);
+
+                // Init Store sofort starten
+                if(typeof Store !== 'undefined') {
+                    Store.init().then(() => {
+                        const select = document.getElementById('club-select');
+                        if(select) select.value = Store.clubId;
                     });
                 }
             }
