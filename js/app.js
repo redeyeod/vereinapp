@@ -33,7 +33,9 @@ const App = {
                 const activeTag = document.activeElement ? document.activeElement.tagName : '';
                 const isTyping = (activeTag === 'INPUT' || activeTag === 'TEXTAREA');
 
-                if (!isTyping) {
+                // Spezielle Ausnahme: Wenn wir im Messenger sind und tippen, kümmert sich der Messenger selbst ums Update.
+                // In allen anderen Fällen (oder wenn nicht getippt wird) rendern wir neu.
+                if (!isTyping || Store.state.currentView !== 'messenger') {
                      this.router(Store.state.currentView);
                 } else {
                     console.log("Update empfangen, aber User tippt gerade. Überspringe Render.");
@@ -167,7 +169,6 @@ const App = {
     },
     
     toggleNotifications() {
-        // ... (Verwendet den gleichen Code wie in der Single-File Version für Notifs) ...
         let overlay = document.getElementById('notification-overlay');
         if (overlay && !overlay.classList.contains('hidden')) { overlay.classList.add('hidden'); return; }
 
