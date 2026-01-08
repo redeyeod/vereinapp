@@ -10,7 +10,7 @@ const App = {
     state: {
         lastRead: parseInt(localStorage.getItem('vm_last_read')) || 0,
         theme: localStorage.getItem('vm_theme') || 'dark',
-        currentUser: null 
+        currentUser: null // Speichert das volle User-Objekt inkl. Rolle
     },
 
     /**
@@ -19,27 +19,37 @@ const App = {
     async init() {
         console.log("App wird initialisiert...");
 
-        // 1. Warte auf Store
+        // 1. Warte auf Store, falls er als Modul verzögert geladen wird
         let attempts = 0;
         while (typeof Store === 'undefined' && attempts < 10) {
             await new Promise(r => setTimeout(r, 100));
             attempts++;
         }
 
+        // 2. Daten-Store initialisieren
         if (typeof Store !== 'undefined') {
             await Store.init();
 
-            // Reaktivität
+            // ZENTRALE UPDATE LOGIK
+            // Wird aufgerufen, wenn sich Daten im Store ändern (durch User oder Cloud)
             Store.onUpdate = () => {
                 this.updateNotificationDot();
+                
+                // Prüfen, ob der User gerade tippt. Wenn ja, KEIN komplettes Neurendern,
+                // da sonst das Textfeld den Fokus verliert.
                 const activeTag = document.activeElement ? document.activeElement.tagName : '';
-                // Nur neu rendern, wenn kein Textfeld fokussiert ist (außer im Messenger)
-                if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+                const isTyping = (activeTag === 'INPUT' || activeTag === 'TEXTAREA');
+
+                // Spezielle Ausnahme: Wenn wir im Messenger sind und tippen, kümmert sich der Messenger selbst ums Update.
+                // In allen anderen Fällen (oder wenn nicht getippt wird) rendern wir neu.
+                if (!isTyping || Store.state.currentView !== 'messenger') {
                      this.router(Store.state.currentView);
+                } else {
+                    console.log("Update empfangen, aber User tippt gerade. Überspringe Render.");
                 }
             };
         } else {
-            console.error("Store nicht gefunden!");
+            console.error("KRITISCHER FEHLER: Store.js wurde nicht geladen!");
             return;
         }
 
@@ -47,34 +57,38 @@ const App = {
         this.initTheme();
         this.injectStyles();
         this.updateNotificationDot();
-        
-        // Start-View laden
         this.router('dashboard');
     },
 
     loadCurrentUser() {
+        // Wir laden die Session vom Supabase Auth
         const sessionStr = localStorage.getItem('vm_supabase_session');
         if(sessionStr && typeof Store !== 'undefined') {
             try {
                 const session = JSON.parse(sessionStr);
-                const user = Store.state.members.find(m => m.email === session.user.email);
+                const email = session.user.email;
+                
+                // User im Store finden
+                // Falls Store noch leer (Daten laden noch), wird dies später durch onUpdate korrigiert
+                const user = Store.state.members.find(m => m.email === email);
                 if(user) {
                     this.state.currentUser = user;
-                    // Header aktualisieren
+                    // Header-Infos aktualisieren
                     const nameEl = document.getElementById('current-user-name');
                     const roleEl = document.getElementById('current-user-role');
                     if(nameEl) nameEl.textContent = user.firstName;
                     if(roleEl) roleEl.textContent = user.role;
-                    
-                    // IDs in Views setzen
-                    if(typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
-                    if(typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
-                    if(typeof WorkHoursView !== 'undefined') WorkHoursView.state.myId = user.id;
+
+                    // IDs für Views setzen
+                    if (typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
+                    if (typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
+                    if (typeof WorkHoursView !== 'undefined') WorkHoursView.state.myId = user.id;
                 }
             } catch(e) { console.error(e); }
         }
     },
 
+    // --- PERMISSION SYSTEM (RBAC) ---
     can(action) {
         if (!this.state.currentUser) this.loadCurrentUser();
         const user = this.state.currentUser;
@@ -100,6 +114,7 @@ const App = {
         return permissions[userGroup].includes(action);
     },
 
+    // --- THEMING & ROUTING ---
     initTheme() { this.applyTheme(); },
     toggleTheme() { 
         this.state.theme = this.state.theme === 'dark' ? 'light' : 'dark'; 
@@ -155,7 +170,6 @@ const App = {
         if(subtitle) subtitle.textContent = titles[viewName] || 'Übersicht';
 
         // EXPLIZITES MAPPING STATT DYNAMISCHER SUCHE
-        // Das verhindert Fehler, wenn window[VarName] nicht funktioniert
         let currentViewObj = null;
 
         switch(viewName) {
@@ -209,8 +223,6 @@ const App = {
             // Notfall-Retry nach 1 Sekunde (falls Skripte langsam laden)
             setTimeout(() => {
                 if (Store.state.currentView === viewName) {
-                    // Nur erneut versuchen, wenn User nicht gewechselt hat
-                    // Wir rufen router nicht rekursiv auf um Loops zu vermeiden, sondern checken direkt global
                     const retryObj = window[viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View'];
                     if (retryObj) retryObj.render(container);
                 }
@@ -259,13 +271,12 @@ const App = {
         html += `</div>`; if (news.length > 0 || chats.length > 0) { html += `<div class="p-3 bg-dark-bg/50 border-t border-dark-border text-center"><button onclick="App.markAllAsRead()" class="text-xs font-bold text-blue-400 hover:text-blue-300 hover:underline">Alle als gelesen markieren</button></div>`; } html += `</div>`;
         if (!overlay) { overlay = document.createElement('div'); overlay.id = 'notification-overlay'; overlay.className = 'fixed inset-0 z-50 hidden'; overlay.onclick = (e) => { if(e.target === overlay) overlay.classList.add('hidden'); }; document.body.appendChild(overlay); } overlay.innerHTML = html; overlay.classList.remove('hidden');
     },
-
     markAllAsRead() { this.state.lastRead = Date.now(); localStorage.setItem('vm_last_read', this.state.lastRead); document.getElementById('notification-overlay').classList.add('hidden'); this.updateNotificationDot(); App.showToast('Alle als gelesen markiert'); },
     updateNotificationDot() { const lastRead = this.state.lastRead; let hasNew = false; if (Store.state.news.some(n => new Date(n.date).getTime() > lastRead)) hasNew = true; if (!hasNew) Store.state.groups.forEach(g => { if (g.chat && g.chat.length > 0) { const lastMsg = g.chat[g.chat.length - 1]; if (new Date(lastMsg.time).getTime() > lastRead) hasNew = true; } }); const dot = document.querySelector('button[onclick="App.toggleNotifications()"] span'); if (dot) dot.style.display = hasNew ? 'block' : 'none'; },
     
     openModal(htmlContent) { const overlay = document.getElementById('modal-overlay'); const content = document.getElementById('modal-content'); if (overlay && content) { content.innerHTML = htmlContent; overlay.classList.remove('hidden'); setTimeout(() => { content.classList.remove('scale-95', 'opacity-0'); content.classList.add('scale-100', 'opacity-100'); }, 10); } },
     closeModal() { const overlay = document.getElementById('modal-overlay'); const content = document.getElementById('modal-content'); if (overlay && content) { content.classList.remove('scale-100', 'opacity-100'); content.classList.add('scale-95', 'opacity-0'); setTimeout(() => { overlay.classList.add('hidden'); content.innerHTML = ''; }, 300); } },
-    showToast(message) { const toast = document.getElementById("toast"); if (toast) { toast.textContent = message; toast.className = "show"; setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000); } }
+    showToast(message) { const toast = document.getElementById("toast"); if (t) { toast.textContent = message; toast.classList.add('show'); setTimeout(() => { toast.classList.remove('show'),3000); } } }
 };
 
 window.addEventListener('DOMContentLoaded', () => { App.init(); });
