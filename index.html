@@ -5,14 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VereinsManager App</title>
     
-    <!-- Supabase Client -->
+    <!-- Externe Bibliotheken -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
-    <!-- Design & Icons -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
+    <!-- Tailwind Config -->
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -53,10 +52,6 @@
                 <p class="text-dark-muted text-sm mt-2">Cloud Edition</p>
             </div>
             
-            <div id="config-warning" class="hidden mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-xl text-red-200 text-xs text-center">
-                <i class="fa-solid fa-triangle-exclamation mr-1"></i> Supabase Config fehlt in js/config.js!
-            </div>
-
             <div class="mb-6 bg-dark-bg/50 p-4 rounded-xl border border-dark-border">
                 <label class="block text-xs font-bold text-dark-muted uppercase mb-2 ml-1">Verein wählen</label>
                 <select id="club-select" onchange="handleClubChange(this.value)" class="w-full bg-dark-card border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 cursor-pointer">
@@ -66,9 +61,10 @@
                 </select>
             </div>
 
+            <!-- Login Form: Wichtig onsubmit="return false;" als Fallback -->
             <form id="login-form" class="space-y-4">
-                <div><label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">E-Mail</label><input type="email" name="email" required class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"></div>
-                <div><label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">Passwort</label><input type="password" name="password" required class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"></div>
+                <div><label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">E-Mail</label><input type="email" name="email" required placeholder="name@verein.de" class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"></div>
+                <div><label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">Passwort</label><input type="password" name="password" required placeholder="••••••••" class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"></div>
                 <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg mt-2">Anmelden</button>
             </form>
             <div class="text-center mt-4"><p class="text-xs text-dark-muted">Admin-Login: <b>admin@gmail.com</b> / <b>admin</b></p></div>
@@ -99,11 +95,12 @@
     <div id="modal-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 transition-opacity duration-300"><div class="bg-dark-card border border-dark-border rounded-bubble shadow-2xl w-full max-w-md transform transition-all scale-95 opacity-0 text-dark-text" id="modal-content"></div></div>
     <div id="toast">Nachricht gesendet</div>
 
-    <!-- 1. Config & Store -->
+    <!-- SCRIPTS (Reihenfolge wichtig!) -->
+    <!-- 1. Config -->
     <script src="js/config.js"></script>
-    <script src="js/store.js"></script>
     
-    <!-- 2. Views -->
+    <!-- 2. Store & Views -->
+    <script src="js/store.js"></script>
     <script src="js/views/dashboard.js"></script>
     <script src="js/views/members.js"></script>
     <script src="js/views/groups.js"></script>
@@ -117,5 +114,167 @@
     <!-- 3. App Core -->
     <script src="js/app.js"></script>
 
+    <!-- 4. Inline Logic für Login & Init -->
+    <script>
+        // Global Logout
+        function logout() {
+            if(confirm("Abmelden?")) {
+                localStorage.removeItem('vm_supabase_session');
+                localStorage.removeItem('vm_current_user_id');
+                location.reload();
+            }
+        }
+        window.logout = logout;
+
+        function handleClubChange(clubId) {
+            if (typeof Store !== 'undefined') {
+                Store.switchClub(clubId);
+            }
+        }
+
+        // Login Handler
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault(); // VERHINDERT NEULADEN
+            
+            // Lade-Status anzeigen (Button deaktivieren)
+            const btn = e.target.querySelector('button');
+            const originalText = btn.textContent;
+            btn.textContent = "Lädt...";
+            btn.disabled = true;
+
+            try {
+                const fd = new FormData(e.target);
+                const email = fd.get('email');
+                const password = fd.get('password');
+
+                // 1. Zuerst existierende Mitglieder prüfen (Lokal/Store Cache)
+                const members = Store.state.members || [];
+                const user = members.find(m => m.email === email);
+
+                if (user) {
+                    const storedPassword = user.password || 'start123';
+                    if (password === storedPassword) {
+                        localStorage.setItem('vm_current_user_id', user.id);
+                        initApp(user);
+                        return;
+                    }
+                }
+
+                // 2. Admin Backdoor (Supabase Auth)
+                if (email === 'admin@gmail.com' && password === 'admin') {
+                    // Supabase Client direkt nutzen falls Store noch nicht ganz bereit
+                    const { createClient } = supabase;
+                    const _sb = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+                    
+                    // Einloggen versuchen
+                    const { data, error } = await _sb.auth.signInWithPassword({ email, password });
+
+                    if (error) {
+                        // Falls User in Auth nicht existiert -> Erstellen
+                        const { data: reg, error: regErr } = await _sb.auth.signUp({email, password});
+                        if(!regErr) {
+                            // Admin User in DB anlegen
+                            const adminUser = { 
+                                id: 999, 
+                                firstName: 'Super', 
+                                lastName: 'Admin', 
+                                email: email, 
+                                role: 'Admin', 
+                                status: 'active', 
+                                groups: ['Vorstand'], 
+                                joinedDate: new Date().toISOString() 
+                            };
+                            await Store.add('members', adminUser);
+                            localStorage.setItem('vm_current_user_id', 999);
+                            localStorage.setItem('vm_supabase_session', JSON.stringify(reg.session));
+                            
+                            // User objekt für initApp manuell bauen, da Store evtl. noch lädt
+                            initApp(adminUser);
+                            return;
+                        }
+                    } else {
+                        // Login erfolgreich
+                        localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
+                        
+                        // Check ob Admin in DB existiert
+                        let adminInDb = members.find(m => m.email === email);
+                        if(!adminInDb) {
+                             const adminUser = { id: 999, firstName: 'Super', lastName: 'Admin', email: email, role: 'Admin', status: 'active', groups: ['Vorstand'], joinedDate: new Date().toISOString() };
+                             await Store.add('members', adminUser);
+                             adminInDb = adminUser;
+                        }
+                        
+                        localStorage.setItem('vm_current_user_id', adminInDb.id);
+                        initApp(adminInDb);
+                        return;
+                    }
+                }
+
+                if (user) {
+                    alert('Passwort falsch.');
+                } else {
+                    alert('Benutzer nicht gefunden. Bitte Admin kontaktieren.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Ein Fehler ist aufgetreten: " + err.message);
+            } finally {
+                // Button zurücksetzen
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        });
+
+        function initApp(user) {
+            document.getElementById('auth-view').classList.add('hidden');
+            document.getElementById('app-view').classList.remove('hidden');
+            
+            if(user) {
+                document.getElementById('current-user-name').textContent = user.firstName;
+                document.getElementById('current-user-role').textContent = user.role;
+                
+                if (typeof App !== 'undefined') {
+                    App.state.currentUser = user;
+                    if (typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
+                    if (typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
+                    App.init(); // Router starten
+                }
+            }
+        }
+
+        // Auto-Login beim Start
+        window.addEventListener('DOMContentLoaded', () => {
+            const currentUserId = localStorage.getItem('vm_current_user_id');
+            const session = localStorage.getItem('vm_supabase_session');
+
+            if (currentUserId || session) {
+                // Warten bis Store geladen (Script Tags)
+                const checkStore = setInterval(() => {
+                    if(typeof Store !== 'undefined') {
+                        clearInterval(checkStore);
+                        Store.init().then(() => {
+                            const select = document.getElementById('club-select');
+                            if(select) select.value = Store.clubId;
+
+                            const user = Store.state.members.find(m => m.id == currentUserId);
+                            if(user) initApp(user);
+                            else {
+                                // Session ungültig
+                                localStorage.removeItem('vm_current_user_id');
+                            }
+                        });
+                    }
+                }, 100);
+            } else {
+                // Nur Store init für Login Screen
+                const checkStoreInit = setInterval(() => {
+                    if(typeof Store !== 'undefined') {
+                         clearInterval(checkStoreInit);
+                         Store.init();
+                    }
+                }, 100);
+            }
+        });
+    </script>
 </body>
 </html>
