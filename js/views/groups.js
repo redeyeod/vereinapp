@@ -1,7 +1,7 @@
 /**
  * =============================================================================
- * GROUPS VIEW (Fixed Persistence & UUID Support)
- * Verwaltung der Abteilungen mit Detailansicht (Chat, Cloud, Kalender)
+ * GROUPS VIEW (Persistence Fix)
+ * Verwaltung der Abteilungen - Speichert Gruppen-Zuweisung zuverlässig
  * =============================================================================
  */
 
@@ -10,8 +10,8 @@ const GroupsView = {
     state: {
         activeGroupId: null,
         activeTab: 'members', // 'members', 'chat', 'calendar', 'files'
-        currentFolderId: null, // null = Root-Verzeichnis
-        myId: 1 // Fallback
+        currentFolderId: null,
+        myId: 1
     },
 
     /**
@@ -33,7 +33,12 @@ const GroupsView = {
         const members = Store.state.members || [];
         
         members.forEach(m => {
-            const memberGroups = Array.isArray(m.groups) ? m.groups : (m.group && m.group !== 'Keine' ? [m.group] : []);
+            const memberGroups = Array.isArray(m.groups) ? m.groups : [];
+            // Legacy Support (falls 'group' noch lokal existiert)
+            if (m.group && m.group !== 'Keine' && !memberGroups.includes(m.group)) {
+                memberGroups.push(m.group);
+            }
+            
             memberGroups.forEach(gName => {
                 if (!counts[gName]) counts[gName] = 0;
                 counts[gName]++;
@@ -81,7 +86,6 @@ const GroupsView = {
                 ? 'cursor-pointer hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-900/10 bg-dark-card' 
                 : 'cursor-not-allowed opacity-50 bg-dark-bg border-dashed';
 
-            // WICHTIG: IDs in Anführungszeichen ('${group.id}') für UUID Support
             const deleteButton = canManage 
                 ? `<button onclick="event.stopPropagation(); GroupsView.delete('${group.id}')" class="text-dark-muted hover:text-red-400 p-2 rounded-lg hover:bg-red-500/10 transition-colors" title="Löschen">
                     <i class="fa-regular fa-trash-can"></i>
@@ -208,9 +212,10 @@ const GroupsView = {
     // --- TAB 1: MITGLIEDER ---
     renderTabMembers(group) {
         const members = (Store.state.members || []).filter(m => {
-            if (Array.isArray(m.groups) && m.groups.includes(group.name)) return true;
+            const groups = Array.isArray(m.groups) ? m.groups : [];
+            // Legacy Support
             if (m.group === group.name) return true;
-            return false;
+            return groups.includes(group.name);
         });
 
         const canManage = App.can('manage_groups');
@@ -266,9 +271,8 @@ const GroupsView = {
 
     openAddMemberModal(groupId) {
         if(!App.can('manage_groups')) return;
-        const group = Store.state.groups.find(g => g.id == groupId); // == für ID Match (String/Int)
+        const group = Store.state.groups.find(g => g.id == groupId);
         
-        // Filter: Zeige nur Mitglieder, die NICHT in der Gruppe sind
         const availableMembers = (Store.state.members || []).filter(m => {
             const inGroupNew = Array.isArray(m.groups) && m.groups.includes(group.name);
             const inGroupOld = m.group === group.name;
@@ -301,7 +305,6 @@ const GroupsView = {
                                     <p class="text-sm font-bold text-white member-name truncate">${m.firstName} ${m.lastName}</p>
                                 </div>
                             </div>
-                            <!-- ID in Anführungszeichen für UUID Sicherheit -->
                             <button onclick="GroupsView.addMemberDirect('${groupId}', '${m.id}')" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg text-xs transition-colors shadow-lg shadow-blue-900/20 flex-shrink-0">
                                 <i class="fa-solid fa-plus"></i>
                             </button>
@@ -328,57 +331,44 @@ const GroupsView = {
         });
     },
 
-    // --- FIX: Optimistic Update für sofortiges Feedback ---
+    // --- FIX: Sicheres Speichern (Ohne 'group: null') ---
     async addMemberDirect(groupId, memberId) {
         if(!App.can('manage_groups')) return;
         
-        // IDs für Vergleich sicherstellen
         const group = Store.state.groups.find(g => g.id == groupId);
         const member = Store.state.members.find(m => m.id == memberId);
 
         if (member && group) {
             try {
-                // Lokale Kopie der Gruppen erstellen
+                App.showToast("Speichere...", "info");
+
+                // Arrays sicherstellen
                 let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
                 
-                // Legacy Migration: Alten "Singular" Wert übernehmen
-                if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
-                    currentGroups.push(member.group);
-                }
-
+                // Wir fügen nur zur Array-Liste hinzu
                 if (!currentGroups.includes(group.name)) {
                     currentGroups.push(group.name);
                 }
                 
-                // 1. Optimistisches Update: Lokal sofort anwenden!
-                member.groups = currentGroups;
-                member.group = null; // Legacy leeren
-                
-                // UI sofort aktualisieren
-                App.closeModal();
-                this.render(document.getElementById('content'));
-                App.showToast(`${member.firstName} hinzugefügt`);
-
-                // 2. Im Hintergrund an DB senden
+                // Update Payload OHNE das 'group' Feld, um Fehler zu vermeiden
                 const updatePayload = {
                     id: member.id,
-                    groups: currentGroups,
-                    group: null
+                    groups: currentGroups
                 };
                 
+                // Warten auf DB
                 await Store.update('members', updatePayload);
                 
-                // 3. Zur Sicherheit neu laden, um konsistenten State zu haben
+                // UI Refresh
+                App.closeModal();
+                App.showToast(`${member.firstName} hinzugefügt`, "success");
+                
                 if(Store.fetchTable) await Store.fetchTable('members');
+                this.render(document.getElementById('content'));
 
             } catch (e) {
                 console.error(e);
                 App.showToast("Fehler beim Speichern: " + e.message, "error");
-                // Fallback: Neu laden, falls es schiefging
-                if(Store.fetchTable) {
-                    await Store.fetchTable('members');
-                    this.render(document.getElementById('content'));
-                }
             }
         }
     },
@@ -394,38 +384,24 @@ const GroupsView = {
                 try {
                     let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
                     
-                    if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
-                        currentGroups.push(member.group);
-                    }
-
+                    // Filtert die Gruppe raus
                     currentGroups = currentGroups.filter(g => g !== group.name);
                     
-                    // 1. Optimistisches Update
-                    member.groups = currentGroups;
-                    member.group = null;
-                    
-                    // UI Update
-                    this.render(document.getElementById('content'));
-                    App.showToast("Entfernt");
-
-                    // 2. DB Update
                     const updatePayload = {
                         id: member.id,
-                        groups: currentGroups,
-                        group: null
+                        groups: currentGroups
+                        // Auch hier kein 'group: null' senden!
                     };
                     
                     await Store.update('members', updatePayload);
+                    
                     if(Store.fetchTable) await Store.fetchTable('members');
+                    this.render(document.getElementById('content'));
+                    App.showToast("Entfernt", "success");
                     
                 } catch (e) {
                     console.error(e);
-                    App.showToast("Fehler beim Entfernen: " + e.message, "error");
-                    // Rollback
-                    if(Store.fetchTable) {
-                        await Store.fetchTable('members');
-                        this.render(document.getElementById('content'));
-                    }
+                    App.showToast("Fehler: " + e.message, "error");
                 }
             }
         }
@@ -528,7 +504,6 @@ const GroupsView = {
         `;
     },
 
-    // Detailansicht für Events (Vereinfacht für Stabilität)
     openEventDetail(eventId) {
         const e = Store.state.events.find(ev => ev.id == eventId);
         if(!e) return;
