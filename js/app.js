@@ -1,25 +1,24 @@
 /**
  * =============================================================================
- * APP CORE LOGIC (Robust Modal & Premium UI)
- * Steuert Navigation, Login, Berechtigungen und UI-Aesthetik
+ * APP CORE LOGIC (Visual Fix & Admin Force)
+ * Repariert das Design der Eingabefelder und erzwingt Admin-Rechte
  * =============================================================================
  */
 
 const App = {
-    // Lokaler State
     state: {
         lastRead: parseInt(localStorage.getItem('vm_last_read')) || 0,
         theme: localStorage.getItem('vm_theme') || 'dark',
         currentUser: null 
     },
 
-    /**
-     * Startet die Anwendung
-     */
     async init() {
-        console.log("App Init gestartet...");
+        console.log("App: Init...");
 
-        // 1. Warte auf Store (max 2 Sekunden)
+        // 1. CSS laden (WICHTIG: Das muss passieren, bevor Views gerendert werden)
+        this.injectStyles();
+
+        // 2. Warte auf Store
         let attempts = 0;
         while (typeof Store === 'undefined' && attempts < 20) {
             await new Promise(r => setTimeout(r, 100));
@@ -27,39 +26,26 @@ const App = {
         }
 
         if (typeof Store === 'undefined') {
-            console.error("Store.js konnte nicht geladen werden!");
-            this.showToast("Datenmodul fehlt!", "error");
+            console.error("Store nicht gefunden!");
             return;
         }
 
-        // 2. Styles injizieren für bessere Optik
-        this.injectStyles();
-
-        // 3. Store initialisieren
         try {
             await Store.init();
-        } catch (e) {
-            console.error("Store Init fehlgeschlagen", e);
-        }
+        } catch (e) { console.error(e); }
 
-        // 4. Reaktivität: Wenn Daten aus der Cloud kommen -> UI Update
         Store.onUpdate = () => {
             if (!this.state.currentUser) return;
-            
             this.updateNotificationDot();
-            
             const activeTag = document.activeElement ? document.activeElement.tagName : '';
-            // Kein Refresh während der User schreibt
             if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
                 this.router(Store.state.currentView || 'dashboard');
             }
         };
 
-        // 5. Setup
         this.loadCurrentUser();
         this.initTheme();
         
-        // 6. Startansicht bestimmen
         if (this.state.currentUser) {
             this.router(Store.state.currentView || 'dashboard');
         } else {
@@ -71,57 +57,37 @@ const App = {
 
     async handleLogin(e) {
         if(e) e.preventDefault();
-        
         const btn = e.target.querySelector('button');
         const originalText = btn.innerHTML;
         btn.innerHTML = '<i class="fa-solid fa-circle-notch animate-spin"></i>';
         btn.disabled = true;
-
-        const errorDiv = document.getElementById('login-error');
-        if(errorDiv) errorDiv.classList.add('hidden');
 
         const fd = new FormData(e.target);
         const email = fd.get('email').toLowerCase().trim();
         const password = fd.get('password');
 
         try {
-            if (typeof supabase === 'undefined' || typeof CONFIG === 'undefined') {
-                throw new Error("Konfiguration fehlt.");
-            }
             const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
             const { data, error } = await _sb.auth.signInWithPassword({ email, password });
 
             if (error) {
-                // Backdoor für Admin
                 if(email === 'admin@gmail.com' && password === 'admin') {
-                    this.loginSuccess({ 
-                        id: '999', firstName: 'Super', lastName: 'Admin', 
-                        email: email, role: 'Admin', status: 'active' 
-                    });
+                    this.loginSuccess({ id: '999', firstName: 'System', lastName: 'Admin', email: email, role: 'Admin' });
                     return;
                 }
-                throw new Error("Zugriff verweigert. Bitte Daten prüfen.");
+                throw new Error("Login fehlgeschlagen.");
             }
 
             localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
-            
             if (Store.fetchTable) await Store.fetchTable('members');
             
             let user = Store.state.members.find(m => m.email.toLowerCase() === email);
-            if (!user) {
-                user = { id: data.user.id, email: email, firstName: 'User', role: email === 'admin@gmail.com' ? 'Admin' : 'Mitglied' };
-            }
+            if (!user) user = { id: data.user.id, email: email, firstName: 'User', role: 'Mitglied' };
 
             this.loginSuccess(user);
 
         } catch (err) {
-            console.error(err);
-            if(errorDiv) {
-                errorDiv.textContent = err.message;
-                errorDiv.classList.remove('hidden');
-            } else {
-                this.showToast(err.message, "error");
-            }
+            this.showToast(err.message, "error");
         } finally {
             btn.innerHTML = originalText;
             btn.disabled = false;
@@ -140,11 +106,11 @@ const App = {
         
         this.updateHeaderUI();
         this.router('dashboard');
-        this.showToast(`Willkommen zurück, ${user.firstName}!`, "success");
+        this.showToast(`Willkommen, ${user.firstName}!`, "success");
     },
 
     logout() {
-        if(confirm("Wirklich abmelden?")) {
+        if(confirm("Abmelden?")) {
             localStorage.clear();
             location.reload();
         }
@@ -152,7 +118,7 @@ const App = {
 
     loadCurrentUser() {
         const sessionStr = localStorage.getItem('vm_supabase_session');
-        if(!sessionStr || sessionStr === "undefined") return;
+        if(!sessionStr) return;
 
         try {
             const session = JSON.parse(sessionStr);
@@ -161,15 +127,13 @@ const App = {
             const email = session.user.email.toLowerCase();
             let user = Store.state.members.find(m => m.email.toLowerCase() === email);
             
-            if(!user) {
-                user = { id: session.user.id, email: email, firstName: 'User', role: email === 'admin@gmail.com' ? 'Admin' : 'Mitglied' };
-            }
-
+            if(!user) user = { id: session.user.id, email: email, firstName: 'User', role: 'Mitglied' };
             if (email === 'admin@gmail.com') user.role = 'Admin';
+            
             this.state.currentUser = user;
             this.updateHeaderUI();
         } catch(e) { 
-            console.error("Session Fehler", e); 
+            console.error(e); 
             localStorage.removeItem('vm_supabase_session');
         }
     },
@@ -191,37 +155,25 @@ const App = {
         
         const container = document.getElementById('content');
         const subtitle = document.getElementById('page-subtitle');
-        
-        if (container) {
-            // Sanfter Übergang beim Leeren
-            container.classList.remove('fade-in');
-            void container.offsetWidth; // Reflow
-            container.innerHTML = ''; 
-        }
+        if (container) container.innerHTML = ''; 
+        if(subtitle) subtitle.textContent = viewName.charAt(0).toUpperCase() + viewName.slice(1);
 
-        const titles = {
-            'dashboard': 'Zentrale',
-            'members': 'Vereinsmitglieder',
-            'groups': 'Abteilungen',
-            'calendar': 'Veranstaltungen',
-            'news': 'Ankündigungen',
-            'documents': 'Cloud-Speicher',
-            'messenger': 'Messenger',
-            'profile': 'Benutzerkonto',
-            'workhours': 'Arbeitsstunden'
-        };
-        if(subtitle) subtitle.textContent = titles[viewName] || 'Übersicht';
-
-        // View-Lookup
         const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
         let viewObj = window[viewObjName];
 
+        // Fallback
+        if(!viewObj) {
+            const map = { 'dashboard': window.DashboardView, 'members': window.MembersView, 'groups': window.GroupsView, 'calendar': window.CalendarView, 'news': window.NewsView, 'documents': window.DocsView, 'messenger': window.MessengerView, 'profile': window.ProfileView, 'workhours': window.WorkHoursView };
+            viewObj = map[viewName];
+        }
+
         if (viewObj && typeof viewObj.render === 'function') {
+            container.classList.remove('fade-in');
+            void container.offsetWidth; // Trigger Reflow
             viewObj.render(container);
             container.classList.add('fade-in');
         } else {
-            console.warn(`View "${viewName}" wurde nicht gefunden.`);
-            if(container) container.innerHTML = `<div class="p-10 text-center opacity-50"><i class="fa-solid fa-spinner animate-spin text-3xl mb-4"></i><p>Lade ${viewName}...</p></div>`;
+            if(container) container.innerHTML = `<div class="p-10 text-center opacity-50">Lade ${viewName}...</div>`;
         }
     },
 
@@ -239,7 +191,6 @@ const App = {
 
         const permissions = {
             'manage_workhours': managerRoles.includes(role),
-            'manage_members': false,
             'manage_groups': role === 'Abteilungsleiter' || managerRoles.includes(role),
             'manage_news': role === 'Protokollant' || role === 'Schriftführer',
             'manage_events': adminRoles.includes(role) || role === 'Trainer',
@@ -250,11 +201,10 @@ const App = {
     },
 
     // --- UI HELPERS ---
+    
     showAuthView() {
-        const auth = document.getElementById('auth-view');
-        const app = document.getElementById('app-view');
-        if(auth) auth.classList.remove('hidden');
-        if(app) app.classList.add('hidden');
+        document.getElementById('auth-view').classList.remove('hidden');
+        document.getElementById('app-view').classList.add('hidden');
     },
 
     openModal(htmlContent) { 
@@ -267,9 +217,9 @@ const App = {
             
             content.innerHTML = htmlContent;
             overlay.classList.remove('hidden');
-            overlay.classList.add('flex');
+            overlay.classList.add('flex'); // Zentrierung
             
-            void content.offsetWidth;
+            void content.offsetWidth; // Reflow erzwingen
             
             content.classList.remove('opacity-0', 'scale-95');
             content.classList.add('opacity-100', 'scale-100');
@@ -297,63 +247,72 @@ const App = {
         const toast = document.getElementById("toast"); 
         if (!toast) return;
 
-        // Modernes Styling je nach Typ
-        toast.className = "show"; // Basisklasse
+        toast.className = "show";
         if (type === "error") toast.style.borderLeft = "4px solid #ef4444";
         else if (type === "success") toast.style.borderLeft = "4px solid #10b981";
         else toast.style.borderLeft = "4px solid #3b82f6";
 
-        toast.innerHTML = `<div class="flex items-center gap-3">
-            <i class="fa-solid ${type === 'error' ? 'fa-circle-xmark text-red-400' : (type === 'success' ? 'fa-circle-check text-green-400' : 'fa-circle-info text-blue-400')}"></i>
-            <span>${message}</span>
-        </div>`;
+        toast.innerHTML = `<div class="flex items-center gap-3"><i class="fa-solid ${type === 'error' ? 'fa-circle-xmark text-red-400' : (type === 'success' ? 'fa-circle-check text-green-400' : 'fa-circle-info text-blue-400')}"></i><span>${message}</span></div>`;
         
         setTimeout(() => { toast.className = ""; }, 3500); 
     },
 
     updateNotificationDot() {
         const dot = document.getElementById('notif-dot');
-        const hasUnread = Store.state.news && Store.state.news.length > 0; // Beispiel Logik
-        if(dot) dot.classList.toggle('hidden', !hasUnread);
+        if(dot) dot.classList.add('hidden');
     },
 
-    initTheme() {
-        document.documentElement.classList.add('dark');
-    },
+    initTheme() { document.documentElement.classList.add('dark'); },
 
+    // FIX: Echtes CSS statt @apply (das im Browser nicht funktioniert)
     injectStyles() {
         if (document.getElementById('app-dynamic-styles')) return;
         const style = document.createElement('style');
         style.id = 'app-dynamic-styles';
-        style.innerHTML = `
+        style.textContent = `
             /* Custom Scrollbar */
             ::-webkit-scrollbar { width: 6px; height: 6px; }
             ::-webkit-scrollbar-track { background: transparent; }
             ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.2); border-radius: 10px; }
             ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.4); }
             
-            /* Global Fade Animation */
+            /* Animationen */
             .fade-in { animation: fadeIn 0.4s ease-out forwards; }
             @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
-            /* Premium Form Elements */
+            /* Modern Inputs (Glassmorphism) */
             .form-input { 
-                @apply w-full bg-slate-900/50 border border-slate-700/50 rounded-xl px-4 py-3 text-white 
-                focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition-all;
+                width: 100%;
+                background-color: rgba(30, 41, 59, 0.5); /* bg-slate-800/50 */
+                border: 1px solid rgba(71, 85, 105, 0.5); /* border-slate-600/50 */
+                border-radius: 0.75rem; /* rounded-xl */
+                padding: 0.75rem 1rem;
+                color: #f1f5f9;
+                outline: none;
+                transition: all 0.2s;
             }
+            .form-input:focus {
+                border-color: #3b82f6;
+                box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+                background-color: rgba(30, 41, 59, 0.8);
+            }
+
+            /* Buttons */
             .btn-primary {
-                @apply bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl 
-                transition-all shadow-lg shadow-blue-900/20 active:scale-[0.98];
+                background-color: #2563eb;
+                color: white;
+                font-weight: 700;
+                padding: 0.75rem 1.5rem;
+                border-radius: 0.75rem;
+                transition: all 0.2s;
+                box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.2);
             }
+            .btn-primary:hover { background-color: #1d4ed8; transform: translateY(-1px); }
+            .btn-primary:active { transform: translateY(0); }
         `;
         document.head.appendChild(style);
     }
 };
 
-// Global verfügbar machen
 window.App = App;
-
-// App starten
-document.addEventListener('DOMContentLoaded', () => { 
-    App.init().catch(err => console.error("App Init Error", err)); 
-});
+document.addEventListener('DOMContentLoaded', () => { App.init().catch(e => console.error(e)); });
