@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="de" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VereinsManager App</title>
+    
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- Tailwind & Fonts -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        dark: { bg: '#0f172a', card: '#1e293b', hover: '#334155', border: '#334155', text: '#f1f5f9', muted: '#94a3b8' }
+                    },
+                    borderRadius: { 'bubble': '2rem' }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-color); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .bubble-card { background: linear-gradient(145deg, var(--card-color), var(--bg-color)); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: all 0.3s; }
+        .bubble-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2); }
+        #toast { visibility: hidden; min-width: 250px; background-color: #3b82f6; color: #fff; text-align: center; border-radius: 12px; padding: 16px; position: fixed; z-index: 100; left: 50%; bottom: 30px; transform: translateX(-50%); transition: opacity 0.3s, bottom 0.3s; opacity: 0; }
+        #toast.show { visibility: visible; opacity: 1; bottom: 50px; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="bg-dark-bg text-dark-text selection:bg-blue-500 selection:text-white transition-colors duration-300">
+
+    <!-- AUTH VIEW -->
+    <div id="auth-view" class="h-screen flex items-center justify-center p-4 bg-[url('https://images.unsplash.com/photo-1526628953301-3e589a6a8b74?q=80&w=1920')] bg-cover bg-center relative">
+        <div class="absolute inset-0 bg-dark-bg/90 backdrop-blur-sm"></div>
+        <div class="relative z-10 w-full max-w-md bg-dark-card border border-dark-border p-8 rounded-bubble shadow-2xl fade-in">
+            <div class="text-center mb-6">
+                <div class="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-3xl text-white shadow-lg mx-auto mb-4"><i class="fa-solid fa-users-rectangle"></i></div>
+                <h1 class="text-2xl font-bold text-white">VereinsManager</h1>
+                <p class="text-dark-muted text-sm mt-2">Cloud Edition</p>
+            </div>
+            
+            <form id="login-form" class="space-y-4">
+                <div><label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">E-Mail</label><input type="email" name="email" required class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"></div>
+                <div><label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">Passwort</label><input type="password" name="password" required class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"></div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg mt-2">Anmelden</button>
+            </form>
+            <div class="text-center mt-4"><p class="text-xs text-dark-muted">Nutzen Sie Ihre Supabase Zugangsdaten oder erstellen Sie einen Admin-Account.<br>Default PW für neue Mitglieder: <b>start123</b></p></div>
+        </div>
+    </div>
+
+    <!-- APP VIEW -->
+    <div id="app-view" class="h-screen flex flex-col overflow-hidden hidden">
+        <!-- Header -->
+        <header class="bg-dark-card/50 backdrop-blur-md border-b border-dark-border h-20 flex items-center justify-between px-6 lg:px-10 z-20 shadow-sm sticky top-0 transition-colors duration-300">
+            <button onclick="App.router('dashboard')" class="flex items-center group">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg mr-3 group-hover:scale-105 transition-transform"><i class="fa-solid fa-users-rectangle"></i></div>
+                <div class="text-left"><h1 class="text-xl font-bold text-blue-500 tracking-tight leading-none group-hover:text-blue-400">VereinApp</h1><p id="page-subtitle" class="text-xs text-dark-muted font-medium">Dashboard</p></div>
+            </button>
+            <div class="flex items-center gap-3 sm:gap-6">
+                <button onclick="App.router('workhours')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Arbeitsstunden"><i class="fa-solid fa-briefcase text-xl"></i></button>
+                <button onclick="App.router('messenger')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Messenger"><i class="fa-solid fa-comments text-xl"></i></button>
+                <button onclick="App.toggleNotifications()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Benachrichtigungen"><i class="fa-regular fa-bell text-xl"></i><span id="notif-dot" class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-dark-card animate-pulse hidden"></span></button>
+                <button onclick="App.openSettingsModal()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Einstellungen"><i class="fa-solid fa-gear text-xl"></i></button>
+                <button onclick="App.router('profile')" class="flex items-center gap-3 pl-6 border-l border-dark-border group">
+                    <div class="text-right hidden sm:block"><p id="current-user-name" class="text-sm font-bold text-dark-text group-hover:text-blue-400">Gast</p><p id="current-user-role" class="text-xs text-dark-muted">Mitglied</p></div>
+                    <div class="w-10 h-10 rounded-full bg-slate-700 overflow-hidden border-2 border-transparent group-hover:border-blue-500 transition-colors"><div class="w-full h-full flex items-center justify-center bg-slate-800 text-slate-400"><i class="fa-solid fa-user"></i></div></div>
+                </button>
+            </div>
+        </header>
+        <div id="content" class="flex-1 overflow-y-auto p-4 lg:p-10 relative max-w-7xl mx-auto w-full transition-colors duration-300"></div>
+    </div>
+
+    <!-- UI Elements -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 transition-opacity duration-300"><div class="bg-dark-card border border-dark-border rounded-bubble shadow-2xl w-full max-w-md transform transition-all scale-95 opacity-0 text-dark-text" id="modal-content"></div></div>
+    <div id="toast">Nachricht gesendet</div>
+
+    <!-- Scripts: Views bleiben gleich, Store & App werden angepasst -->
+    <script src="js/views/dashboard.js"></script>
+    <script src="js/views/members.js"></script>
+    <script src="js/views/groups.js"></script>
+    <script src="js/views/calendar.js"></script>
+    <script src="js/views/news.js"></script>
+    <script src="js/views/documents.js"></script>
+    <script src="js/views/profile.js"></script>
+    <script src="js/views/messenger.js"></script>
+    <script src="js/views/workhours.js"></script>
+
+    <script>
+        // --- KONFIGURATION ---
+        // BITTE HIER DEINE DATEN EINFÜGEN!
+        const SUPABASE_URL = 'https://uccnijvmtfihmbuvnfvp.supabase.co'; // DEINE PROJEKT URL
+        const SUPABASE_KEY = 'sb_publishable_NIMm26pnWp_z4CWrhQM6XA_0D7-4VYP'; // DEIN ANON KEY
+
+        // Initialisierung
+        const { createClient } = supabase;
+        const _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // --- STORE (SUPABASE ADAPTER) ---
+        const Store = {
+            state: { members: [], groups: [], events: [], news: [], docs: [], work_entries: [], currentView: 'dashboard' },
+            onUpdate: null,
+
+            async init() {
+                console.log("Lade Daten aus Supabase...");
+                // Parallel alles laden
+                const tables = ['members', 'groups', 'events', 'news', 'docs', 'work_entries'];
+                for(let t of tables) {
+                    await this.fetchTable(t);
+                }
+                
+                // Echtzeit-Updates abonnieren
+                const channel = _supabase.channel('public-db-changes')
+                    .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+                        console.log('Change received!', payload);
+                        this.fetchTable(payload.table); // Einfachheit: Tabelle neu laden
+                    })
+                    .subscribe();
+            },
+
+            async fetchTable(table) {
+                const { data, error } = await _supabase.from(table).select('*');
+                if(!error) {
+                    this.state[table] = data;
+                    if(this.onUpdate) this.onUpdate();
+                }
+            },
+
+            // CRUD Wrapper für Supabase
+            async add(table, item) {
+                // ID entfernen wenn auto-increment, oder wir nutzen Date.now() als ID (bei SQL besser: weglassen)
+                // Für Kompatibilität mit dem bisherigen Code nutzen wir die ID, die die Views generieren
+                const { error } = await _supabase.from(table).insert(item);
+                if(error) console.error(error);
+                else App.showToast('Gespeichert');
+            },
+            async update(table, item) {
+                const { error } = await _supabase.from(table).update(item).eq('id', item.id);
+                if(error) console.error(error);
+                else App.showToast('Aktualisiert');
+            },
+            async remove(table, id) {
+                const { error } = await _supabase.from(table).delete().eq('id', id);
+                if(error) console.error(error);
+                else App.showToast('Gelöscht');
+            },
+            async addFirst(table, item) { return this.add(table, item); } // Supabase sortiert via Query
+        };
+
+
+        // --- APP CORE (mit Auth) ---
+        const App = {
+            state: { currentUser: null, theme: 'dark' },
+            async init() {
+                await Store.init();
+                Store.onUpdate = () => {
+                     const dot = document.getElementById('notif-dot'); if(dot) dot.style.display = Store.state.news.length > 0 ? 'block' : 'none';
+                     if(document.activeElement.tagName!=='INPUT' && document.activeElement.tagName!=='TEXTAREA') this.router(Store.state.currentView);
+                };
+                
+                // Styles
+                const style = document.createElement('style');
+                style.innerHTML = `.form-input { width: 100%; background-color: var(--bg-color); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 0.75rem; color: var(--text-color); transition: 0.2s; } .form-input:focus { outline: none; ring: 2px solid #3b82f6; border-color: #3b82f6; } .btn-primary { background-color: #2563eb; color: white; font-weight: 700; padding: 0.75rem 1.5rem; border-radius: 0.75rem; transition: 0.2s; } .btn-primary:hover { background-color: #1d4ed8; }`;
+                document.head.appendChild(style);
+
+                this.initTheme();
+                this.router('dashboard');
+            },
+
+            loadCurrentUser() { 
+                const session = JSON.parse(localStorage.getItem('vm_supabase_session'));
+                if(session) {
+                    // Verknüpfe Auth-User mit Member-Daten via Email
+                    const email = session.user.email;
+                    this.state.currentUser = Store.state.members.find(m => m.email === email);
+                }
+            },
+            
+            can(action) {
+                // Sicherheitscheck: Immer neu laden
+                this.loadCurrentUser();
+                const user = this.state.currentUser; 
+                if (!user) return false;
+                
+                const role = user.role || 'Mitglied';
+                const roles = { admin: ['Vorstand', '1. Vorstand', '2. Vorstand', 'Admin', 'Präsident'], manager: ['Kassenwart', 'Trainer', 'Abteilungsleiter'] };
+                if(roles.admin.includes(role)) return true;
+                if(roles.manager.includes(role) && ['manage_workhours', 'manage_groups'].includes(action)) return true;
+                return false;
+            },
+
+            initTheme() { 
+                const t = localStorage.getItem('vm_theme') || 'dark'; this.state.theme = t;
+                const r = document.documentElement;
+                if(t === 'dark') { r.classList.add('dark'); r.style.setProperty('--bg-color','#0f172a'); r.style.setProperty('--card-color','#1e293b'); r.style.setProperty('--border-color','#334155'); r.style.setProperty('--text-color','#f1f5f9'); r.style.setProperty('--muted-color','#94a3b8'); }
+                else { r.classList.remove('dark'); r.style.setProperty('--bg-color','#f1f5f9'); r.style.setProperty('--card-color','#ffffff'); r.style.setProperty('--border-color','#e2e8f0'); r.style.setProperty('--text-color','#0f172a'); r.style.setProperty('--muted-color','#64748b'); }
+            },
+            toggleTheme() { this.state.theme = this.state.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('vm_theme', this.state.theme); this.initTheme(); this.openSettingsModal(); },
+
+            router(viewName) {
+                Store.state.currentView = viewName;
+                const container = document.getElementById('content');
+                const sub = document.getElementById('page-subtitle');
+                if(container) { container.innerHTML = ''; container.classList.remove('fade-in'); void container.offsetWidth; container.classList.add('fade-in'); }
+                
+                if(sub) sub.textContent = viewName.charAt(0).toUpperCase() + viewName.slice(1);
+
+                if (viewName === 'dashboard') DashboardView.render(container);
+                else if (viewName === 'members') MembersView.render(container);
+                else if (viewName === 'groups') GroupsView.render(container);
+                else if (viewName === 'workhours') WorkHoursView.render(container);
+                else if (viewName === 'messenger') MessengerView.render(container);
+                else if (viewName === 'profile') ProfileView.render(container);
+                else if (viewName === 'calendar') CalendarView.render(container);
+                else if (viewName === 'news') NewsView.render(container);
+                else if (viewName === 'documents') DocsView.render(container);
+                else container.innerHTML = `<div class="text-center p-10 text-dark-muted">Modul "${viewName}" lädt...</div>`;
+            },
+
+            openSettingsModal() { 
+                const isDark = this.state.theme === 'dark';
+                this.openModal(`<div class="p-6"><h3 class="text-xl font-bold text-dark-text mb-4">Einstellungen</h3><div class="flex items-center justify-between p-4 rounded-xl bg-dark-bg border border-dark-border"><p class="text-dark-text">Dark Mode</p><button onclick="App.toggleTheme()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold">${isDark ? 'An' : 'Aus'}</button></div></div>`);
+            },
+            toggleNotifications() { App.showToast('Keine neuen Benachrichtigungen'); },
+            openModal(html) { const o=document.getElementById('modal-overlay'), c=document.getElementById('modal-content'); if(o&&c){ c.innerHTML=html; o.classList.remove('hidden'); } },
+            closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); },
+            showToast(msg) { const t=document.getElementById('toast'); if(t){ t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); } }
+        };
+
+        // --- AUTH HANDLER ---
+        window.handleLogin = async (e) => {
+            e.preventDefault();
+            const email = e.target.email.value;
+            const password = e.target.password.value;
+            
+            // Supabase Auth Login
+            const { data, error } = await _supabase.auth.signInWithPassword({ email, password });
+            
+            if (error) {
+                alert('Login fehlgeschlagen: ' + error.message);
+                return;
+            }
+
+            // Session speichern
+            localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
+            initApp(data.user.email);
+        };
+
+        window.logout = async () => {
+            if(confirm("Abmelden?")) {
+                await _supabase.auth.signOut();
+                localStorage.removeItem('vm_supabase_session');
+                location.reload();
+            }
+        };
+
+        async function initApp(email) {
+            document.getElementById('auth-view').classList.add('hidden');
+            document.getElementById('app-view').classList.remove('hidden');
+            
+            // App initialisieren
+            await App.init();
+            
+            // User Daten setzen
+            const user = Store.state.members.find(m => m.email === email);
+            if(user) {
+                document.getElementById('current-user-name').textContent = user.firstName;
+                document.getElementById('current-user-role').textContent = user.role;
+                App.state.currentUser = user;
+                // Views aktualisieren mit richtiger ID
+                if(typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
+                if(typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
+                App.router('dashboard'); // Dashboard neu rendern mit User-Daten
+            } else {
+                console.warn("User in 'members' Tabelle nicht gefunden, obwohl Login erfolgreich.");
+                // Fallback: Admin erstellen wenn Tabelle leer und email passt
+                if (email === 'admin@gmail.com' && Store.state.members.length === 0) {
+                     await Store.add('members', { id: Date.now(), firstName: 'Super', lastName: 'Admin', email: 'admin@gmail.com', role: 'Admin', status: 'active', groups: ['Vorstand'] });
+                     initApp(email); // Retry
+                }
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+             // Check Session
+             const session = JSON.parse(localStorage.getItem('vm_supabase_session'));
+             if(session) {
+                 initApp(session.user.email);
+             }
+        });
+
+    </script>
+</body>
+</html>
