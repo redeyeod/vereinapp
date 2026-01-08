@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VereinsManager App</title>
     
-    <!-- Supabase Client (Wichtig!) -->
+    <!-- Supabase Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
     <!-- Design & Icons -->
@@ -54,8 +54,16 @@
             </div>
             
             <div id="config-warning" class="hidden mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-xl text-red-200 text-xs text-center">
-                <i class="fa-solid fa-triangle-exclamation mr-1"></i> 
-                Supabase URL & Key fehlen im Code (Zeile ~550)!
+                <i class="fa-solid fa-triangle-exclamation mr-1"></i> Supabase Config fehlt in js/config.js!
+            </div>
+
+            <div class="mb-6 bg-dark-bg/50 p-4 rounded-xl border border-dark-border">
+                <label class="block text-xs font-bold text-dark-muted uppercase mb-2 ml-1">Verein wählen</label>
+                <select id="club-select" onchange="handleClubChange(this.value)" class="w-full bg-dark-card border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 cursor-pointer">
+                    <option value="demo">TSV Musterstadt (Demo)</option>
+                    <option value="grokage">GroKaGe Malsch 1929 e.V.</option>
+                    <option value="fc_beispiel">1. FC Beispielhausen</option>
+                </select>
             </div>
 
             <form id="login-form" class="space-y-4">
@@ -63,7 +71,7 @@
                 <div><label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">Passwort</label><input type="password" name="password" required class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"></div>
                 <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg mt-2">Anmelden</button>
             </form>
-            <div class="text-center mt-4"><p class="text-xs text-dark-muted">Nutzen Sie Ihre Supabase Zugangsdaten.<br>Erster Start? Login mit <b>admin@gmail.com</b> / <b>admin</b></p></div>
+            <div class="text-center mt-4"><p class="text-xs text-dark-muted">Admin-Login: <b>admin@gmail.com</b> / <b>admin</b></p></div>
         </div>
     </div>
 
@@ -88,11 +96,14 @@
         <div id="content" class="flex-1 overflow-y-auto p-4 lg:p-10 relative max-w-7xl mx-auto w-full transition-colors duration-300"></div>
     </div>
 
-    <!-- UI Elements -->
     <div id="modal-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 transition-opacity duration-300"><div class="bg-dark-card border border-dark-border rounded-bubble shadow-2xl w-full max-w-md transform transition-all scale-95 opacity-0 text-dark-text" id="modal-content"></div></div>
     <div id="toast">Nachricht gesendet</div>
 
-    <!-- VIEWS -->
+    <!-- 1. Config & Store -->
+    <script src="js/config.js"></script>
+    <script src="js/store.js"></script>
+    
+    <!-- 2. Views -->
     <script src="js/views/dashboard.js"></script>
     <script src="js/views/members.js"></script>
     <script src="js/views/groups.js"></script>
@@ -103,243 +114,8 @@
     <script src="js/views/messenger.js"></script>
     <script src="js/views/workhours.js"></script>
 
-    <!-- LOGIK -->
-    <script>
-        // ===============================================
-        // KONFIGURATION (HIER DATEN EINFÜGEN!)
-        // ===============================================
-        const SUPABASE_URL = 'https://uccnijvmtfihmbuvnfvp.supabase.co'; 
-        const SUPABASE_KEY = 'sb_publishable_NIMm26pnWp_z4CWrhQM6XA_0D7-4VYP';
-        // ===============================================
+    <!-- 3. App Core -->
+    <script src="js/app.js"></script>
 
-        let _supabase = null;
-
-        // --- STORE ---
-        const Store = {
-            state: { members: [], groups: [], events: [], news: [], docs: [], work_entries: [], currentView: 'dashboard' },
-            onUpdate: null,
-
-            async init() {
-                // Check Configuration
-                if (SUPABASE_URL.includes('HIER') || SUPABASE_KEY.includes('HIER')) {
-                    document.getElementById('config-warning').classList.remove('hidden');
-                    return;
-                }
-
-                // Supabase Init (via Window Global)
-                if (window.supabase) {
-                    const { createClient } = window.supabase;
-                    _supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-                } else {
-                    alert("Supabase konnte nicht geladen werden. Internetverbindung prüfen!");
-                    return;
-                }
-
-                console.log("Lade Daten aus Cloud...");
-                
-                // Realtime Channel
-                const channel = _supabase.channel('db-changes')
-                    .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
-                        console.log('Update:', payload);
-                        this.fetchTable(payload.table);
-                    })
-                    .subscribe();
-
-                // Initial Load
-                const tables = ['members', 'groups', 'events', 'news', 'docs', 'work_entries'];
-                for(let t of tables) await this.fetchTable(t);
-            },
-
-            async fetchTable(table) {
-                if(!_supabase) return;
-                const { data, error } = await _supabase.from(table).select('*');
-                if(data) {
-                    this.state[table] = data;
-                    if(this.onUpdate) this.onUpdate();
-                }
-            },
-
-            // CRUD
-            async add(table, item) {
-                // Lokale ID entfernen damit DB sie generiert, oder beibehalten wenn wir sie brauchen
-                // Um Konflikte zu vermeiden, lassen wir die ID drin, wenn sie wichtig ist (z.B. Zeitstempel-IDs)
-                // Aber Vorsicht: Supabase 'id' ist meist bigint/serial.
-                // Für diesen Prototyp nutzen wir 'upsert' (Insert or Update)
-                
-                const { error } = await _supabase.from(table).upsert(item);
-                if(error) { 
-                    console.error("Fehler beim Speichern:", error);
-                    alert("Fehler beim Speichern: " + error.message);
-                } else {
-                    App.showToast('Gespeichert');
-                }
-            },
-            async update(table, item) { await this.add(table, item); },
-            async remove(table, id) {
-                const { error } = await _supabase.from(table).delete().eq('id', id);
-                if(error) console.error(error); else App.showToast('Gelöscht');
-            },
-            async addFirst(table, item) { await this.add(table, item); }
-        };
-
-        // --- APP CORE ---
-        const App = {
-            state: { currentUser: null, theme: 'dark' },
-            
-            async init() {
-                await Store.init();
-                
-                Store.onUpdate = () => {
-                     const dot = document.getElementById('notif-dot'); 
-                     if(dot) dot.style.display = Store.state.news.length > 0 ? 'block' : 'none';
-                     
-                     // Rerender nur wenn kein Input aktiv
-                     if(document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
-                         this.router(Store.state.currentView);
-                     }
-                };
-
-                // Styles injecten
-                const style = document.createElement('style');
-                style.innerHTML = `.form-input { width: 100%; background-color: var(--bg-color); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 0.75rem; color: var(--text-color); transition: 0.2s; } .form-input:focus { outline: none; ring: 2px solid #3b82f6; border-color: #3b82f6; } .btn-primary { background-color: #2563eb; color: white; font-weight: 700; padding: 0.75rem 1.5rem; border-radius: 0.75rem; transition: 0.2s; } .btn-primary:hover { background-color: #1d4ed8; } .notif-scrollbar::-webkit-scrollbar { width: 6px; } .notif-scrollbar::-webkit-scrollbar-track { background: var(--card-color); } .notif-scrollbar::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }`;
-                document.head.appendChild(style);
-
-                this.initTheme();
-                this.router('dashboard');
-            },
-
-            loadCurrentUser() { 
-                const sessionStr = localStorage.getItem('vm_supabase_session');
-                if(sessionStr) {
-                    const session = JSON.parse(sessionStr);
-                    const email = session.user.email;
-                    this.state.currentUser = Store.state.members.find(m => m.email === email);
-                }
-            },
-            
-            can(action) {
-                this.loadCurrentUser();
-                const user = this.state.currentUser; 
-                if (!user) return false;
-                
-                const role = user.role || 'Mitglied';
-                // Rollen anpassen
-                const roles = { admin: ['Admin', 'Vorstand', '1. Vorstand', '2. Vorstand', 'Präsident'], manager: ['Kassenwart', 'Trainer'] };
-                
-                if(roles.admin.includes(role)) return true;
-                if(roles.manager.includes(role) && ['manage_workhours', 'manage_groups'].includes(action)) return true;
-                return false;
-            },
-
-            initTheme() { 
-                const t = localStorage.getItem('vm_theme') || 'dark'; this.state.theme = t;
-                const r = document.documentElement;
-                if(t === 'dark') { r.classList.add('dark'); r.style.setProperty('--bg-color','#0f172a'); r.style.setProperty('--card-color','#1e293b'); r.style.setProperty('--border-color','#334155'); r.style.setProperty('--text-color','#f1f5f9'); r.style.setProperty('--muted-color','#94a3b8'); }
-                else { r.classList.remove('dark'); r.style.setProperty('--bg-color','#f1f5f9'); r.style.setProperty('--card-color','#ffffff'); r.style.setProperty('--border-color','#e2e8f0'); r.style.setProperty('--text-color','#0f172a'); r.style.setProperty('--muted-color','#64748b'); }
-            },
-            toggleTheme() { this.state.theme = this.state.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('vm_theme', this.state.theme); this.initTheme(); this.openSettingsModal(); },
-
-            router(viewName) {
-                Store.state.currentView = viewName;
-                const container = document.getElementById('content');
-                const sub = document.getElementById('page-subtitle');
-                if(container) { container.innerHTML = ''; container.classList.remove('fade-in'); void container.offsetWidth; container.classList.add('fade-in'); }
-                
-                if(sub) sub.textContent = viewName.charAt(0).toUpperCase() + viewName.slice(1);
-
-                if (viewName === 'dashboard') DashboardView.render(container);
-                else if (viewName === 'members') MembersView.render(container);
-                else if (viewName === 'groups') GroupsView.render(container);
-                else if (viewName === 'workhours') WorkHoursView.render(container);
-                else if (viewName === 'messenger') MessengerView.render(container);
-                else if (viewName === 'profile') ProfileView.render(container);
-                else if (viewName === 'calendar') CalendarView.render(container);
-                else if (viewName === 'news') NewsView.render(container);
-                else if (viewName === 'documents') DocsView.render(container);
-                else container.innerHTML = `<div class="text-center p-10 text-dark-muted">Ansicht laden...</div>`;
-            },
-
-            openSettingsModal() { 
-                const isDark = this.state.theme === 'dark';
-                this.openModal(`<div class="p-6"><h3 class="text-xl font-bold text-dark-text mb-4">Einstellungen</h3><div class="flex items-center justify-between p-4 rounded-xl bg-dark-bg border border-dark-border"><p class="text-dark-text">Dark Mode</p><button onclick="App.toggleTheme()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold">${isDark ? 'An' : 'Aus'}</button></div></div>`);
-            },
-            toggleNotifications() { App.showToast('Keine neuen Benachrichtigungen'); },
-            openModal(html) { const o=document.getElementById('modal-overlay'), c=document.getElementById('modal-content'); if(o&&c){ c.innerHTML=html; o.classList.remove('hidden'); setTimeout(()=>c.classList.remove('scale-95','opacity-0'),10); } },
-            closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); },
-            showToast(msg) { const t=document.getElementById('toast'); if(t){ t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); } }
-        };
-
-        // --- HANDLER ---
-        document.getElementById('login-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = e.target.email.value;
-            const password = e.target.password.value;
-
-            if(!_supabase) { alert('Supabase nicht konfiguriert!'); return; }
-
-            // Login Versuch
-            const { data, error } = await _supabase.auth.signInWithPassword({ email, password });
-
-            if (error) {
-                // BACKDOOR: Erster Admin Login wenn Auth leer ist oder User nicht existiert
-                if(email === 'admin@gmail.com' && password === 'admin') {
-                    // Versuche Registrierung
-                    const { data: reg, error: regErr } = await _supabase.auth.signUp({email, password});
-                    if(!regErr) {
-                        // Admin in DB eintragen
-                        const adminUser = { id: Date.now(), firstName: 'Super', lastName: 'Admin', email: email, role: 'Admin', status: 'active', groups: ['Vorstand'], joinedDate: new Date().toISOString() };
-                        await Store.add('members', adminUser);
-                        localStorage.setItem('vm_supabase_session', JSON.stringify(reg.session));
-                        initApp(email);
-                        return;
-                    }
-                }
-                alert('Login fehlgeschlagen: ' + error.message);
-                return;
-            }
-
-            localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
-            initApp(email);
-        });
-
-        window.logout = async () => {
-            if(confirm("Abmelden?")) {
-                if(_supabase) await _supabase.auth.signOut();
-                localStorage.removeItem('vm_supabase_session');
-                location.reload();
-            }
-        };
-
-        async function initApp(email) {
-            document.getElementById('auth-view').classList.add('hidden');
-            document.getElementById('app-view').classList.remove('hidden');
-            
-            await App.init();
-            
-            // User suchen
-            const user = Store.state.members.find(m => m.email === email);
-            if(user) {
-                document.getElementById('current-user-name').textContent = user.firstName;
-                document.getElementById('current-user-role').textContent = user.role;
-                App.state.currentUser = user;
-                
-                // Views updaten
-                if(typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
-                if(typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
-                
-                App.router('dashboard');
-            } else {
-                 console.log("User nicht in DB gefunden (evtl. neu registriert).");
-                 // Optional: User anlegen wenn er via Auth reinkommt aber nicht in DB ist
-            }
-        }
-
-        // Auto Login
-        window.addEventListener('DOMContentLoaded', () => {
-            const session = JSON.parse(localStorage.getItem('vm_supabase_session'));
-            if(session) initApp(session.user.email);
-        });
-
-    </script>
 </body>
 </html>
