@@ -11,8 +11,8 @@ const NewsView = {
      * @param {HTMLElement} container 
      */
     render(container) {
-        // News aus dem Store holen
-        const newsList = Store.state.news;
+        // News aus dem Store holen und sortieren (Neueste zuerst)
+        const newsList = (Store.state.news || []).sort((a, b) => new Date(b.date) - new Date(a.date));
         
         // Berechtigungs-Check
         const canManage = App.can('manage_news');
@@ -68,12 +68,13 @@ const NewsView = {
      * Löscht eine Ankündigung
      * @param {number} id 
      */
-    delete(id) {
+    async delete(id) {
         if(!App.can('manage_news')) return;
 
         if(confirm("Diesen Beitrag wirklich löschen?")) {
-            Store.remove('news', id);
-            this.render(document.getElementById('content'));
+            await Store.remove('news', id);
+            // Render wird durch Store.onUpdate getriggert, aber wir rufen es sicherheitshalber auf
+            setTimeout(() => this.render(document.getElementById('content')), 100);
             App.showToast('Beitrag gelöscht');
         }
     },
@@ -115,22 +116,24 @@ const NewsView = {
      * Verarbeitet das Erstellen einer Ankündigung
      * @param {Event} e 
      */
-    handleAdd(e) {
+    async handleAdd(e) {
         e.preventDefault();
         const fd = new FormData(e.target);
         
         const newNews = {
-            id: Date.now(),
             title: fd.get('title'),
             content: fd.get('content'),
             date: new Date().toISOString()
         };
         
-        // Fügt die News am Anfang der Liste hinzu, damit sie oben erscheint
-        Store.addFirst('news', newNews);
+        // Fügt die News hinzu
+        await Store.addFirst('news', newNews);
         
         App.closeModal();
         App.showToast('Ankündigung veröffentlicht');
         this.render(document.getElementById('content'));
     }
 };
+
+// WICHTIG: Global verfügbar machen für die neue App.js
+window.NewsView = NewsView;
