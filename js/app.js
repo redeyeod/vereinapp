@@ -1,10 +1,10 @@
 /**
  * =============================================================================
- * APP CORE LOGIC (Safe Mode)
+ * APP CORE LOGIC (Safe Mode v2)
  * =============================================================================
  */
 
-// 1. App SOFORT global verfügbar machen, bevor irgendwas anderes passiert
+// 1. App SOFORT global verfügbar machen
 window.App = {
     state: {
         currentUser: null,
@@ -16,27 +16,42 @@ window.App = {
         console.log("App: Init gestartet...");
         
         try {
-            // Check Store
+            // 2. Warte kurz auf Store (Race-Condition Fix)
             if (typeof Store === 'undefined') {
-                console.error("Store nicht gefunden");
-                // Wir brechen hier NICHT ab, damit die App zumindest den Login anzeigen kann
-            } else {
-                // Store starten
-                await Store.init();
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
 
-                // Store Listener
-                Store.onUpdate = () => {
-                    if (this.state.currentUser) this.router(Store.state.currentView || 'dashboard');
+            // 3. Fallback: Wenn Store immer noch fehlt oder kaputt ist -> Dummy erstellen
+            if (typeof Store === 'undefined') {
+                console.warn("WARNUNG: Store.js nicht gefunden. Nutze lokalen Fallback.");
+                window.Store = {
+                    state: { members: [], groups: [], news: [], currentView: 'dashboard' },
+                    init: async () => { console.log("Fallback Store Init"); },
+                    fetchTable: async () => {},
+                    add: async () => {},
+                    get: () => []
                 };
             }
 
-            // User laden (Versuch Session wiederherzustellen)
+            // 4. Store starten (in eigenem Try-Catch, damit App nicht stirbt)
+            try {
+                await Store.init();
+                // Listener setzen
+                Store.onUpdate = () => {
+                    if (this.state.currentUser) this.router(Store.state.currentView || 'dashboard');
+                };
+            } catch (storeErr) {
+                console.error("Store Init fehlgeschlagen (nicht kritisch für Login):", storeErr);
+            }
+
+            // 5. User laden
             this.loadCurrentUser();
 
-            // Routing
+            // 6. Routing entscheiden
             if (this.state.currentUser) {
                 this.router('dashboard');
             } else {
+                // Login Screen explizit anzeigen
                 const authView = document.getElementById('auth-view');
                 const appView = document.getElementById('app-view');
                 if(authView) authView.classList.remove('hidden');
@@ -45,11 +60,12 @@ window.App = {
 
         } catch (e) {
             console.error("Kritischer Fehler im App Init:", e);
-            alert("App Init Fehler: " + e.message);
+            // Auch im Fehlerfall versuchen, den Login anzuzeigen
+            document.getElementById('auth-view').classList.remove('hidden');
         }
     },
 
-    // Login Handler (Muss existieren, auch wenn Init crasht)
+    // Login Handler
     handleLogin: async function(e) {
         if(e) e.preventDefault();
         const btn = e.target.querySelector('button');
@@ -63,17 +79,16 @@ window.App = {
         try {
             // Supabase Check
             if(typeof supabase === 'undefined' || typeof CONFIG === 'undefined') {
-                alert("Konfiguration oder Supabase Library fehlt! Prüfe config.js und index.html imports.");
+                alert("Fehler: Supabase Verbindung fehlt. (Prüfe Internet & Config)");
                 return;
             }
 
             const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
             const { data, error } = await _sb.auth.signInWithPassword({ email, password });
 
-            // Backdoor / Fehlerbehandlung
+            // Backdoor für Admin (falls Auth fehlschlägt oder DB leer)
             if (error) {
                 if(email === 'admin@gmail.com' && password === 'admin') {
-                    // Fake Admin Login erlauben für Demo (falls DB leer oder Auth failt)
                     console.log("Backdoor Admin Login");
                     this.loginSuccess({ id: '999', firstName: 'Admin', role: 'Vorstand', email: email });
                     return;
@@ -84,18 +99,24 @@ window.App = {
             // Erfolg
             localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
             
-            // Versuchen User aus Store zu holen
-            if (typeof Store !== 'undefined') {
+            // User Daten abgleichen
+            let user = null;
+            if (typeof Store !== 'undefined' && Store.state.members) {
+                // Lade Members Tabelle falls leer
                 if(Store.state.members.length === 0) await Store.fetchTable('members');
-                const user = Store.state.members.find(m => m.email === email);
-                this.loginSuccess(user || { id: data.user.id, email: email, firstName: 'User', role: 'Mitglied' });
-            } else {
-                this.loginSuccess({ id: data.user.id, email: email, firstName: 'User', role: 'Mitglied' });
+                user = Store.state.members.find(m => m.email === email);
             }
+            
+            // Fallback User Objekt falls DB leer
+            if (!user) {
+                user = { id: data.user.id, email: email, firstName: 'User', role: 'Mitglied' };
+            }
+
+            this.loginSuccess(user);
 
         } catch (err) {
             console.error(err);
-            alert("Login Fehler: " + (err.message || err));
+            alert("Login fehlgeschlagen: " + (err.message || "Unbekannter Fehler"));
         } finally {
             if(btn) { btn.innerText = originalText; btn.disabled = false; }
         }
@@ -106,8 +127,11 @@ window.App = {
         this.state.currentUser = user;
         localStorage.setItem('vm_current_user_id', user.id);
         
-        document.getElementById('auth-view').classList.add('hidden');
-        document.getElementById('app-view').classList.remove('hidden');
+        // UI Umschalten
+        const authView = document.getElementById('auth-view');
+        const appView = document.getElementById('app-view');
+        if(authView) authView.classList.add('hidden');
+        if(appView) appView.classList.remove('hidden');
         
         // Header Infos update
         const nameEl = document.getElementById('current-user-name');
@@ -132,19 +156,19 @@ window.App = {
                 const session = JSON.parse(sessionStr);
                 if(!session || !session.user) return;
 
-                this.state.currentUser = { email: session.user.email, role: 'Mitglied', firstName: 'User', id: session.user.id }; // Minimal User
+                // Minimal User wiederherstellen
+                this.state.currentUser = { email: session.user.email, role: 'Mitglied', firstName: 'User', id: session.user.id };
                 
-                // Versuche echten User aus Store zu holen
+                // Versuche echten User aus Store zu holen für mehr Details
                 if(typeof Store !== 'undefined' && Store.state.members) {
                      const realUser = Store.state.members.find(m => m.email === session.user.email);
                      if(realUser) {
                          this.state.currentUser = realUser;
-                         // Header update sofort
                          const nameEl = document.getElementById('current-user-name');
                          if(nameEl) nameEl.textContent = realUser.firstName;
                      }
                 }
-            } catch(e) { console.error(e); }
+            } catch(e) { console.error("Session Restore Error", e); }
         }
     },
 
@@ -152,28 +176,31 @@ window.App = {
         const container = document.getElementById('content');
         if(!container) return;
         
-        // Titel Update
         const subtitle = document.getElementById('page-subtitle');
         if(subtitle) subtitle.textContent = viewName.charAt(0).toUpperCase() + viewName.slice(1);
 
         container.innerHTML = '';
         
-        // Versuchen View zu finden (über globales window Objekt)
+        // Globale View Objekte suchen (window.DashboardView etc.)
         const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
         
         if (typeof window[viewObjName] !== 'undefined' && window[viewObjName].render) {
-            window[viewObjName].render(container);
+            try {
+                window[viewObjName].render(container);
+            } catch(err) {
+                console.error(`Fehler beim Rendern von ${viewName}:`, err);
+                container.innerHTML = `<div class="text-red-400">Fehler in View ${viewName}: ${err.message}</div>`;
+            }
         } else {
-            // Fallback Dashboard oder Fehler
+            // Fallback
             if(viewName === 'dashboard') {
                 container.innerHTML = `
                     <div class="p-6 bg-slate-800 rounded-xl text-white border border-slate-700">
                         <h2 class="text-xl font-bold mb-2">Dashboard</h2>
                         <p>Willkommen ${this.state.currentUser?.firstName || 'Gast'}!</p>
-                        <p class="text-sm text-slate-400 mt-2">Wenn du dies siehst, wurde die Datei <b>js/views/dashboard.js</b> nicht geladen oder DashboardView ist nicht definiert.</p>
                     </div>`;
             } else {
-                container.innerHTML = `<div class="text-red-400 p-4 border border-red-500 rounded bg-red-900/20">View "${viewName}" nicht gefunden.<br>Bitte prüfe, ob <b>js/views/${viewName}.js</b> existiert und geladen wurde.</div>`;
+                container.innerHTML = `<div class="text-slate-400 p-4">Lade Ansicht "${viewName}"...<br><small>(Falls nichts passiert: Datei js/views/${viewName}.js prüfen)</small></div>`;
             }
         }
     },
@@ -187,7 +214,9 @@ window.App = {
     openSettingsModal: function() { this.showToast('Einstellungen...'); }
 };
 
-// Start
-window.addEventListener('DOMContentLoaded', () => {
+// Start - sicherstellen, dass DOM geladen ist
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => App.init());
+} else {
     App.init();
-});
+}
