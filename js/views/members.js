@@ -1,7 +1,7 @@
 /**
  * =============================================================================
- * MEMBERS VIEW (Final Fix)
- * Verwaltet Mitglieder und sorgt für saubere Datenbank-Synchronisation
+ * MEMBERS VIEW (Final Fix - Full Profile)
+ * Verwaltet Mitglieder mit vollständigem Profil (Adresse, Kontakt etc.)
  * =============================================================================
  */
 
@@ -127,7 +127,6 @@ const MembersView = {
     },
 
     openDetailModal(id) {
-        // ID Vergleich flexibel (String/Number)
         const m = Store.state.members.find(mem => mem.id == id);
         if(!m) return;
         
@@ -136,6 +135,25 @@ const MembersView = {
         if (Array.isArray(m.groups) && m.groups.length > 0) {
             groupsHtml = m.groups.map(g => `<span class="bg-blue-900/30 text-blue-300 px-2 py-1 rounded-md text-xs border border-blue-500/30">${g}</span>`).join('');
         }
+
+        const hasAddress = m.street || m.city;
+        const addressHtml = hasAddress 
+            ? `<p class="text-white text-sm leading-relaxed">${m.street || ''} ${m.houseNumber || ''}<br>${m.zip || ''} ${m.city || ''}</p>`
+            : `<p class="text-dark-muted italic text-xs">Keine Adresse hinterlegt</p>`;
+
+        const contactHtml = `
+            ${m.email ? `<div class="flex items-center gap-3 mb-2 text-sm"><i class="fa-solid fa-envelope text-dark-muted w-4 flex-shrink-0"></i> <a href="mailto:${m.email}" class="text-blue-400 hover:underline truncate">${m.email}</a></div>` : ''}
+            ${m.phone ? `<div class="flex items-center gap-3 mb-2 text-sm"><i class="fa-solid fa-phone text-dark-muted w-4 flex-shrink-0"></i> <span class="text-white">${m.phone}</span></div>` : ''}
+            ${m.birthdate ? `<div class="flex items-center gap-3 text-sm"><i class="fa-solid fa-cake-candles text-dark-muted w-4 flex-shrink-0"></i> <span class="text-white">${new Date(m.birthdate).toLocaleDateString('de-DE')}</span></div>` : ''}
+            ${!m.email && !m.phone && !m.birthdate ? '<p class="text-dark-muted italic text-xs">Keine Kontaktdaten</p>' : ''}
+        `;
+
+        const footerHtml = canManage ? `
+            <div class="mt-6 pt-4 border-t border-dark-border flex gap-3">
+                <button onclick="MembersView.openEditModal(${m.id})" class="btn-primary flex-1">Bearbeiten</button>
+                <button onclick="MembersView.delete(${m.id}); App.closeModal()" class="flex-1 py-3 bg-dark-bg border border-dark-border rounded-xl text-red-400 font-bold hover:bg-red-900/20">Löschen</button>
+            </div>
+        ` : '';
 
         const html = `
             <div class="p-4 md:p-8">
@@ -153,18 +171,27 @@ const MembersView = {
                 </div>
                 <div class="space-y-4">
                     <div class="bg-dark-bg p-4 rounded-xl border border-dark-border">
-                        <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-3">Email</h4>
-                        <p class="text-white">${m.email || '-'}</p>
+                        <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-3">Kontakt</h4>
+                        ${contactHtml}
                     </div>
                     <div class="bg-dark-bg p-4 rounded-xl border border-dark-border">
+                        <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-3">Anschrift</h4>
+                        ${addressHtml}
+                    </div>
+                    <div class="bg-dark-bg p-4 rounded-xl border border-dark-border h-fit">
                         <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-3">Gruppen</h4>
                         <div class="flex flex-wrap gap-2">${groupsHtml}</div>
                     </div>
                 </div>
-                ${canManage ? `<div class="mt-6 pt-4 border-t border-dark-border flex gap-3"><button onclick="MembersView.openEditModal(${m.id})" class="btn-primary flex-1">Bearbeiten</button><button onclick="MembersView.delete(${m.id}); App.closeModal()" class="flex-1 py-3 bg-dark-bg border border-dark-border rounded-xl text-red-400 font-bold hover:bg-red-900/20">Löschen</button></div>` : ''}
+                ${footerHtml}
             </div>
         `;
         App.openModal(html);
+        const modalContainer = document.getElementById('modal-content');
+        if(modalContainer) {
+            modalContainer.classList.remove('max-w-md');
+            modalContainer.classList.add('max-w-4xl', 'w-full', 'max-h-[90vh]', 'overflow-y-auto', 'custom-scrollbar');
+        }
     },
 
     openEditModal(id) {
@@ -191,22 +218,58 @@ const MembersView = {
         const roleOptions = this.standardRoles.map(r => `<option value="${r}" ${data.role === r ? 'selected' : ''}>${r}</option>`).join('');
 
         const html = `
-            <div class="p-4 md:p-8">
+            <div class="p-4 md:p-8 max-h-[85vh] overflow-y-auto custom-scrollbar">
                 <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 sticky top-0 bg-dark-card z-10">
                     <h3 class="text-lg md:text-xl font-bold text-white">${title}</h3>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
-                <form onsubmit="${handler}" class="space-y-4">
+                <form onsubmit="${handler}" class="space-y-5">
+                    <!-- Names -->
                     <div class="grid grid-cols-2 gap-4">
-                        <div><label class="text-xs text-dark-muted uppercase">Vorname</label><input type="text" name="firstName" value="${data.firstName||''}" required class="form-input"></div>
-                        <div><label class="text-xs text-dark-muted uppercase">Nachname</label><input type="text" name="lastName" value="${data.lastName||''}" required class="form-input"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Vorname *</label><input type="text" name="firstName" value="${data.firstName||''}" required class="form-input" placeholder="Max"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Nachname *</label><input type="text" name="lastName" value="${data.lastName||''}" required class="form-input" placeholder="Mustermann"></div>
                     </div>
-                    <div><label class="text-xs text-dark-muted uppercase">Email (Login)</label><input type="email" name="email" value="${data.email||''}" required class="form-input"></div>
-                    <div><label class="text-xs text-dark-muted uppercase">Rolle</label><select name="roleSelect" class="form-input">${roleOptions}<option value="custom">✎ Eigene...</option></select></div>
                     
-                    ${!isEdit ? `<div class="bg-blue-500/10 p-3 rounded-lg text-xs text-blue-300 border border-blue-500/20">Passwort wird automatisch generiert.</div>` : ''}
+                    <!-- Address -->
+                    <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mt-6 mb-3">Adresse</h4>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="col-span-2"><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Straße</label><input type="text" name="street" value="${data.street||''}" class="form-input"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Nr.</label><input type="text" name="houseNumber" value="${data.houseNumber||''}" class="form-input"></div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">PLZ</label><input type="text" name="zip" value="${data.zip||''}" class="form-input"></div>
+                        <div class="col-span-2"><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ort</label><input type="text" name="city" value="${data.city||''}" class="form-input"></div>
+                    </div>
+
+                    <!-- Contact -->
+                    <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mt-6 mb-3">Kontakt</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Email (Login) *</label><input type="email" name="email" value="${data.email||''}" required class="form-input"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Telefon</label><input type="tel" name="phone" value="${data.phone||''}" class="form-input"></div>
+                    </div>
+                    <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Geburtsdatum</label><input type="date" name="birthdate" value="${data.birthdate||''}" class="form-input dark-date"></div>
+
+                    <!-- Role & Status -->
+                    <div class="mt-4">
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Rolle *</label>
+                        <select name="roleSelect" class="form-input cursor-pointer" onchange="document.getElementById('customRoleInput').classList.toggle('hidden', this.value !== 'custom'); if(this.value === 'custom') document.getElementById('customRoleInput').focus();">
+                            ${roleOptions}<option value="" disabled>──────────</option><option value="custom" ${isEdit && !this.standardRoles.includes(data.role) ? 'selected' : ''}>✎ Eigene...</option>
+                        </select>
+                        <input type="text" name="customRole" id="customRoleInput" value="${isEdit && !this.standardRoles.includes(data.role) ? data.role : ''}" class="form-input mt-2 ${isEdit && !this.standardRoles.includes(data.role) ? '' : 'hidden'}" placeholder="Bezeichnung der Rolle eingeben">
+                    </div>
                     
-                    <button type="submit" class="btn-primary w-full mt-2">${btnText}</button>
+                    ${isEdit ? `
+                    <div>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Status</label>
+                        <select name="status" class="form-input cursor-pointer">
+                            <option value="active" ${data.status === 'active' ? 'selected' : ''}>Aktiv</option>
+                            <option value="inactive" ${data.status === 'inactive' ? 'selected' : ''}>Inaktiv</option>
+                        </select>
+                    </div>` : ''}
+                    
+                    ${!isEdit ? `<div class="bg-blue-500/10 p-3 rounded-lg text-xs text-blue-300 border border-blue-500/20 flex gap-2 items-start"><i class="fa-solid fa-key mt-0.5"></i> Ein sicheres Passwort wird automatisch generiert und im nächsten Schritt angezeigt.</div>` : ''}
+                    
+                    <button type="submit" class="btn-primary w-full mt-4">${btnText}</button>
                 </form>
             </div>
         `;
@@ -224,7 +287,9 @@ const MembersView = {
 
         try {
             const fd = new FormData(e.target);
-            const role = fd.get('roleSelect');
+            let role = fd.get('roleSelect');
+            if (role === 'custom') role = fd.get('customRole') || 'Mitglied';
+
             const firstName = fd.get('firstName');
             const email = fd.get('email');
             const generatedPassword = this.generatePassword();
@@ -242,29 +307,27 @@ const MembersView = {
                 id: newUserId, 
                 firstName: firstName, 
                 lastName: fd.get('lastName'),
+                street: fd.get('street'),
+                houseNumber: fd.get('houseNumber'),
+                zip: fd.get('zip'),
+                city: fd.get('city'),
+                phone: fd.get('phone'),
+                birthdate: fd.get('birthdate'),
                 email: email,
                 role: role, 
                 status: 'active',
                 groups: []
             };
             
-            // WICHTIG: Insert mit AKTUELLER Session versuchen
-            // Wir nutzen hier eine spezielle Funktion, die den Token explizit mitsendet
             let insertError = await this.safeInsert(newMember);
             
             if (insertError) {
-                console.warn("DB Fehler mit UUID:", insertError.message);
-                // Fallback: Wenn DB keine UUIDs akzeptiert, probieren wir es ohne ID (Auto-Increment)
-                // ACHTUNG: Dann passt die ID nicht zum Login, aber der User ist wenigstens in der Liste
+                console.warn("UUID Insert failed (" + insertError.message + "), trying Auto-ID...");
                 const memberClone = { ...newMember };
                 delete memberClone.id;
-                
                 const retryError = await this.safeInsert(memberClone);
-                if (retryError) {
-                    throw new Error("Datenbank-Fehler: " + retryError.message);
-                } else {
-                    App.showToast("Warnung: Login-Verknüpfung evtl. fehlerhaft (ID-Format)", "error");
-                }
+                if (retryError) throw new Error("Datenbank-Fehler: " + retryError.message);
+                else App.showToast("Warnung: Login-Verknüpfung evtl. fehlerhaft (ID-Format)", "error");
             }
             
             // Erfolg!
@@ -295,21 +358,14 @@ const MembersView = {
         }
     },
 
-    // Hilfsfunktion: Führt einen Insert mit dem Token des Admins aus
     async safeInsert(item) {
         if(typeof supabase === 'undefined') return { message: "Supabase fehlt" };
-        
-        // Token holen
         const sessionStr = localStorage.getItem('vm_supabase_session');
         if (!sessionStr) return { message: "Nicht eingeloggt" };
-        
         const token = JSON.parse(sessionStr).access_token;
-        
-        // Client mit Token erstellen
         const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, {
             global: { headers: { Authorization: `Bearer ${token}` } }
         });
-        
         const { error } = await client.from('members').insert(item);
         return error;
     },
@@ -317,6 +373,9 @@ const MembersView = {
     async handleUpdate(e, id) {
         e.preventDefault();
         const fd = new FormData(e.target);
+        let role = fd.get('roleSelect');
+        if (role === 'custom') role = fd.get('customRole') || 'Mitglied';
+
         const member = Store.state.members.find(m => m.id == id);
         
         if(member) {
@@ -324,8 +383,15 @@ const MembersView = {
                 ...member, 
                 firstName: fd.get('firstName'), 
                 lastName: fd.get('lastName'), 
+                street: fd.get('street'),
+                houseNumber: fd.get('houseNumber'),
+                zip: fd.get('zip'),
+                city: fd.get('city'),
                 email: fd.get('email'), 
-                role: fd.get('roleSelect') 
+                phone: fd.get('phone'),
+                birthdate: fd.get('birthdate'),
+                role: role, 
+                status: fd.get('status') 
             };
             await Store.update('members', updated);
             App.closeModal();
