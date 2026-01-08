@@ -1,120 +1,173 @@
 /**
  * =============================================================================
  * APP CORE LOGIC
- * Steuert Navigation (Router), Initialisierung, Theming und globale UI-Elemente
  * =============================================================================
  */
 
 const App = {
-    // Lokaler State für die App-Steuerung
     state: {
         lastRead: parseInt(localStorage.getItem('vm_last_read')) || 0,
         theme: localStorage.getItem('vm_theme') || 'dark',
-        currentUser: null // Speichert das volle User-Objekt inkl. Rolle
+        currentUser: null
     },
 
-    /**
-     * Startet die Anwendung
-     */
     async init() {
         console.log("App wird initialisiert...");
 
-        // 1. Warte auf Store, falls er als Modul verzögert geladen wird
+        // 1. Warte auf Store (Retry-Logik)
         let attempts = 0;
-        while (typeof Store === 'undefined' && attempts < 10) {
+        while (typeof Store === 'undefined' && attempts < 20) {
             await new Promise(r => setTimeout(r, 100));
             attempts++;
         }
 
-        // 2. Daten-Store initialisieren
-        if (typeof Store !== 'undefined') {
-            await Store.init();
-
-            // ZENTRALE UPDATE LOGIK
-            // Wird aufgerufen, wenn sich Daten im Store ändern (durch User oder Cloud)
-            Store.onUpdate = () => {
-                this.updateNotificationDot();
-                
-                // Prüfen, ob der User gerade tippt. Wenn ja, KEIN komplettes Neurendern,
-                // da sonst das Textfeld den Fokus verliert.
-                const activeTag = document.activeElement ? document.activeElement.tagName : '';
-                const isTyping = (activeTag === 'INPUT' || activeTag === 'TEXTAREA');
-
-                // Spezielle Ausnahme: Wenn wir im Messenger sind und tippen, kümmert sich der Messenger selbst ums Update.
-                // In allen anderen Fällen (oder wenn nicht getippt wird) rendern wir neu.
-                if (!isTyping || Store.state.currentView !== 'messenger') {
-                     this.router(Store.state.currentView);
-                } else {
-                    console.log("Update empfangen, aber User tippt gerade. Überspringe Render.");
-                }
-            };
-        } else {
-            console.error("KRITISCHER FEHLER: Store.js wurde nicht geladen!");
+        if (typeof Store === 'undefined') {
+            console.error("Store nicht gefunden!");
             return;
         }
+
+        // 2. Store initialisieren
+        await Store.init();
+
+        // 3. Reaktivität einrichten
+        Store.onUpdate = () => {
+            this.updateNotificationDot();
+            const activeTag = document.activeElement ? document.activeElement.tagName : '';
+            if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+                 this.router(Store.state.currentView);
+            }
+        };
 
         this.loadCurrentUser();
         this.initTheme();
         this.injectStyles();
         this.updateNotificationDot();
+        
+        // Starten
         this.router('dashboard');
     },
 
     loadCurrentUser() {
-        // Wir laden die Session vom Supabase Auth
         const sessionStr = localStorage.getItem('vm_supabase_session');
         if(sessionStr && typeof Store !== 'undefined') {
             try {
                 const session = JSON.parse(sessionStr);
                 const email = session.user.email;
-                
-                // User im Store finden
-                // Falls Store noch leer (Daten laden noch), wird dies später durch onUpdate korrigiert
                 const user = Store.state.members.find(m => m.email === email);
+                
                 if(user) {
                     this.state.currentUser = user;
-                    // Header-Infos aktualisieren
                     const nameEl = document.getElementById('current-user-name');
                     const roleEl = document.getElementById('current-user-role');
                     if(nameEl) nameEl.textContent = user.firstName;
                     if(roleEl) roleEl.textContent = user.role;
-
-                    // IDs für Views setzen
-                    if (typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
-                    if (typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
-                    if (typeof WorkHoursView !== 'undefined') WorkHoursView.state.myId = user.id;
+                    
+                    if(typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
+                    if(typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
+                    if(typeof WorkHoursView !== 'undefined') WorkHoursView.state.myId = user.id;
                 }
-            } catch(e) { console.error(e); }
+            } catch(e) { console.error("User Load Error:", e); }
         }
     },
 
-    // --- PERMISSION SYSTEM (RBAC) ---
+    // --- ROUTER MIT EXPLIZITEM MAPPING ---
+    router(viewName) {
+        if (typeof Store !== 'undefined') Store.state.currentView = viewName;
+        
+        const container = document.getElementById('content');
+        const subtitle = document.getElementById('page-subtitle');
+        
+        if (container) {
+            container.classList.remove('fade-in');
+            void container.offsetWidth; // Trigger Reflow
+            container.classList.add('fade-in');
+            container.innerHTML = ''; 
+        }
+
+        // Titel setzen
+        const titles = {
+            'dashboard': 'Dashboard',
+            'members': 'Mitglieder',
+            'groups': 'Abteilungen',
+            'calendar': 'Kalender',
+            'news': 'Ankündigungen',
+            'documents': 'Dokumente',
+            'messenger': 'Messenger',
+            'profile': 'Profil',
+            'workhours': 'Arbeitsstunden'
+        };
+        if(subtitle) subtitle.textContent = titles[viewName] || 'Übersicht';
+
+        // View Object finden
+        // Wir prüfen direkt auf die Variablen, da window['Name'] bei const/let nicht geht
+        let viewObj = null;
+
+        try {
+            switch(viewName) {
+                case 'dashboard': 
+                    if(typeof DashboardView !== 'undefined') viewObj = DashboardView; 
+                    break;
+                case 'members': 
+                    if(typeof MembersView !== 'undefined') viewObj = MembersView; 
+                    break;
+                case 'groups': 
+                    if(typeof GroupsView !== 'undefined') viewObj = GroupsView; 
+                    break;
+                case 'calendar': 
+                    if(typeof CalendarView !== 'undefined') viewObj = CalendarView; 
+                    break;
+                case 'news': 
+                    if(typeof NewsView !== 'undefined') viewObj = NewsView; 
+                    break;
+                case 'documents': 
+                    if(typeof DocsView !== 'undefined') viewObj = DocsView; 
+                    break;
+                case 'messenger': 
+                    if(typeof MessengerView !== 'undefined') viewObj = MessengerView; 
+                    break;
+                case 'profile': 
+                    if(typeof ProfileView !== 'undefined') viewObj = ProfileView; 
+                    break;
+                case 'workhours': 
+                    if(typeof WorkHoursView !== 'undefined') viewObj = WorkHoursView; 
+                    break;
+            }
+        } catch (e) {
+            console.error("Router Error:", e);
+        }
+
+        if (viewObj) {
+            viewObj.render(container);
+        } else {
+            console.warn(`View "${viewName}" nicht gefunden oder nicht geladen.`);
+            if(container) container.innerHTML = `<div class="p-10 text-center text-dark-muted">Lade Ansicht "${viewName}"...<br><span class="text-xs opacity-50">(Falls nichts passiert: Seite neu laden)</span></div>`;
+            
+            // Retry Mechanism (falls Skript noch lädt)
+            setTimeout(() => {
+                if(Store.state.currentView === viewName) this.router(viewName);
+            }, 500);
+        }
+    },
+
+    // --- PERMISSIONS ---
     can(action) {
         if (!this.state.currentUser) this.loadCurrentUser();
         const user = this.state.currentUser;
         if (!user) return false; 
 
         const role = user.role || 'Mitglied';
-        const roles = {
-            admin: ['1. Vorstand', '2. Vorstand', '3. Vorstand', '4. Vorstand', 'Präsident', 'Vize-Präsident', 'Admin', 'Vorstand'], 
-            manager: ['Kassenwart', 'Protokollant', 'Trainer', 'Abteilungsleiter'], 
-            member: ['Mitglied', 'Ehren-Mitglied', 'Beisitzer', 'Gast'] 
-        };
+        const admins = ['1. Vorstand', '2. Vorstand', '3. Vorstand', '4. Vorstand', 'Präsident', 'Vize-Präsident', 'Admin', 'Vorstand'];
+        const managers = ['Kassenwart', 'Protokollant', 'Trainer', 'Abteilungsleiter'];
 
-        const permissions = {
-            admin:   ['manage_members', 'manage_groups', 'manage_events', 'manage_news', 'manage_docs', 'manage_workhours', 'settings', 'delete_content'],
-            manager: ['manage_workhours'], 
-            member:  [] 
-        };
+        if (admins.includes(role)) return true;
+        if (managers.includes(role)) {
+             if (['manage_workhours', 'view_members_detail'].includes(action)) return true;
+        }
 
-        let userGroup = 'member';
-        if (roles.admin.includes(role)) userGroup = 'admin';
-        else if (roles.manager.includes(role)) userGroup = 'manager';
-
-        return permissions[userGroup].includes(action);
+        return false;
     },
 
-    // --- THEMING & ROUTING ---
+    // --- THEME & STYLES ---
     initTheme() { this.applyTheme(); },
     toggleTheme() { 
         this.state.theme = this.state.theme === 'dark' ? 'light' : 'dark'; 
@@ -140,96 +193,6 @@ const App = {
             root.style.setProperty('--muted-color', '#64748b'); 
         }
     },
-
-    // --- ROBUST ROUTER FIX ---
-    router(viewName) {
-        if (typeof Store !== 'undefined') Store.state.currentView = viewName;
-        
-        const container = document.getElementById('content');
-        const subtitle = document.getElementById('page-subtitle');
-        
-        if (container) {
-            container.classList.remove('fade-in');
-            void container.offsetWidth; 
-            container.classList.add('fade-in');
-            container.innerHTML = ''; 
-        }
-
-        // Titel Mapping
-        const titles = {
-            'dashboard': 'Dashboard',
-            'members': 'Mitgliederverwaltung',
-            'groups': 'Abteilungen',
-            'calendar': 'Kalender',
-            'news': 'Ankündigungen',
-            'documents': 'Dokumente',
-            'messenger': 'Messenger',
-            'profile': 'Mein Profil',
-            'workhours': 'Arbeitsstunden'
-        };
-        if(subtitle) subtitle.textContent = titles[viewName] || 'Übersicht';
-
-        // EXPLIZITES MAPPING STATT DYNAMISCHER SUCHE
-        let currentViewObj = null;
-
-        switch(viewName) {
-            case 'dashboard': 
-                if(typeof DashboardView !== 'undefined') currentViewObj = DashboardView;
-                break;
-            case 'members':
-                if(typeof MembersView !== 'undefined') currentViewObj = MembersView;
-                break;
-            case 'groups':
-                if(typeof GroupsView !== 'undefined') currentViewObj = GroupsView;
-                break;
-            case 'calendar':
-                if(typeof CalendarView !== 'undefined') currentViewObj = CalendarView;
-                break;
-            case 'news':
-                if(typeof NewsView !== 'undefined') currentViewObj = NewsView;
-                break;
-            case 'documents':
-                if(typeof DocsView !== 'undefined') currentViewObj = DocsView;
-                break;
-            case 'messenger':
-                if(typeof MessengerView !== 'undefined') currentViewObj = MessengerView;
-                break;
-            case 'profile':
-                if(typeof ProfileView !== 'undefined') currentViewObj = ProfileView;
-                break;
-            case 'workhours':
-                if(typeof WorkHoursView !== 'undefined') currentViewObj = WorkHoursView;
-                break;
-        }
-
-        // Render oder Fehler
-        if (currentViewObj) {
-            try {
-                currentViewObj.render(container);
-            } catch (e) {
-                console.error(`Fehler beim Rendern von ${viewName}:`, e);
-                container.innerHTML = `<div class="p-8 text-center text-red-400">Fehler beim Laden der Ansicht:<br>${e.message}</div>`;
-            }
-        } else {
-            console.warn(`View "${viewName}" Objekt nicht gefunden.`);
-            if(container) {
-                container.innerHTML = `
-                    <div class="flex flex-col items-center justify-center h-64 text-dark-muted">
-                        <i class="fa-solid fa-spinner fa-spin text-3xl mb-4"></i>
-                        <p>Lade Modul... (${viewName})</p>
-                        <p class="text-xs mt-2 opacity-50">Falls dies lange dauert, Seite neu laden.</p>
-                    </div>`;
-            }
-            // Notfall-Retry nach 1 Sekunde (falls Skripte langsam laden)
-            setTimeout(() => {
-                if (Store.state.currentView === viewName) {
-                    const retryObj = window[viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View'];
-                    if (retryObj) retryObj.render(container);
-                }
-            }, 1000);
-        }
-    },
-
     injectStyles() {
          if(document.getElementById('app-styles')) return;
          const style = document.createElement('style');
@@ -249,7 +212,7 @@ const App = {
     // --- UI HELPERS ---
     openSettingsModal() { 
         const isDark = this.state.theme === 'dark';
-        this.openModal(`<div class="p-6"><h3 class="text-xl font-bold text-dark-text mb-4">Einstellungen</h3><div class="flex items-center justify-between p-4 rounded-xl bg-dark-bg border border-dark-border"><p class="text-dark-text">Dark Mode</p><button onclick="App.toggleTheme()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold">${isDark ? 'An' : 'Aus'}</button></div><div class="p-4 rounded-xl bg-dark-bg border border-dark-border text-center mt-6"><p class="text-sm text-dark-muted mb-2">VereinsManager App v1.2.1</p><button onclick="if(confirm('Alle lokalen Daten löschen?')) { localStorage.clear(); location.reload(); }" class="text-xs text-red-400 hover:underline">Reset Cache</button></div></div>`);
+        this.openModal(`<div class="p-6"><h3 class="text-xl font-bold text-dark-text mb-4">Einstellungen</h3><div class="flex items-center justify-between p-4 rounded-xl bg-dark-bg border border-dark-border"><p class="text-dark-text">Dark Mode</p><button onclick="App.toggleTheme()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold">${isDark ? 'An' : 'Aus'}</button></div><div class="p-4 rounded-xl bg-dark-bg border border-dark-border text-center mt-6"><p class="text-sm text-dark-muted mb-2">VereinsManager App v1.2.2</p><button onclick="if(confirm('Alle lokalen Daten löschen?')) { localStorage.clear(); location.reload(); }" class="text-xs text-red-400 hover:underline">Reset Cache</button></div></div>`);
     },
     
     toggleNotifications() {
