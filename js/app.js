@@ -181,12 +181,33 @@ window.App = {
 
         container.innerHTML = '';
         
-        // Globale View Objekte suchen (window.DashboardView etc.)
-        const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
+        // Versuche View Objekt zu finden (Unterstützt const und window Definitionen)
+        let viewObj = null;
+        try {
+            switch(viewName) {
+                case 'dashboard': viewObj = (typeof DashboardView !== 'undefined') ? DashboardView : null; break;
+                case 'members': viewObj = (typeof MembersView !== 'undefined') ? MembersView : null; break;
+                case 'groups': viewObj = (typeof GroupsView !== 'undefined') ? GroupsView : null; break;
+                case 'calendar': viewObj = (typeof CalendarView !== 'undefined') ? CalendarView : null; break;
+                case 'news': viewObj = (typeof NewsView !== 'undefined') ? NewsView : null; break;
+                case 'documents': viewObj = (typeof DocsView !== 'undefined') ? DocsView : null; break;
+                case 'messenger': viewObj = (typeof MessengerView !== 'undefined') ? MessengerView : null; break;
+                case 'profile': viewObj = (typeof ProfileView !== 'undefined') ? ProfileView : null; break;
+                case 'workhours': viewObj = (typeof WorkHoursView !== 'undefined') ? WorkHoursView : null; break;
+            }
+        } catch(e) { console.warn("Router Switch Error", e); }
+
+        // Fallback: Suche global via window
+        if (!viewObj) {
+             const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
+             if (typeof window[viewObjName] !== 'undefined') {
+                 viewObj = window[viewObjName];
+             }
+        }
         
-        if (typeof window[viewObjName] !== 'undefined' && window[viewObjName].render) {
+        if (viewObj && typeof viewObj.render === 'function') {
             try {
-                window[viewObjName].render(container);
+                viewObj.render(container);
             } catch(err) {
                 console.error(`Fehler beim Rendern von ${viewName}:`, err);
                 container.innerHTML = `<div class="text-red-400">Fehler in View ${viewName}: ${err.message}</div>`;
@@ -198,6 +219,7 @@ window.App = {
                     <div class="p-6 bg-slate-800 rounded-xl text-white border border-slate-700">
                         <h2 class="text-xl font-bold mb-2">Dashboard</h2>
                         <p>Willkommen ${this.state.currentUser?.firstName || 'Gast'}!</p>
+                        <p class="text-sm mt-4 text-slate-400">Hinweis: Die Datei 'js/views/dashboard.js' scheint zu fehlen oder ist fehlerhaft.</p>
                     </div>`;
             } else {
                 container.innerHTML = `<div class="text-slate-400 p-4">Lade Ansicht "${viewName}"...<br><small>(Falls nichts passiert: Datei js/views/${viewName}.js prüfen)</small></div>`;
