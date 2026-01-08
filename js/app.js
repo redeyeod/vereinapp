@@ -135,14 +135,32 @@ const App = {
             subtitle.textContent = titles[viewName] || 'Übersicht';
         }
 
-        // Views laden (Erwartet, dass die View-Objekte global verfügbar sind)
-        if (window[viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View']) {
-            window[viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View'].render(container);
-        } else if (viewName === 'dashboard' && typeof DashboardView !== 'undefined') {
-             DashboardView.render(container);
+        // FIX: Explizite Zuordnung der Views statt dynamischer Fenster-Suche
+        // Das löst das Problem, dass const-Variablen nicht auf window gefunden werden
+        const views = {
+            'dashboard': typeof DashboardView !== 'undefined' ? DashboardView : null,
+            'members': typeof MembersView !== 'undefined' ? MembersView : null,
+            'groups': typeof GroupsView !== 'undefined' ? GroupsView : null,
+            'calendar': typeof CalendarView !== 'undefined' ? CalendarView : null,
+            'news': typeof NewsView !== 'undefined' ? NewsView : null,
+            'documents': typeof DocsView !== 'undefined' ? DocsView : null,
+            'messenger': typeof MessengerView !== 'undefined' ? MessengerView : null,
+            'profile': typeof ProfileView !== 'undefined' ? ProfileView : null,
+            'workhours': typeof WorkHoursView !== 'undefined' ? WorkHoursView : null
+        };
+
+        const currentViewObj = views[viewName];
+
+        if (currentViewObj) {
+            currentViewObj.render(container);
         } else {
              // Fallback oder Fehler
-             if(container) container.innerHTML = `<div class="text-center p-10 text-dark-muted">Lade Modul... (${viewName})</div>`;
+             if(container) container.innerHTML = `<div class="text-center p-10 text-dark-muted">
+                <i class="fa-solid fa-triangle-exclamation text-3xl mb-2 text-yellow-500"></i><br>
+                Modul "${viewName}" konnte nicht geladen werden.<br>
+                <span class="text-xs opacity-70">Stellen Sie sicher, dass die Datei js/views/${viewName}.js geladen wurde.</span>
+             </div>`;
+             console.error(`View "${viewName}" nicht gefunden. Verfügbare Views:`, Object.keys(views).filter(k => views[k] !== null));
         }
     },
 
