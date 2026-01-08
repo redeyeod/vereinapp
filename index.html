@@ -5,104 +5,156 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VereinsManager App</title>
     
-    <!-- ERROR LOGGER: Zeigt Fehler direkt auf dem Screen an -->
-    <script>
-        window.onerror = function(msg, url, line, col, error) {
-            const errorBox = document.getElementById('debug-error-box');
-            if(errorBox) {
-                errorBox.style.display = 'block';
-                errorBox.innerHTML += `<div class="mb-2">❌ <b>Fehler:</b> ${msg}<br><span class="text-xs opacity-75">${url.split('/').pop()}:${line}</span></div>`;
-            }
-            return false;
-        };
-        // Prüfen ob Dateien geladen werden
-        window.addEventListener('DOMContentLoaded', () => {
-            const files = ['js/config.js', 'js/store.js', 'js/app.js'];
-            setTimeout(() => {
-                // Check ob Objekte da sind
-                if(typeof CONFIG === 'undefined') window.onerror('config.js wurde nicht geladen! Pfad prüfen.', 'index.html', 0);
-                if(typeof Store === 'undefined') window.onerror('store.js wurde nicht geladen! Pfad prüfen.', 'index.html', 0);
-                if(typeof App === 'undefined') window.onerror('app.js wurde nicht geladen oder hat Syntax-Fehler!', 'index.html', 0);
-            }, 1000);
-        });
-    </script>
-
-    <!-- Externe Libs -->
+    <!-- 1. Externe Bibliotheken -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <!-- Tailwind Config -->
+    <!-- Tailwind Konfiguration -->
     <script>
         tailwind.config = {
             darkMode: 'class',
-            theme: { extend: { colors: { dark: { bg: '#0f172a', card: '#1e293b', border: '#334155', text: '#f1f5f9', muted: '#94a3b8' } }, borderRadius: { 'bubble': '2rem' } } }
+            theme: {
+                extend: {
+                    colors: {
+                        dark: { bg: '#0f172a', card: '#1e293b', hover: '#334155', border: '#334155', text: '#f1f5f9', muted: '#94a3b8' }
+                    },
+                    borderRadius: { 'bubble': '2rem' }
+                }
+            }
         }
     </script>
     
     <style>
-        body { font-family: sans-serif; background-color: #0f172a; color: white; }
-        .bubble-card { background: #1e293b; border-radius: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .fade-in { animation: fadeIn 0.5s ease; }
+        body { font-family: 'Inter', sans-serif; }
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-color); }
+        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+        
+        /* Animationen */
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        /* Toast */
-        #toast { visibility: hidden; min-width: 250px; background-color: #3b82f6; color: #fff; text-align: center; border-radius: 12px; padding: 16px; position: fixed; z-index: 100; left: 50%; bottom: 30px; transform: translateX(-50%); opacity: 0; transition: 0.3s; }
+        
+        /* Bubble Card Effekt */
+        .bubble-card { background: linear-gradient(145deg, var(--card-color), var(--bg-color)); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: all 0.3s; }
+        .bubble-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2); }
+        
+        /* Toast Notification */
+        #toast { visibility: hidden; min-width: 250px; background-color: #3b82f6; color: #fff; text-align: center; border-radius: 12px; padding: 16px; position: fixed; z-index: 100; left: 50%; bottom: 30px; transform: translateX(-50%); transition: opacity 0.3s, bottom 0.3s; opacity: 0; }
         #toast.show { visibility: visible; opacity: 1; bottom: 50px; }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
     </style>
 </head>
-<body class="bg-dark-bg text-dark-text">
+<body class="bg-dark-bg text-dark-text selection:bg-blue-500 selection:text-white transition-colors duration-300">
 
-    <!-- DEBUG BOX: Erscheint nur bei Fehlern -->
-    <div id="debug-error-box" class="hidden fixed top-0 left-0 w-full bg-red-900/90 text-white p-4 z-[9999] border-b-2 border-red-500 font-mono text-sm">
-        <h3 class="font-bold border-b border-red-400 mb-2 pb-1">⚠️ DEBUG KONSOLE (Fehler gefunden)</h3>
-        <!-- Fehler erscheinen hier -->
-    </div>
-
-    <!-- AUTH VIEW -->
-    <div id="auth-view" class="h-screen flex items-center justify-center p-4 relative">
-        <div class="absolute inset-0 bg-dark-bg z-0"></div>
+    <!-- AUTH VIEW (LOGIN) -->
+    <div id="auth-view" class="h-screen flex items-center justify-center p-4 bg-[url('https://images.unsplash.com/photo-1526628953301-3e589a6a8b74?q=80&w=1920')] bg-cover bg-center relative">
+        <div class="absolute inset-0 bg-dark-bg/90 backdrop-blur-sm"></div>
         <div class="relative z-10 w-full max-w-md bg-dark-card border border-dark-border p-8 rounded-bubble shadow-2xl fade-in">
             <div class="text-center mb-6">
+                <div class="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-3xl text-white shadow-lg mx-auto mb-4"><i class="fa-solid fa-users-rectangle"></i></div>
                 <h1 class="text-2xl font-bold text-white">VereinsManager</h1>
-                <p class="text-dark-muted text-sm mt-2">Login</p>
+                <p class="text-dark-muted text-sm mt-2">Cloud Edition</p>
             </div>
             
-            <form id="login-form" onsubmit="event.preventDefault(); if(typeof App !== 'undefined') { App.handleLogin(event); } else { alert('FEHLER: App.js wurde nicht geladen. Siehe rote Box oben.'); } return false;" class="space-y-4">
+            <!-- Verein Auswahl -->
+            <div class="mb-6 bg-dark-bg/50 p-4 rounded-xl border border-dark-border">
+                <label class="block text-xs font-bold text-dark-muted uppercase mb-2 ml-1">Verein wählen</label>
+                <!-- Inline Handler für sofortiges Feedback -->
+                <select id="club-select" onchange="if(typeof Store !== 'undefined') Store.switchClub(this.value)" class="w-full bg-dark-card border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 cursor-pointer">
+                    <option value="demo">TSV Musterstadt (Demo)</option>
+                    <option value="grokage">GroKaGe Malsch 1929 e.V.</option>
+                    <option value="fc_beispiel">1. FC Beispielhausen</option>
+                </select>
+            </div>
+
+            <!-- LOGIN FORMULAR -->
+            <!-- WICHTIG: Der Check "if(typeof App !== 'undefined')" verhindert Abstürze beim Start -->
+            <form id="login-form" onsubmit="event.preventDefault(); if(typeof App !== 'undefined') { App.handleLogin(event); } else { alert('App lädt noch... Bitte kurz warten.'); } return false;" class="space-y-4">
                 <div>
                     <label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">E-Mail</label>
-                    <input type="email" name="email" required placeholder="admin@gmail.com" class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500">
+                    <input type="email" name="email" required placeholder="name@verein.de" class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500">
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">Passwort</label>
-                    <input type="password" name="password" required placeholder="admin" class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500">
+                    <input type="password" name="password" required placeholder="••••••••" class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500">
                 </div>
                 <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg mt-2">Anmelden</button>
             </form>
+            
             <div id="login-error" class="text-red-400 text-xs text-center mt-3 hidden"></div>
+            <div class="text-center mt-4"><p class="text-xs text-dark-muted">Admin-Login: <b>admin@gmail.com</b> / <b>admin</b></p></div>
         </div>
     </div>
 
-    <!-- APP VIEW -->
-    <div id="app-view" class="h-screen flex flex-col hidden">
-        <header class="bg-dark-card border-b border-dark-border h-16 flex items-center justify-between px-6">
-            <h1 class="font-bold text-blue-500">VereinsApp</h1>
-            <button onclick="App.logout()" class="text-red-400 text-sm">Logout</button>
+    <!-- APP VIEW (HAUPTANWENDUNG) -->
+    <div id="app-view" class="h-screen flex flex-col overflow-hidden hidden">
+        <header class="bg-dark-card/50 backdrop-blur-md border-b border-dark-border h-20 flex items-center justify-between px-6 lg:px-10 z-20 shadow-sm sticky top-0 transition-colors duration-300">
+            <!-- Logo / Home Button -->
+            <button onclick="if(typeof App !== 'undefined') App.router('dashboard')" class="flex items-center group">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg mr-3 group-hover:scale-105 transition-transform"><i class="fa-solid fa-users-rectangle"></i></div>
+                <div class="text-left"><h1 class="text-xl font-bold text-blue-500 tracking-tight leading-none group-hover:text-blue-400">VereinApp</h1><p id="page-subtitle" class="text-xs text-dark-muted font-medium">Dashboard</p></div>
+            </button>
+            
+            <!-- Navigation -->
+            <div class="flex items-center gap-3 sm:gap-6">
+                <button onclick="if(typeof App !== 'undefined') App.router('workhours')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Arbeitsstunden"><i class="fa-solid fa-briefcase text-xl"></i></button>
+                <button onclick="if(typeof App !== 'undefined') App.router('messenger')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Messenger"><i class="fa-solid fa-comments text-xl"></i></button>
+                <button onclick="if(typeof App !== 'undefined') App.toggleNotifications()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Benachrichtigungen"><i class="fa-regular fa-bell text-xl"></i><span id="notif-dot" class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-dark-card animate-pulse hidden"></span></button>
+                <button onclick="if(typeof App !== 'undefined') App.openSettingsModal()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Einstellungen"><i class="fa-solid fa-gear text-xl"></i></button>
+                <button onclick="if(typeof App !== 'undefined') App.logout()" class="relative p-2 text-red-400 hover:text-red-300 transition-colors" title="Abmelden"><i class="fa-solid fa-right-from-bracket text-xl"></i></button>
+                
+                <!-- Profil Button -->
+                <button onclick="if(typeof App !== 'undefined') App.router('profile')" class="flex items-center gap-3 pl-6 border-l border-dark-border group">
+                    <div class="text-right hidden sm:block"><p id="current-user-name" class="text-sm font-bold text-dark-text group-hover:text-blue-400">Gast</p><p id="current-user-role" class="text-xs text-dark-muted">Mitglied</p></div>
+                    <div class="w-10 h-10 rounded-full bg-slate-700 overflow-hidden border-2 border-transparent group-hover:border-blue-500 transition-colors"><div class="w-full h-full flex items-center justify-center bg-slate-800 text-slate-400"><i class="fa-solid fa-user"></i></div></div>
+                </button>
+            </div>
         </header>
-        <div id="content" class="flex-1 p-6 overflow-y-auto"></div>
+        
+        <!-- Content Area -->
+        <div id="content" class="flex-1 overflow-y-auto p-4 lg:p-10 relative max-w-7xl mx-auto w-full transition-colors duration-300">
+            <!-- Hier werden die Views reingeladen (js/views/...) -->
+        </div>
     </div>
-    
-    <div id="toast">Nachricht</div>
 
-    <!-- WICHTIG: SKRIPTE -->
-    <!-- Wenn diese Pfade falsch sind, erscheint oben die rote Box -->
+    <!-- Modals & Toasts -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 transition-opacity duration-300"><div class="bg-dark-card border border-dark-border rounded-bubble shadow-2xl w-full max-w-md transform transition-all scale-95 opacity-0 text-dark-text" id="modal-content"></div></div>
+    <div id="toast">Nachricht gesendet</div>
+
+    <!-- SKRIPTE: Reihenfolge ist wichtig! -->
+    <!-- 1. Konfiguration -->
     <script src="js/config.js"></script>
+    
+    <!-- 2. Datenhaltung (Store) -->
     <script src="js/store.js"></script>
     
-    <!-- Views -->
+    <!-- 3. Views (Teilansichten - Füge hier alle hinzu, die du hast) -->
     <script src="js/views/dashboard.js"></script>
-    <!-- (Füge hier deine anderen Views hinzu wenn nötig) -->
+    <script src="js/views/members.js"></script>
+    <script src="js/views/groups.js"></script>
+    <script src="js/views/calendar.js"></script>
+    <script src="js/views/news.js"></script>
+    <script src="js/views/documents.js"></script>
+    <script src="js/views/messenger.js"></script>
+    <script src="js/views/profile.js"></script>
+    <script src="js/views/workhours.js"></script>
 
+    <!-- 4. Hauptlogik (App) -->
     <script src="js/app.js"></script>
-
+    
+    <!-- Fallback Helper -->
+    <script>
+        window.handleClubChange = function(val) {
+            if(typeof Store !== 'undefined' && Store.switchClub) {
+                Store.switchClub(val);
+            } else {
+                console.warn("Store noch nicht geladen");
+            }
+        };
+    </script>
 </body>
 </html>
