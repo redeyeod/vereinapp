@@ -10,7 +10,7 @@ const App = {
     state: {
         lastRead: parseInt(localStorage.getItem('vm_last_read')) || 0,
         theme: localStorage.getItem('vm_theme') || 'dark',
-        currentUser: null // Speichert das volle User-Objekt inkl. Rolle
+        currentUser: null 
     },
 
     /**
@@ -19,30 +19,27 @@ const App = {
     async init() {
         console.log("App wird initialisiert...");
 
-        // 1. Daten-Store initialisieren (Async für Cloud)
+        // 1. Warte auf Store
+        let attempts = 0;
+        while (typeof Store === 'undefined' && attempts < 10) {
+            await new Promise(r => setTimeout(r, 100));
+            attempts++;
+        }
+
         if (typeof Store !== 'undefined') {
             await Store.init();
 
-            // ZENTRALE UPDATE LOGIK
-            // Wird aufgerufen, wenn sich Daten im Store ändern (durch User oder Cloud)
+            // Reaktivität
             Store.onUpdate = () => {
                 this.updateNotificationDot();
-                
-                // Prüfen, ob der User gerade tippt. Wenn ja, KEIN komplettes Neurendern,
-                // da sonst das Textfeld den Fokus verliert.
                 const activeTag = document.activeElement ? document.activeElement.tagName : '';
-                const isTyping = (activeTag === 'INPUT' || activeTag === 'TEXTAREA');
-
-                // Spezielle Ausnahme: Wenn wir im Messenger sind und tippen, kümmert sich der Messenger selbst ums Update.
-                // In allen anderen Fällen (oder wenn nicht getippt wird) rendern wir neu.
-                if (!isTyping || Store.state.currentView !== 'messenger') {
+                // Nur neu rendern, wenn kein Textfeld fokussiert ist (außer im Messenger)
+                if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
                      this.router(Store.state.currentView);
-                } else {
-                    console.log("Update empfangen, aber User tippt gerade. Überspringe Render.");
                 }
             };
         } else {
-            console.error("KRITISCHER FEHLER: Store.js wurde nicht geladen!");
+            console.error("Store nicht gefunden!");
             return;
         }
 
@@ -50,36 +47,34 @@ const App = {
         this.initTheme();
         this.injectStyles();
         this.updateNotificationDot();
+        
+        // Start-View laden
         this.router('dashboard');
     },
 
     loadCurrentUser() {
-        // Wir laden die Session vom Supabase Auth
         const sessionStr = localStorage.getItem('vm_supabase_session');
         if(sessionStr && typeof Store !== 'undefined') {
-            const session = JSON.parse(sessionStr);
-            const email = session.user.email;
-            
-            // User im Store finden
-            // Falls Store noch leer (Daten laden noch), wird dies später durch onUpdate korrigiert
-            const user = Store.state.members.find(m => m.email === email);
-            if(user) {
-                this.state.currentUser = user;
-                // Header-Infos aktualisieren
-                const nameEl = document.getElementById('current-user-name');
-                const roleEl = document.getElementById('current-user-role');
-                if(nameEl) nameEl.textContent = user.firstName;
-                if(roleEl) roleEl.textContent = user.role;
-
-                // IDs für Views setzen
-                if (typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
-                if (typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
-                if (typeof WorkHoursView !== 'undefined') WorkHoursView.state.myId = user.id;
-            }
+            try {
+                const session = JSON.parse(sessionStr);
+                const user = Store.state.members.find(m => m.email === session.user.email);
+                if(user) {
+                    this.state.currentUser = user;
+                    // Header aktualisieren
+                    const nameEl = document.getElementById('current-user-name');
+                    const roleEl = document.getElementById('current-user-role');
+                    if(nameEl) nameEl.textContent = user.firstName;
+                    if(roleEl) roleEl.textContent = user.role;
+                    
+                    // IDs in Views setzen
+                    if(typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
+                    if(typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
+                    if(typeof WorkHoursView !== 'undefined') WorkHoursView.state.myId = user.id;
+                }
+            } catch(e) { console.error(e); }
         }
     },
 
-    // --- PERMISSION SYSTEM (RBAC) ---
     can(action) {
         if (!this.state.currentUser) this.loadCurrentUser();
         const user = this.state.currentUser;
@@ -105,62 +100,121 @@ const App = {
         return permissions[userGroup].includes(action);
     },
 
-    // --- THEMING & ROUTING ---
     initTheme() { this.applyTheme(); },
-    toggleTheme() { this.state.theme = this.state.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('vm_theme', this.state.theme); this.applyTheme(); if(document.getElementById('settings-modal')) this.openSettingsModal(); },
+    toggleTheme() { 
+        this.state.theme = this.state.theme === 'dark' ? 'light' : 'dark'; 
+        localStorage.setItem('vm_theme', this.state.theme); 
+        this.applyTheme(); 
+        if(document.getElementById('settings-modal')) this.openSettingsModal(); 
+    },
     applyTheme() {
         const root = document.documentElement;
-        if (this.state.theme === 'dark') { root.classList.add('dark'); root.style.setProperty('--bg-color', '#0f172a'); root.style.setProperty('--card-color', '#1e293b'); root.style.setProperty('--border-color', '#334155'); root.style.setProperty('--text-color', '#f1f5f9'); root.style.setProperty('--muted-color', '#94a3b8'); } 
-        else { root.classList.remove('dark'); root.style.setProperty('--bg-color', '#f1f5f9'); root.style.setProperty('--card-color', '#ffffff'); root.style.setProperty('--border-color', '#e2e8f0'); root.style.setProperty('--text-color', '#0f172a'); root.style.setProperty('--muted-color', '#64748b'); }
+        if (this.state.theme === 'dark') { 
+            root.classList.add('dark'); 
+            root.style.setProperty('--bg-color', '#0f172a'); 
+            root.style.setProperty('--card-color', '#1e293b'); 
+            root.style.setProperty('--border-color', '#334155'); 
+            root.style.setProperty('--text-color', '#f1f5f9'); 
+            root.style.setProperty('--muted-color', '#94a3b8'); 
+        } else { 
+            root.classList.remove('dark'); 
+            root.style.setProperty('--bg-color', '#f1f5f9'); 
+            root.style.setProperty('--card-color', '#ffffff'); 
+            root.style.setProperty('--border-color', '#e2e8f0'); 
+            root.style.setProperty('--text-color', '#0f172a'); 
+            root.style.setProperty('--muted-color', '#64748b'); 
+        }
     },
 
+    // --- ROBUST ROUTER FIX ---
     router(viewName) {
         if (typeof Store !== 'undefined') Store.state.currentView = viewName;
+        
         const container = document.getElementById('content');
         const subtitle = document.getElementById('page-subtitle');
-        if (container) { container.classList.remove('fade-in'); void container.offsetWidth; container.classList.add('fade-in'); container.innerHTML = ''; }
         
-        if(subtitle) {
-            const titles = {
-                'dashboard': 'Dashboard',
-                'members': 'Mitgliederverwaltung',
-                'groups': 'Abteilungen',
-                'calendar': 'Kalender',
-                'news': 'Ankündigungen',
-                'documents': 'Dokumente',
-                'messenger': 'Messenger',
-                'profile': 'Mein Profil',
-                'workhours': 'Arbeitsstunden'
-            };
-            subtitle.textContent = titles[viewName] || 'Übersicht';
+        if (container) {
+            container.classList.remove('fade-in');
+            void container.offsetWidth; 
+            container.classList.add('fade-in');
+            container.innerHTML = ''; 
         }
 
-        // FIX: Explizite Zuordnung der Views statt dynamischer Fenster-Suche
-        // Das löst das Problem, dass const-Variablen nicht auf window gefunden werden
-        const views = {
-            'dashboard': typeof DashboardView !== 'undefined' ? DashboardView : null,
-            'members': typeof MembersView !== 'undefined' ? MembersView : null,
-            'groups': typeof GroupsView !== 'undefined' ? GroupsView : null,
-            'calendar': typeof CalendarView !== 'undefined' ? CalendarView : null,
-            'news': typeof NewsView !== 'undefined' ? NewsView : null,
-            'documents': typeof DocsView !== 'undefined' ? DocsView : null,
-            'messenger': typeof MessengerView !== 'undefined' ? MessengerView : null,
-            'profile': typeof ProfileView !== 'undefined' ? ProfileView : null,
-            'workhours': typeof WorkHoursView !== 'undefined' ? WorkHoursView : null
+        // Titel Mapping
+        const titles = {
+            'dashboard': 'Dashboard',
+            'members': 'Mitgliederverwaltung',
+            'groups': 'Abteilungen',
+            'calendar': 'Kalender',
+            'news': 'Ankündigungen',
+            'documents': 'Dokumente',
+            'messenger': 'Messenger',
+            'profile': 'Mein Profil',
+            'workhours': 'Arbeitsstunden'
         };
+        if(subtitle) subtitle.textContent = titles[viewName] || 'Übersicht';
 
-        const currentViewObj = views[viewName];
+        // EXPLIZITES MAPPING STATT DYNAMISCHER SUCHE
+        // Das verhindert Fehler, wenn window[VarName] nicht funktioniert
+        let currentViewObj = null;
 
+        switch(viewName) {
+            case 'dashboard': 
+                if(typeof DashboardView !== 'undefined') currentViewObj = DashboardView;
+                break;
+            case 'members':
+                if(typeof MembersView !== 'undefined') currentViewObj = MembersView;
+                break;
+            case 'groups':
+                if(typeof GroupsView !== 'undefined') currentViewObj = GroupsView;
+                break;
+            case 'calendar':
+                if(typeof CalendarView !== 'undefined') currentViewObj = CalendarView;
+                break;
+            case 'news':
+                if(typeof NewsView !== 'undefined') currentViewObj = NewsView;
+                break;
+            case 'documents':
+                if(typeof DocsView !== 'undefined') currentViewObj = DocsView;
+                break;
+            case 'messenger':
+                if(typeof MessengerView !== 'undefined') currentViewObj = MessengerView;
+                break;
+            case 'profile':
+                if(typeof ProfileView !== 'undefined') currentViewObj = ProfileView;
+                break;
+            case 'workhours':
+                if(typeof WorkHoursView !== 'undefined') currentViewObj = WorkHoursView;
+                break;
+        }
+
+        // Render oder Fehler
         if (currentViewObj) {
-            currentViewObj.render(container);
+            try {
+                currentViewObj.render(container);
+            } catch (e) {
+                console.error(`Fehler beim Rendern von ${viewName}:`, e);
+                container.innerHTML = `<div class="p-8 text-center text-red-400">Fehler beim Laden der Ansicht:<br>${e.message}</div>`;
+            }
         } else {
-             // Fallback oder Fehler
-             if(container) container.innerHTML = `<div class="text-center p-10 text-dark-muted">
-                <i class="fa-solid fa-triangle-exclamation text-3xl mb-2 text-yellow-500"></i><br>
-                Modul "${viewName}" konnte nicht geladen werden.<br>
-                <span class="text-xs opacity-70">Stellen Sie sicher, dass die Datei js/views/${viewName}.js geladen wurde.</span>
-             </div>`;
-             console.error(`View "${viewName}" nicht gefunden. Verfügbare Views:`, Object.keys(views).filter(k => views[k] !== null));
+            console.warn(`View "${viewName}" Objekt nicht gefunden.`);
+            if(container) {
+                container.innerHTML = `
+                    <div class="flex flex-col items-center justify-center h-64 text-dark-muted">
+                        <i class="fa-solid fa-spinner fa-spin text-3xl mb-4"></i>
+                        <p>Lade Modul... (${viewName})</p>
+                        <p class="text-xs mt-2 opacity-50">Falls dies lange dauert, Seite neu laden.</p>
+                    </div>`;
+            }
+            // Notfall-Retry nach 1 Sekunde (falls Skripte langsam laden)
+            setTimeout(() => {
+                if (Store.state.currentView === viewName) {
+                    // Nur erneut versuchen, wenn User nicht gewechselt hat
+                    // Wir rufen router nicht rekursiv auf um Loops zu vermeiden, sondern checken direkt global
+                    const retryObj = window[viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View'];
+                    if (retryObj) retryObj.render(container);
+                }
+            }, 1000);
         }
     },
 
@@ -171,7 +225,7 @@ const App = {
          style.innerHTML = `
             .form-input { width: 100%; background-color: var(--bg-color); border: 1px solid var(--border-color); border-radius: 0.75rem; padding: 0.75rem; color: var(--text-color); transition: box-shadow 0.2s, border-color 0.2s; }
             .form-input:focus { outline: none; ring: 2px solid #3b82f6; border-color: #3b82f6; }
-            .btn-primary { background-color: #2563eb; color: white; font-weight: 700; padding: 0.75rem 1.5rem; border-radius: 0.75rem; transition: 0.2s; cursor: pointer; }
+            .btn-primary { background-color: #2563eb; color: white; font-weight: 700; padding: 0.75rem 1.5rem; border-radius: 0.75rem; transition: all 0.2s; box-shadow: 0 10px 15px -3px rgba(30, 58, 138, 0.4); cursor: pointer; }
             .btn-primary:hover { background-color: #1d4ed8; }
             .notif-scrollbar::-webkit-scrollbar { width: 6px; }
             .notif-scrollbar::-webkit-scrollbar-track { background: var(--card-color); }
@@ -183,7 +237,7 @@ const App = {
     // --- UI HELPERS ---
     openSettingsModal() { 
         const isDark = this.state.theme === 'dark';
-        this.openModal(`<div class="p-6"><h3 class="text-xl font-bold text-dark-text mb-4">Einstellungen</h3><div class="flex items-center justify-between p-4 rounded-xl bg-dark-bg border border-dark-border"><p class="text-dark-text">Dark Mode</p><button onclick="App.toggleTheme()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold">${isDark ? 'An' : 'Aus'}</button></div><div class="p-4 rounded-xl bg-dark-bg border border-dark-border text-center mt-6"><p class="text-sm text-dark-muted mb-2">VereinsManager App v1.2.0</p><button onclick="if(confirm('Alle lokalen Daten löschen und abmelden?')) { localStorage.clear(); location.reload(); }" class="text-xs text-red-400 hover:underline">App zurücksetzen & Cache leeren</button></div></div>`);
+        this.openModal(`<div class="p-6"><h3 class="text-xl font-bold text-dark-text mb-4">Einstellungen</h3><div class="flex items-center justify-between p-4 rounded-xl bg-dark-bg border border-dark-border"><p class="text-dark-text">Dark Mode</p><button onclick="App.toggleTheme()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold">${isDark ? 'An' : 'Aus'}</button></div><div class="p-4 rounded-xl bg-dark-bg border border-dark-border text-center mt-6"><p class="text-sm text-dark-muted mb-2">VereinsManager App v1.2.1</p><button onclick="if(confirm('Alle lokalen Daten löschen?')) { localStorage.clear(); location.reload(); }" class="text-xs text-red-400 hover:underline">Reset Cache</button></div></div>`);
     },
     
     toggleNotifications() {
@@ -205,12 +259,13 @@ const App = {
         html += `</div>`; if (news.length > 0 || chats.length > 0) { html += `<div class="p-3 bg-dark-bg/50 border-t border-dark-border text-center"><button onclick="App.markAllAsRead()" class="text-xs font-bold text-blue-400 hover:text-blue-300 hover:underline">Alle als gelesen markieren</button></div>`; } html += `</div>`;
         if (!overlay) { overlay = document.createElement('div'); overlay.id = 'notification-overlay'; overlay.className = 'fixed inset-0 z-50 hidden'; overlay.onclick = (e) => { if(e.target === overlay) overlay.classList.add('hidden'); }; document.body.appendChild(overlay); } overlay.innerHTML = html; overlay.classList.remove('hidden');
     },
+
     markAllAsRead() { this.state.lastRead = Date.now(); localStorage.setItem('vm_last_read', this.state.lastRead); document.getElementById('notification-overlay').classList.add('hidden'); this.updateNotificationDot(); App.showToast('Alle als gelesen markiert'); },
     updateNotificationDot() { const lastRead = this.state.lastRead; let hasNew = false; if (Store.state.news.some(n => new Date(n.date).getTime() > lastRead)) hasNew = true; if (!hasNew) Store.state.groups.forEach(g => { if (g.chat && g.chat.length > 0) { const lastMsg = g.chat[g.chat.length - 1]; if (new Date(lastMsg.time).getTime() > lastRead) hasNew = true; } }); const dot = document.querySelector('button[onclick="App.toggleNotifications()"] span'); if (dot) dot.style.display = hasNew ? 'block' : 'none'; },
     
-    openModal(html) { const o=document.getElementById('modal-overlay'), c=document.getElementById('modal-content'); if(o&&c){ c.innerHTML=html; o.classList.remove('hidden'); setTimeout(()=>c.classList.remove('scale-95','opacity-0'),10); } },
-    closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); },
-    showToast(msg) { const t=document.getElementById('toast'); if(t){ t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); } }
+    openModal(htmlContent) { const overlay = document.getElementById('modal-overlay'); const content = document.getElementById('modal-content'); if (overlay && content) { content.innerHTML = htmlContent; overlay.classList.remove('hidden'); setTimeout(() => { content.classList.remove('scale-95', 'opacity-0'); content.classList.add('scale-100', 'opacity-100'); }, 10); } },
+    closeModal() { const overlay = document.getElementById('modal-overlay'); const content = document.getElementById('modal-content'); if (overlay && content) { content.classList.remove('scale-100', 'opacity-100'); content.classList.add('scale-95', 'opacity-0'); setTimeout(() => { overlay.classList.add('hidden'); content.innerHTML = ''; }, 300); } },
+    showToast(message) { const toast = document.getElementById("toast"); if (toast) { toast.textContent = message; toast.className = "show"; setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000); } }
 };
 
 window.addEventListener('DOMContentLoaded', () => { App.init(); });
