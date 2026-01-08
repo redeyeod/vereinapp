@@ -54,11 +54,12 @@ const App = {
         this.injectStyles();
         
         // 5. Routing Start
-        if (localStorage.getItem('vm_current_user_id')) {
+        // Wir prüfen sowohl currentUser als auch den LocalStorage Key, um Flackern zu vermeiden
+        if (this.state.currentUser || localStorage.getItem('vm_current_user_id')) {
             this.router('dashboard');
             this.updateNotificationDot();
         } else {
-            // Zeige Login
+            // Zeige Login Screen
             document.getElementById('auth-view').classList.remove('hidden');
             document.getElementById('app-view').classList.add('hidden');
         }
@@ -135,11 +136,15 @@ const App = {
                 // Spezialfall: Admin Login ging durch Auth, aber DB Eintrag fehlt (z.B. DB gelöscht)
                 if (email === 'admin@gmail.com') {
                     const adminUser = { firstName: 'Super', lastName: 'Admin', email: email, role: 'Admin', status: 'active', groups: ['Vorstand'], joinedDate: new Date().toISOString() };
-                    await Store.add('members', adminUser);
+                    // Nur hinzufügen, wenn noch nicht existiert
+                    const exists = Store.state.members.find(m => m.email === email);
+                    if (!exists) {
+                         await Store.add('members', adminUser);
+                    }
                     // Reload und retry
                     await Store.fetchTable('members');
                     user = Store.state.members.find(m => m.email === email);
-                    this.loginSuccess(user);
+                    this.loginSuccess(user || adminUser);
                 } else {
                     throw new Error("Benutzerprofil nicht gefunden.");
                 }
@@ -201,11 +206,26 @@ const App = {
         }
     },
 
+    // --- CRITICAL FIX: Session Handling ---
     loadCurrentUser() {
         const sessionStr = localStorage.getItem('vm_supabase_session');
+        
+        // 1. Check: Ist der String leer oder ungültig?
+        if(!sessionStr || sessionStr === "undefined" || sessionStr === "null") {
+             return;
+        }
+
         if(sessionStr && typeof Store !== 'undefined') {
             try {
                 const session = JSON.parse(sessionStr);
+                
+                // 2. Check: Ist das Session Objekt korrekt strukturiert?
+                if (!session || !session.user || !session.user.email) {
+                    console.warn("Session Daten sind beschädigt oder unvollständig. Logout wird erzwungen.");
+                    localStorage.removeItem('vm_supabase_session');
+                    return;
+                }
+
                 const email = session.user.email;
                 const user = Store.state.members.find(m => m.email === email);
                 
@@ -222,7 +242,11 @@ const App = {
                     if(typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
                     if(typeof WorkHoursView !== 'undefined') WorkHoursView.state.myId = user.id;
                 }
-            } catch(e) { console.error("User Load Error", e); }
+            } catch(e) { 
+                console.error("User Load Error", e); 
+                // Wenn JSON Parse fehlschlägt, MUSS die kaputte Session gelöscht werden, sonst Loop
+                localStorage.removeItem('vm_supabase_session');
+            }
         }
     },
 
@@ -275,10 +299,10 @@ const App = {
             viewObj.render(container);
         } else {
             console.warn(`View "${viewName}" nicht gefunden.`);
-            // Retry Mechanism
+            // Retry Mechanism: Falls Views noch laden
             setTimeout(() => {
                 if(Store.state.currentView === viewName) {
-                    // Versuch direkter Zugriff global
+                    // Versuch direkter Zugriff global über window
                     const v = window[viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View'];
                     if (v && v.render) v.render(container);
                 }
@@ -309,7 +333,7 @@ const App = {
         if (roles.admin.includes(role)) userGroup = 'admin';
         else if (roles.manager.includes(role)) userGroup = 'manager';
 
-        return permissions[userGroup].includes(action);
+        return permissions[userGroup] ? permissions[userGroup].includes(action) : false;
     },
 
     // --- THEMING & STYLES ---
@@ -365,17 +389,20 @@ const App = {
         if (overlay && !overlay.classList.contains('hidden')) { overlay.classList.add('hidden'); return; }
 
         const lastRead = this.state.lastRead;
-        const news = Store.state.news.filter(n => new Date(n.date).getTime() > lastRead);
+        // Sicherheitscheck falls Store.state.news noch undefined
+        const news = Store.state.news ? Store.state.news.filter(n => new Date(n.date).getTime() > lastRead) : [];
         const chats = [];
         
-        Store.state.groups.forEach(g => { 
-            if (g.chat && g.chat.length > 0) { 
-                const lastMsg = g.chat[g.chat.length - 1]; 
-                if (new Date(lastMsg.time).getTime() > lastRead) { 
-                    chats.push({ groupName: g.name, groupId: g.id, message: lastMsg.text, sender: lastMsg.sender, time: lastMsg.time }); 
+        if (Store.state.groups) {
+            Store.state.groups.forEach(g => { 
+                if (g.chat && g.chat.length > 0) { 
+                    const lastMsg = g.chat[g.chat.length - 1]; 
+                    if (new Date(lastMsg.time).getTime() > lastRead) { 
+                        chats.push({ groupName: g.name, groupId: g.id, message: lastMsg.text, sender: lastMsg.sender, time: lastMsg.time }); 
+                    } 
                 } 
-            } 
-        });
+            });
+        }
         chats.sort((a, b) => new Date(b.time) - new Date(a.time));
 
         let html = `<div class="absolute top-20 right-6 w-96 bg-dark-card border border-dark-border rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[500px]" onclick="event.stopPropagation()"><div class="p-4 border-b border-dark-border bg-dark-bg/95 backdrop-blur flex justify-between items-center sticky top-0"><h3 class="font-bold text-dark-text"><i class="fa-regular fa-bell mr-2"></i>Benachrichtigungen</h3><button onclick="document.getElementById('notification-overlay').classList.add('hidden')" class="text-dark-muted hover:text-dark-text transition-colors"><i class="fa-solid fa-times"></i></button></div><div class="overflow-y-auto notif-scrollbar flex-1">`;
@@ -389,7 +416,17 @@ const App = {
     },
 
     markAllAsRead() { this.state.lastRead = Date.now(); localStorage.setItem('vm_last_read', this.state.lastRead); document.getElementById('notification-overlay').classList.add('hidden'); this.updateNotificationDot(); App.showToast('Alle als gelesen markiert'); },
-    updateNotificationDot() { const lastRead = this.state.lastRead; let hasNew = false; if (Store.state.news.some(n => new Date(n.date).getTime() > lastRead)) hasNew = true; if (!hasNew) Store.state.groups.forEach(g => { if (g.chat && g.chat.length > 0) { const lastMsg = g.chat[g.chat.length - 1]; if (new Date(lastMsg.time).getTime() > lastRead) hasNew = true; } }); const dot = document.querySelector('button[onclick="App.toggleNotifications()"] span'); if (dot) dot.style.display = hasNew ? 'block' : 'none'; },
+    updateNotificationDot() { 
+        const lastRead = this.state.lastRead; 
+        let hasNew = false; 
+        // Checks falls Arrays noch leer sind
+        if (Store.state.news && Store.state.news.some(n => new Date(n.date).getTime() > lastRead)) hasNew = true; 
+        if (!hasNew && Store.state.groups) {
+             Store.state.groups.forEach(g => { if (g.chat && g.chat.length > 0) { const lastMsg = g.chat[g.chat.length - 1]; if (new Date(lastMsg.time).getTime() > lastRead) hasNew = true; } }); 
+        }
+        const dot = document.querySelector('button[onclick="App.toggleNotifications()"] span'); 
+        if (dot) dot.style.display = hasNew ? 'block' : 'none'; 
+    },
     openModal(htmlContent) { const overlay = document.getElementById('modal-overlay'); const content = document.getElementById('modal-content'); if (overlay && content) { content.innerHTML = htmlContent; overlay.classList.remove('hidden'); setTimeout(() => { content.classList.remove('scale-95', 'opacity-0'); content.classList.add('scale-100', 'opacity-100'); }, 10); } },
     closeModal() { const overlay = document.getElementById('modal-overlay'); const content = document.getElementById('modal-content'); if (overlay && content) { content.classList.remove('scale-100', 'opacity-100'); content.classList.add('scale-95', 'opacity-0'); setTimeout(() => { overlay.classList.add('hidden'); content.innerHTML = ''; }, 300); } },
     showToast(message) { const toast = document.getElementById("toast"); if (toast) { toast.textContent = message; toast.classList.add('show'); setTimeout(() => { toast.classList.remove('show'),3000); } } }
