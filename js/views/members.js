@@ -195,8 +195,6 @@ const MembersView = {
         }
     },
 
-    // --- NEUE FUNKTIONEN FÜR PASSWORT & MODAL ---
-
     openAddModal() {
         if(!App.can('manage_members')) {
             App.showToast("Keine Berechtigung", "error");
@@ -227,7 +225,7 @@ const MembersView = {
                     </div>
                     <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mt-6 mb-3">Kontakt</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Email</label><input type="email" name="email" class="form-input" placeholder="Wichtig für Login"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Email</label><input type="email" name="email" class="form-input" placeholder="Wichtig für Login" required></div>
                         <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Telefon</label><input type="tel" name="phone" class="form-input"></div>
                     </div>
                     <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Geburtsdatum</label><input type="date" name="birthdate" class="form-input dark-date"></div>
@@ -338,36 +336,35 @@ const MembersView = {
 
             const firstName = fd.get('firstName');
             const email = fd.get('email');
-            const generatedPassword = MembersView.generatePassword();
+            const generatedPassword = this.generatePassword();
 
-            // 1. Authentifizierungs-User in Supabase anlegen (ohne Login)
-            const { error: signUpError, data: authData } = await fetch(CONFIG.SUPABASE_URL + '/auth/v1/signup', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': CONFIG.SUPABASE_KEY
-                },
-                body: JSON.stringify({
-                    email: email,
-                    password: generatedPassword
-                })
-            }).then(r => r.json().then(data => ({ status: r.status, body: data })))
-              .then(res => {
-                  if (res.status >= 400) return { error: res.body, data: null };
-                  return { error: null, data: res.body };
-              });
+            // 1. Authentifizierungs-User in Supabase anlegen (ohne Logout des Admins!)
+            // Wir erstellen einen temporären Client ohne Session-Persistenz
+            const tempClient = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, {
+                auth: {
+                    persistSession: false, // WICHTIG: Überschreibt nicht den Admin-Token
+                    autoRefreshToken: false,
+                    detectSessionInUrl: false
+                }
+            });
+
+            const { data: authData, error: signUpError } = await tempClient.auth.signUp({
+                email: email,
+                password: generatedPassword
+            });
 
             if (signUpError) {
                 console.error("Auth Error:", signUpError);
-                throw new Error("Login-Erstellung fehlgeschlagen: " + (signUpError.msg || signUpError.message || "Unbekannter Fehler"));
+                throw new Error("Registrierung fehlgeschlagen: " + (signUpError.message || "Unbekannter Fehler"));
             }
 
             // 2. Profil-Daten in die Datenbank schreiben
-            // Wir nutzen die ID, die Supabase Auth generiert hat
+            // Falls signUp keine User-ID liefert (z.B. bei bestätigungspflichtiger Email), nutzen wir Date.now() als Fallback
+            // aber besser ist es, die echte ID zu nehmen, falls vorhanden
             const newUserId = authData.user ? authData.user.id : Date.now();
 
             const newMember = { 
-                id: newUserId, // WICHTIG: Verknüpfung Auth <-> Profil
+                id: newUserId, 
                 firstName: firstName, 
                 lastName: fd.get('lastName'),
                 street: fd.get('street'),
@@ -395,10 +392,10 @@ const MembersView = {
                         <i class="fa-solid fa-check"></i>
                     </div>
                     <h3 class="text-2xl font-bold text-white mb-2">Mitglied angelegt!</h3>
-                    <p class="text-dark-muted text-sm mb-6">Login-Zugang wurde erstellt.</p>
+                    <p class="text-dark-muted text-sm mb-6">Das Profil wurde erstellt und der Login eingerichtet.</p>
                     
                     <div class="bg-dark-bg border border-dark-border rounded-xl p-4 mb-6 text-left relative group">
-                        <p class="text-xs text-dark-muted uppercase font-bold mb-1">Passwort</p>
+                        <p class="text-xs text-dark-muted uppercase font-bold mb-1">Generiertes Passwort</p>
                         <div class="flex justify-between items-center">
                             <code class="text-blue-400 font-mono text-lg select-all">${generatedPassword}</code>
                             <button onclick="navigator.clipboard.writeText('${generatedPassword}'); App.showToast('Passwort kopiert')" class="text-dark-muted hover:text-white p-2 transition-colors" title="Kopieren">
