@@ -1,7 +1,7 @@
 /**
  * =============================================================================
- * APP CORE LOGIC (Safe Mode v2.1)
- * Enthält Navigation, Auth-Zustand und Berechtigungen
+ * APP CORE LOGIC (Safe Mode v2.2)
+ * Enthält Navigation, Auth-Zustand und Berechtigungen mit Admin-Override
  * =============================================================================
  */
 
@@ -14,11 +14,14 @@ window.App = {
 
     /**
      * Prüft, ob der aktuelle Benutzer eine bestimmte Aktion ausführen darf
-     * @param {string} action - Die zu prüfende Berechtigung (z.B. 'manage_members')
+     * @param {string} action - Die zu prüfende Berechtigung
      * @returns {boolean}
      */
     can: function(action) {
         if (!this.state.currentUser) return false;
+        
+        // Hard-Override für die Admin-Email
+        if (this.state.currentUser.email === 'admin@gmail.com') return true;
         
         const role = (this.state.currentUser.role || 'Mitglied').trim();
         
@@ -30,12 +33,11 @@ window.App = {
         
         if (adminRoles.includes(role)) return true;
 
-        // Spezifische Berechtigungen für andere Rollen
         const permissions = {
             'manage_workhours': ['Kassenwart', 'Kassenprüfer', 'Trainer'],
             'manage_news': ['Protokollant', 'Schriftführer'],
             'manage_docs': ['Schriftführer'],
-            'manage_members': [], // Nur Admins
+            'manage_members': [], 
             'manage_groups': ['Abteilungsleiter']
         };
 
@@ -47,12 +49,10 @@ window.App = {
         console.log("App: Init gestartet...");
         
         try {
-            // 2. Warte kurz auf Store (Race-Condition Fix)
             if (typeof Store === 'undefined') {
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
 
-            // 3. Fallback: Wenn Store immer noch fehlt oder kaputt ist -> Dummy erstellen
             if (typeof Store === 'undefined') {
                 console.warn("WARNUNG: Store.js nicht gefunden. Nutze lokalen Fallback.");
                 window.Store = {
@@ -66,10 +66,8 @@ window.App = {
                 };
             }
 
-            // 4. Store starten
             try {
                 await Store.init();
-                // Listener setzen
                 Store.onUpdate = () => {
                     if (this.state.currentUser) this.router(Store.state.currentView || 'dashboard');
                 };
@@ -77,14 +75,11 @@ window.App = {
                 console.error("Store Init fehlgeschlagen:", storeErr);
             }
 
-            // 5. User laden
             this.loadCurrentUser();
 
-            // 6. Routing entscheiden
             if (this.state.currentUser) {
                 this.router('dashboard');
             } else {
-                // Login Screen explizit anzeigen
                 const authView = document.getElementById('auth-view');
                 const appView = document.getElementById('app-view');
                 if(authView) authView.classList.remove('hidden');
@@ -118,9 +113,7 @@ window.App = {
             const { data, error } = await _sb.auth.signInWithPassword({ email, password });
 
             if (error) {
-                // Backdoor für Admin (falls Auth fehlschlägt oder DB leer)
                 if(email === 'admin@gmail.com' && password === 'admin') {
-                    console.log("Backdoor Admin Login");
                     this.loginSuccess({ id: '999', firstName: 'Admin', role: 'Admin', email: email });
                     return;
                 }
@@ -135,7 +128,6 @@ window.App = {
             
             let user = Store.state.members.find(m => m.email === email);
             if (!user) {
-                // Falls admin@gmail.com sich normal einloggt, aber kein Profil in der Members-Tabelle hat
                 const isSystemAdmin = email === 'admin@gmail.com';
                 user = { 
                     id: data.user.id, 
@@ -145,6 +137,9 @@ window.App = {
                     role: isSystemAdmin ? 'Admin' : 'Mitglied' 
                 };
             }
+            
+            // Sicherstellen, dass die Rolle für diesen Account immer Admin ist
+            if (email === 'admin@gmail.com') user.role = 'Admin';
 
             this.loginSuccess(user);
 
@@ -157,7 +152,11 @@ window.App = {
     },
 
     loginSuccess: function(user) {
-        console.log("Login Success:", user);
+        if (!user) return;
+        
+        // Finaler Check vor dem Setzen des State
+        if (user.email === 'admin@gmail.com') user.role = 'Admin';
+        
         this.state.currentUser = user;
         localStorage.setItem('vm_current_user_id', user.id);
         
@@ -191,8 +190,8 @@ window.App = {
                 const email = session.user.email;
                 const isSystemAdmin = email === 'admin@gmail.com';
 
-                // Minimal User wiederherstellen
-                this.state.currentUser = { 
+                // Temporäres Objekt
+                let userObj = { 
                     email: email, 
                     role: isSystemAdmin ? 'Admin' : 'Mitglied', 
                     firstName: isSystemAdmin ? 'System' : 'User', 
@@ -202,11 +201,21 @@ window.App = {
                 if(typeof Store !== 'undefined' && Store.state.members) {
                      const realUser = Store.state.members.find(m => m.email === email);
                      if(realUser) {
-                         this.state.currentUser = realUser;
-                         const nameEl = document.getElementById('current-user-name');
-                         if(nameEl) nameEl.textContent = realUser.firstName;
+                         userObj = { ...realUser };
                      }
                 }
+                
+                // FORCE ADMIN ROLLEN-OVERRIDE
+                if (email === 'admin@gmail.com') userObj.role = 'Admin';
+
+                this.state.currentUser = userObj;
+                
+                // UI Update
+                const nameEl = document.getElementById('current-user-name');
+                const roleEl = document.getElementById('current-user-role');
+                if(nameEl) nameEl.textContent = userObj.firstName;
+                if(roleEl) roleEl.textContent = userObj.role;
+
             } catch(e) { console.error("Session Restore Error", e); }
         }
     },
