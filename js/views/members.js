@@ -1,7 +1,7 @@
 /**
  * =============================================================================
- * MEMBERS VIEW (Debugged & Fixed v2)
- * Verwaltet Mitglieder und löst ID/RLS Probleme automatisch
+ * MEMBERS VIEW (Final Fix)
+ * Verwaltet Mitglieder und sorgt für saubere Datenbank-Synchronisation
  * =============================================================================
  */
 
@@ -42,8 +42,8 @@ const MembersView = {
                     <div class="w-16 h-16 bg-dark-bg rounded-full flex items-center justify-center mb-4 text-2xl opacity-50 border border-dark-border">
                         <i class="fa-solid fa-user-slash"></i>
                     </div>
-                    <p class="text-sm">Keine Mitglieder gefunden.</p>
-                    <p class="text-xs mt-2 opacity-60">Drücke oben auf <i class="fa-solid fa-rotate-right"></i> um neu zu laden.</p>
+                    <p class="text-sm font-bold">Keine Mitglieder gefunden.</p>
+                    <p class="text-xs mt-2 opacity-60">Liste ist leer oder wird geladen.</p>
                 </div>
             </div>
         `;
@@ -55,7 +55,7 @@ const MembersView = {
         const icon = document.querySelector('button[title="Neu laden"] i');
         if(icon) icon.classList.add('animate-spin');
         
-        if (Store && Store.fetchTable) {
+        if (typeof Store !== 'undefined' && Store.fetchTable) {
             await Store.fetchTable('members');
         }
         this.updateList();
@@ -127,6 +127,7 @@ const MembersView = {
     },
 
     openDetailModal(id) {
+        // ID Vergleich flexibel (String/Number)
         const m = Store.state.members.find(mem => mem.id == id);
         if(!m) return;
         
@@ -228,13 +229,13 @@ const MembersView = {
             const email = fd.get('email');
             const generatedPassword = this.generatePassword();
 
-            // 1. Auth User anlegen (Ohne Admin-Logout)
+            // 1. Auth User anlegen
             const tempClient = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, { auth: { persistSession: false } });
             const { data: authData, error: signUpError } = await tempClient.auth.signUp({ email, password: generatedPassword });
 
             if (signUpError) throw new Error("Auth Fehler: " + signUpError.message);
 
-            // 2. Datenbank Eintrag versuchen
+            // 2. Datenbank Eintrag erstellen
             let newUserId = authData.user ? authData.user.id : Date.now();
             
             const newMember = { 
@@ -247,19 +248,23 @@ const MembersView = {
                 groups: []
             };
             
-            // WICHTIG: Insert mit AKTUELLER Session versuchen (als Admin)
-            // tryInsert nutzt jetzt den authentifizierten Client, falls möglich
-            let insertError = await this.tryInsert(newMember);
+            // WICHTIG: Insert mit AKTUELLER Session versuchen
+            // Wir nutzen hier eine spezielle Funktion, die den Token explizit mitsendet
+            let insertError = await this.safeInsert(newMember);
             
             if (insertError) {
-                console.warn("UUID Insert failed (" + insertError.message + "), trying Auto-ID...");
-                // Fallback: Auto-ID (falls DB auf Int eingestellt ist)
-                delete newMember.id;
-                insertError = await this.tryInsert(newMember);
-            }
-
-            if (insertError) {
-                throw new Error("DB Speicherfehler: " + insertError.message + " (RLS Policy prüfen!)");
+                console.warn("DB Fehler mit UUID:", insertError.message);
+                // Fallback: Wenn DB keine UUIDs akzeptiert, probieren wir es ohne ID (Auto-Increment)
+                // ACHTUNG: Dann passt die ID nicht zum Login, aber der User ist wenigstens in der Liste
+                const memberClone = { ...newMember };
+                delete memberClone.id;
+                
+                const retryError = await this.safeInsert(memberClone);
+                if (retryError) {
+                    throw new Error("Datenbank-Fehler: " + retryError.message);
+                } else {
+                    App.showToast("Warnung: Login-Verknüpfung evtl. fehlerhaft (ID-Format)", "error");
+                }
             }
             
             // Erfolg!
@@ -268,6 +273,7 @@ const MembersView = {
                 <div class="p-6 text-center">
                     <div class="w-14 h-14 bg-green-500/20 rounded-full flex items-center justify-center text-green-500 text-2xl mx-auto mb-4"><i class="fa-solid fa-check"></i></div>
                     <h3 class="text-xl font-bold text-white mb-2">Erfolgreich!</h3>
+                    <p class="text-sm text-dark-muted mb-4">Profil erstellt & Login angelegt.</p>
                     <div class="bg-dark-bg p-3 rounded mb-4 text-left">
                         <p class="text-xs text-dark-muted uppercase">Passwort</p>
                         <code class="text-blue-400 select-all font-mono text-lg">${generatedPassword}</code>
@@ -289,22 +295,22 @@ const MembersView = {
         }
     },
 
-    // Hilfsfunktion für sicheren Insert (MIT AUTH TOKEN)
-    async tryInsert(item) {
-        if(typeof supabase === 'undefined') return { message: "Supabase nicht geladen" };
+    // Hilfsfunktion: Führt einen Insert mit dem Token des Admins aus
+    async safeInsert(item) {
+        if(typeof supabase === 'undefined') return { message: "Supabase fehlt" };
         
-        // Wir erstellen einen Client, der explizit das Token des Admins nutzt
+        // Token holen
         const sessionStr = localStorage.getItem('vm_supabase_session');
-        const options = sessionStr ? {
-            global: {
-                headers: {
-                    Authorization: `Bearer ${JSON.parse(sessionStr).access_token}`
-                }
-            }
-        } : {};
-
-        const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, options);
-        const { error } = await _sb.from('members').insert(item);
+        if (!sessionStr) return { message: "Nicht eingeloggt" };
+        
+        const token = JSON.parse(sessionStr).access_token;
+        
+        // Client mit Token erstellen
+        const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, {
+            global: { headers: { Authorization: `Bearer ${token}` } }
+        });
+        
+        const { error } = await client.from('members').insert(item);
         return error;
     },
 
