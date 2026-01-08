@@ -16,7 +16,8 @@ const DocsView = {
      * @param {HTMLElement} container 
      */
     render(container) {
-        const allDocs = Store.state.docs;
+        // Sicherheits-Check
+        const allDocs = Store.state.docs || [];
         const currentFolderId = this.state.currentFolderId;
 
         // Inhalte filtern: Nur Items anzeigen, die im aktuellen Ordner liegen
@@ -31,7 +32,6 @@ const DocsView = {
 
         // Breadcrumbs & Parent ID ermitteln
         let breadcrumbs = [{ id: null, name: 'Home' }];
-        let tempId = currentFolderId;
         let parentFolderId = null; 
         
         if (currentFolderId !== null) {
@@ -185,13 +185,22 @@ const DocsView = {
         ev.stopPropagation();
 
         const draggedId = parseInt(ev.dataTransfer.getData("text/plain"));
+        // Verhindern, dass man einen Ordner in sich selbst zieht
         if (draggedId === targetFolderId) return;
 
         const draggedItem = Store.state.docs.find(d => d.id === draggedId);
         
         if (draggedItem) {
-            draggedItem.parentId = targetFolderId;
-            Store.save();
+            // Update via Store
+            const updatedItem = { ...draggedItem, parentId: targetFolderId };
+            // Wir simulieren hier das Update, da Store.save() deprecated ist
+            // In einer echten App würde man Store.update('docs', updatedItem) aufrufen
+            Store.update('docs', updatedItem);
+            
+            // Lokales Update für schnelles Feedback
+            const index = Store.state.docs.indexOf(draggedItem);
+            if(index !== -1) Store.state.docs[index] = updatedItem;
+
             this.render(document.getElementById('content'));
             App.showToast(`"${draggedItem.name}" verschoben`);
         }
@@ -206,16 +215,37 @@ const DocsView = {
 
     createFolder() {
         if(!App.can('manage_docs')) return;
-        const name = prompt("Name des neuen Ordners:");
+        
+        // Modal statt Prompt
+        const html = `
+            <div class="p-6">
+                <h3 class="text-xl font-bold text-white mb-4">Neuer Ordner</h3>
+                <form onsubmit="DocsView.handleCreateFolder(event)">
+                    <label class="block text-sm text-dark-muted mb-2">Ordnername</label>
+                    <input type="text" name="folderName" class="form-input mb-4" placeholder="z.B. Protokolle" required autofocus>
+                    <div class="flex gap-3">
+                        <button type="button" onclick="App.closeModal()" class="flex-1 py-2 rounded-lg border border-dark-border text-dark-muted hover:text-white">Abbrechen</button>
+                        <button type="submit" class="flex-1 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700">Erstellen</button>
+                    </div>
+                </form>
+            </div>
+        `;
+        App.openModal(html);
+    },
+
+    handleCreateFolder(e) {
+        e.preventDefault();
+        const name = new FormData(e.target).get('folderName');
         if (name && name.trim() !== "") {
             const newFolder = {
-                id: Date.now(),
+                id: Date.now(), // Temporäre ID
                 parentId: this.state.currentFolderId,
                 name: name.trim(),
                 type: 'folder',
                 date: new Date().toISOString().split('T')[0]
             };
             Store.add('docs', newFolder);
+            App.closeModal();
             this.render(document.getElementById('content'));
             App.showToast('Ordner erstellt');
         }
@@ -223,15 +253,40 @@ const DocsView = {
 
     renameItem(id, oldName) {
         if(!App.can('manage_docs')) return;
-        const newName = prompt("Neuer Name:", oldName);
-        if (newName && newName.trim() !== "" && newName !== oldName) {
-            const index = Store.state.docs.findIndex(d => d.id === id);
-            if (index !== -1) {
-                Store.state.docs[index].name = newName.trim();
-                Store.save();
-                this.render(document.getElementById('content'));
-                App.showToast('Umbenannt');
-            }
+        
+        // Modal statt Prompt
+        const html = `
+            <div class="p-6">
+                <h3 class="text-xl font-bold text-white mb-4">Umbenennen</h3>
+                <form onsubmit="DocsView.handleRename(event, ${id})">
+                    <label class="block text-sm text-dark-muted mb-2">Neuer Name</label>
+                    <input type="text" name="newName" class="form-input mb-4" value="${oldName}" required autofocus>
+                    <div class="flex gap-3">
+                        <button type="button" onclick="App.closeModal()" class="flex-1 py-2 rounded-lg border border-dark-border text-dark-muted hover:text-white">Abbrechen</button>
+                        <button type="submit" class="flex-1 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700">Speichern</button>
+                    </div>
+                </form>
+            </div>
+        `;
+        App.openModal(html);
+    },
+
+    handleRename(e, id) {
+        e.preventDefault();
+        const newName = new FormData(e.target).get('newName');
+        
+        const item = Store.state.docs.find(d => d.id === id);
+        if (item && newName && newName.trim() !== "" && newName !== item.name) {
+            const updatedItem = { ...item, name: newName.trim() };
+            Store.update('docs', updatedItem);
+            
+            // Lokal
+            const index = Store.state.docs.indexOf(item);
+            if(index !== -1) Store.state.docs[index] = updatedItem;
+
+            App.closeModal();
+            this.render(document.getElementById('content'));
+            App.showToast('Umbenannt');
         }
     },
 
@@ -253,7 +308,8 @@ const DocsView = {
                 }
             }
             Store.remove('docs', id);
-            this.render(document.getElementById('content'));
+            // Kleines Timeout für UI Refresh
+            setTimeout(() => this.render(document.getElementById('content')), 100);
             App.showToast('Gelöscht');
         }
     },
@@ -268,7 +324,7 @@ const DocsView = {
                 </div>
                 
                 <form onsubmit="DocsView.handleAdd(event)" class="space-y-4">
-                     <div>
+                      <div>
                         <label class="block text-sm font-medium text-dark-muted mb-2">Dateiname</label>
                         <input type="text" name="name" placeholder="z.B. Protokoll_JHV_2024.pdf" required class="form-input">
                     </div>
@@ -300,7 +356,7 @@ const DocsView = {
         const formData = new FormData(e.target);
         
         const newDoc = {
-            id: Date.now(),
+            // Keine ID generieren, das macht der Store/Supabase (oder wir lassen Store eine temp ID machen)
             parentId: this.state.currentFolderId,
             name: formData.get('name'),
             type: formData.get('type'),
@@ -313,3 +369,6 @@ const DocsView = {
         this.render(document.getElementById('content'));
     }
 };
+
+// WICHTIG: Global verfügbar machen für die neue App.js
+window.DocsView = DocsView;
