@@ -3,113 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VereinsManager App</title>
+    <title>VereinsManager</title>
     
-    <!-- 1. Externe Bibliotheken -->
-    <!-- Supabase Client (Wichtig für Datenbank) -->
+    <!-- Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Tailwind CSS (Design) -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Schriftart -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- Tailwind Config -->
+    <!-- Config -->
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
-                    fontFamily: { sans: ['Inter', 'sans-serif'] },
                     colors: {
-                        dark: { bg: '#0f172a', card: '#1e293b', hover: '#334155', border: '#334155', text: '#f1f5f9', muted: '#94a3b8' }
+                        dark: { bg: '#0f172a', card: '#1e293b', border: '#334155', text: '#f1f5f9', muted: '#94a3b8' }
                     },
-                    borderRadius: { 'bubble': '2rem' }
+                    borderRadius: { 'bubble': '1.5rem' }
                 }
             }
         }
     </script>
-    
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: var(--bg-color); }
-        ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
-        .fade-in { animation: fadeIn 0.5s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .bubble-card { background: linear-gradient(145deg, var(--card-color), var(--bg-color)); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); transition: all 0.3s; }
-        .bubble-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2); }
-        #toast { visibility: hidden; min-width: 250px; background-color: #3b82f6; color: #fff; text-align: center; border-radius: 12px; padding: 16px; position: fixed; z-index: 100; left: 50%; bottom: 30px; transform: translateX(-50%); transition: opacity 0.3s, bottom 0.3s; opacity: 0; }
-        #toast.show { visibility: visible; opacity: 1; bottom: 50px; }
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f1f5f9; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        #toast { visibility: hidden; min-width: 250px; background-color: #2563eb; color: #fff; text-align: center; border-radius: 8px; padding: 12px; position: fixed; z-index: 100; left: 50%; bottom: 30px; transform: translateX(-50%); opacity: 0; transition: opacity 0.3s; }
+        #toast.show { visibility: visible; opacity: 1; }
     </style>
 </head>
-<body class="bg-dark-bg text-dark-text selection:bg-blue-500 selection:text-white transition-colors duration-300">
+<body>
 
-    <!-- AUTH VIEW (Login) -->
-    <div id="auth-view" class="h-screen flex items-center justify-center p-4 bg-[url('https://images.unsplash.com/photo-1526628953301-3e589a6a8b74?q=80&w=1920')] bg-cover bg-center relative">
-        <div class="absolute inset-0 bg-dark-bg/90 backdrop-blur-sm"></div>
-        <div class="relative z-10 w-full max-w-md bg-dark-card border border-dark-border p-8 rounded-bubble shadow-2xl fade-in">
+    <!-- 1. LOGIN SCREEN -->
+    <div id="auth-view" class="h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-sm bg-dark-card border border-dark-border p-8 rounded-bubble shadow-2xl">
             <div class="text-center mb-6">
-                <div class="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-3xl text-white shadow-lg mx-auto mb-4"><i class="fa-solid fa-users-rectangle"></i></div>
-                <h1 class="text-2xl font-bold text-white">VereinsManager</h1>
-                <p class="text-dark-muted text-sm mt-2">Cloud Edition</p>
+                <i class="fa-solid fa-users-rectangle text-4xl text-blue-500 mb-2"></i>
+                <h1 class="text-xl font-bold">VereinsManager</h1>
             </div>
             
-            <div id="loading-error" class="hidden mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-xl text-red-200 text-xs text-center"></div>
-
-            <div class="mb-6 bg-dark-bg/50 p-4 rounded-xl border border-dark-border">
-                <label class="block text-xs font-bold text-dark-muted uppercase mb-2 ml-1">Verein wählen</label>
-                <select id="club-select" onchange="handleClubChange(this.value)" class="w-full bg-dark-card border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 cursor-pointer">
-                    <option value="demo">TSV Musterstadt (Demo)</option>
-                    <option value="grokage">GroKaGe Malsch 1929 e.V.</option>
-                    <option value="fc_beispiel">1. FC Beispielhausen</option>
+            <div class="mb-4">
+                <label class="text-xs text-dark-muted uppercase font-bold">Verein</label>
+                <select id="club-select" class="w-full bg-dark-bg border border-dark-border rounded-lg p-2 text-white mt-1">
+                    <option value="demo">TSV Musterstadt</option>
+                    <option value="grokage">GroKaGe Malsch</option>
                 </select>
             </div>
 
-            <form id="login-form" class="space-y-4">
-                <div><label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">E-Mail</label><input type="email" name="email" required placeholder="name@verein.de" class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"></div>
-                <div><label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">Passwort</label><input type="password" name="password" required placeholder="••••••••" class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500"></div>
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg mt-2">Anmelden</button>
+            <form onsubmit="App.handleLogin(event)" class="space-y-4">
+                <div>
+                    <label class="text-xs text-dark-muted uppercase font-bold">Email</label>
+                    <input type="email" name="email" required class="w-full bg-dark-bg border border-dark-border rounded-lg p-2 text-white mt-1 focus:border-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="text-xs text-dark-muted uppercase font-bold">Passwort</label>
+                    <input type="password" name="password" required class="w-full bg-dark-bg border border-dark-border rounded-lg p-2 text-white mt-1 focus:border-blue-500 outline-none">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition-colors">Anmelden</button>
             </form>
-            <div class="text-center mt-4"><p class="text-xs text-dark-muted">Admin-Login: <b>admin@gmail.com</b> / <b>admin</b></p></div>
+            <div id="login-error" class="text-red-400 text-xs text-center mt-3 hidden"></div>
         </div>
     </div>
 
-    <!-- APP VIEW (Hauptbereich) -->
-    <div id="app-view" class="h-screen flex flex-col overflow-hidden hidden">
-        <header class="bg-dark-card/50 backdrop-blur-md border-b border-dark-border h-20 flex items-center justify-between px-6 lg:px-10 z-20 shadow-sm sticky top-0 transition-colors duration-300">
-            <button onclick="App.router('dashboard')" class="flex items-center group">
-                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg mr-3 group-hover:scale-105 transition-transform"><i class="fa-solid fa-users-rectangle"></i></div>
-                <div class="text-left"><h1 class="text-xl font-bold text-blue-500 tracking-tight leading-none group-hover:text-blue-400">VereinApp</h1><p id="page-subtitle" class="text-xs text-dark-muted font-medium">Dashboard</p></div>
-            </button>
-            <div class="flex items-center gap-3 sm:gap-6">
-                <button onclick="App.router('workhours')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Arbeitsstunden"><i class="fa-solid fa-briefcase text-xl"></i></button>
-                <button onclick="App.router('messenger')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Messenger"><i class="fa-solid fa-comments text-xl"></i></button>
-                <button onclick="App.toggleNotifications()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Benachrichtigungen"><i class="fa-regular fa-bell text-xl"></i><span id="notif-dot" class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-dark-card animate-pulse hidden"></span></button>
-                <button onclick="App.openSettingsModal()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Einstellungen"><i class="fa-solid fa-gear text-xl"></i></button>
-                <button onclick="App.router('profile')" class="flex items-center gap-3 pl-6 border-l border-dark-border group">
-                    <div class="text-right hidden sm:block"><p id="current-user-name" class="text-sm font-bold text-dark-text group-hover:text-blue-400">Gast</p><p id="current-user-role" class="text-xs text-dark-muted">Mitglied</p></div>
-                    <div class="w-10 h-10 rounded-full bg-slate-700 overflow-hidden border-2 border-transparent group-hover:border-blue-500 transition-colors"><div class="w-full h-full flex items-center justify-center bg-slate-800 text-slate-400"><i class="fa-solid fa-user"></i></div></div>
+    <!-- 2. APP SCREEN -->
+    <div id="app-view" class="h-screen flex flex-col hidden">
+        <!-- Header -->
+        <header class="h-16 border-b border-dark-border flex items-center justify-between px-4 bg-dark-card sticky top-0 z-20">
+            <div class="flex items-center gap-3 cursor-pointer" onclick="App.router('dashboard')">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white"><i class="fa-solid fa-users"></i></div>
+                <span class="font-bold hidden sm:block">VereinsManager</span>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <button onclick="App.router('workhours')" title="Arbeitsstunden" class="text-dark-muted hover:text-white"><i class="fa-solid fa-briefcase"></i></button>
+                <button onclick="App.router('messenger')" title="Messenger" class="text-dark-muted hover:text-white"><i class="fa-solid fa-comments"></i></button>
+                <button onclick="App.toggleNotifications()" class="relative text-dark-muted hover:text-white">
+                    <i class="fa-regular fa-bell"></i>
+                    <span id="notif-dot" class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full hidden"></span>
+                </button>
+                <button onclick="App.router('profile')" class="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center text-white text-xs border border-dark-border">
+                    <i class="fa-solid fa-user"></i>
                 </button>
             </div>
         </header>
-        <div id="content" class="flex-1 overflow-y-auto p-4 lg:p-10 relative max-w-7xl mx-auto w-full transition-colors duration-300"></div>
+
+        <!-- Content -->
+        <div id="content" class="flex-1 overflow-y-auto p-4 md:p-6 max-w-7xl mx-auto w-full"></div>
     </div>
 
-    <!-- Modals & Toasts -->
-    <div id="modal-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 transition-opacity duration-300"><div class="bg-dark-card border border-dark-border rounded-bubble shadow-2xl w-full max-w-md transform transition-all scale-95 opacity-0 text-dark-text" id="modal-content"></div></div>
-    <div id="toast">Nachricht gesendet</div>
+    <!-- 3. OVERLAYS -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-dark-card border border-dark-border rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" id="modal-content"></div>
+    </div>
+    <div id="notification-overlay" class="hidden fixed top-16 right-4 w-80 bg-dark-card border border-dark-border rounded-xl shadow-2xl z-50 overflow-hidden"></div>
+    <div id="toast">Info</div>
 
-    <!-- ========================================== -->
-    <!-- 2. SKRIPTE LADEN (Reihenfolge wichtig!) -->
-    <!-- ========================================== -->
-    
-    <!-- Config & Store -->
+    <!-- 4. SCRIPTS (Reihenfolge ist Pflicht!) -->
     <script src="js/config.js"></script>
     <script src="js/store.js"></script>
     
-    <!-- Views (Ansichten) -->
     <script src="js/views/dashboard.js"></script>
     <script src="js/views/members.js"></script>
     <script src="js/views/groups.js"></script>
@@ -120,208 +115,6 @@
     <script src="js/views/messenger.js"></script>
     <script src="js/views/workhours.js"></script>
 
-    <!-- App Logic -->
     <script src="js/app.js"></script>
-
-    <!-- ========================================== -->
-    <!-- 3. LOGIN & INIT LOGIK (Inline) -->
-    <!-- ========================================== -->
-    <script>
-        // Diese Funktion prüft, ob alles geladen wurde
-        window.addEventListener('load', () => {
-            if (typeof App === 'undefined') {
-                const err = document.getElementById('loading-error');
-                err.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1"></i> <b>Fehler:</b> Die App-Dateien (js/app.js) konnten nicht geladen werden.<br>Bitte prüfen Sie, ob der Ordner "js" existiert.';
-                err.classList.remove('hidden');
-            }
-        });
-
-        // Global Logout Function
-        function logout() {
-            if(confirm("Möchten Sie sich wirklich abmelden?")) {
-                localStorage.removeItem('vm_current_user_id');
-                // Optional: Supabase Logout
-                if (typeof supabase !== 'undefined' && typeof CONFIG !== 'undefined') {
-                    // Quick Instance
-                    const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-                    _sb.auth.signOut();
-                }
-                localStorage.removeItem('vm_supabase_session');
-                location.reload();
-            }
-        }
-        window.logout = logout;
-
-        // Vereins-Wechsel
-        function handleClubChange(clubId) {
-            if (typeof Store !== 'undefined') {
-                Store.switchClub(clubId);
-            }
-        }
-
-        // Login Handler
-        document.getElementById('login-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const btn = e.target.querySelector('button');
-            const originalText = btn.innerText;
-            btn.innerText = "Lade...";
-            btn.disabled = true;
-
-            const fd = new FormData(e.target);
-            const email = fd.get('email');
-            const password = fd.get('password'); 
-
-            try {
-                // Config Check
-                if (typeof CONFIG === 'undefined' || CONFIG.SUPABASE_URL.includes('HIER')) {
-                    alert('Fehler: Supabase Config in js/config.js fehlt!');
-                    btn.innerText = originalText;
-                    btn.disabled = false;
-                    return;
-                }
-
-                // Supabase Client hier direkt nutzen (falls Store noch lädt)
-                const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-
-                // 1. Zuerst prüfen, ob Mitglieder im Store geladen sind
-                let members = [];
-                if (typeof Store !== 'undefined' && Store.state) members = Store.state.members;
-                
-                // Falls Store noch leer, direkt laden
-                if (members.length === 0) {
-                    const { data } = await _sb.from('members').select('*');
-                    if (data) members = data;
-                }
-
-                const user = members.find(m => m.email === email);
-
-                if (user) {
-                    // Passwort prüfen
-                    const storedPassword = user.password || 'start123';
-                    if (password === storedPassword) {
-                        loginSuccess(user);
-                        return;
-                    }
-                }
-
-                // 2. Admin Backdoor (Via Supabase Auth)
-                if (email === 'admin@gmail.com' && password === 'admin') {
-                    // Login via Auth
-                    const { data: authData, error: authError } = await _sb.auth.signInWithPassword({ email, password });
-                    
-                    if (authError) {
-                        // Versuch: Registrieren falls User in Auth noch nicht existiert
-                        const { data: reg, error: regErr } = await _sb.auth.signUp({email, password});
-                        if (!regErr) {
-                            // Admin User in DB anlegen
-                            const adminUser = { 
-                                id: 999, // Fixe ID
-                                firstName: 'Super', lastName: 'Admin', email: email, password: 'admin',
-                                role: 'Admin', status: 'active', groups: ['Vorstand'], joinedDate: new Date().toISOString() 
-                            };
-                            if (typeof Store !== 'undefined') await Store.add('members', adminUser);
-                            
-                            localStorage.setItem('vm_supabase_session', JSON.stringify(reg.session));
-                            loginSuccess(adminUser);
-                            return;
-                        }
-                    } else {
-                        // Login erfolgreich in Auth, aber User nicht in DB gefunden?
-                        // Dann erstellen wir ihn jetzt in der DB
-                        let admin = {
-                            id: 999, firstName: 'Super', lastName: 'Admin', email: email, password: 'admin',
-                            role: 'Admin', status: 'active', groups: ['Vorstand'], joinedDate: new Date().toISOString()
-                        };
-                        
-                        // Prüfen ob er wirklich nicht in DB ist (vielleicht nur im Store noch nicht geladen)
-                        const { data: dbAdmin } = await _sb.from('members').select('*').eq('email', email).single();
-                        if(!dbAdmin) {
-                            if (typeof Store !== 'undefined') await Store.add('members', admin);
-                        } else {
-                            admin = dbAdmin;
-                        }
-
-                        localStorage.setItem('vm_supabase_session', JSON.stringify(authData.session));
-                        loginSuccess(admin);
-                        return;
-                    }
-                }
-
-                alert('Login fehlgeschlagen. Passwort falsch oder Benutzer unbekannt.');
-
-            } catch (err) {
-                console.error(err);
-                alert("Fehler beim Login: " + err.message);
-            } finally {
-                btn.innerText = originalText;
-                btn.disabled = false;
-            }
-        });
-
-        function loginSuccess(user) {
-            localStorage.setItem('vm_current_user_id', user.id);
-            initApp(user);
-        }
-
-        function initApp(user) {
-            document.getElementById('auth-view').classList.add('hidden');
-            document.getElementById('app-view').classList.remove('hidden');
-            
-            // Lade-Spinner anzeigen
-            document.getElementById('content').innerHTML = `
-                <div class="flex flex-col items-center justify-center h-full text-dark-muted">
-                    <i class="fa-solid fa-circle-notch fa-spin text-4xl mb-4 text-blue-500"></i>
-                    <p>App wird geladen...</p>
-                </div>
-            `;
-            
-            if(user) {
-                document.getElementById('current-user-name').textContent = user.firstName;
-                document.getElementById('current-user-role').textContent = user.role;
-            }
-
-            if (typeof App !== 'undefined') {
-                // Wir laden den User im App-State neu
-                if (typeof App.loadCurrentUser === 'function') App.loadCurrentUser();
-                else App.state.currentUser = user; // Fallback
-                
-                // IDs in Views
-                if(typeof MessengerView !== 'undefined') MessengerView.state.myId = parseInt(user.id);
-                if(typeof GroupsView !== 'undefined') GroupsView.state.myId = parseInt(user.id);
-                if(typeof WorkHoursView !== 'undefined') WorkHoursView.state.myId = parseInt(user.id);
-                
-                // Starte Router
-                setTimeout(() => App.init(), 100);
-            } else {
-                console.error("App Objekt nicht gefunden!");
-            }
-        }
-
-        // Auto-Login beim Start
-        window.addEventListener('DOMContentLoaded', () => {
-            const currentUserId = localStorage.getItem('vm_current_user_id');
-            if (currentUserId) {
-                // Warten bis Store bereit
-                const check = setInterval(() => {
-                    if (typeof Store !== 'undefined' && Store.state && Store.state.members.length > 0) {
-                        clearInterval(check);
-                        const user = Store.state.members.find(m => m.id == currentUserId);
-                        if (user) loginSuccess(user);
-                    }
-                }, 100);
-
-                // Timeout Safety
-                setTimeout(() => clearInterval(check), 5000);
-
-                // Init Store sofort starten
-                if(typeof Store !== 'undefined') {
-                    Store.init().then(() => {
-                        const select = document.getElementById('club-select');
-                        if(select) select.value = Store.clubId;
-                    });
-                }
-            }
-        });
-    </script>
 </body>
 </html>
