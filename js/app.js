@@ -1,6 +1,7 @@
 /**
  * =============================================================================
- * APP CORE LOGIC (Safe Mode v2)
+ * APP CORE LOGIC (Safe Mode v2.1)
+ * Enthält Navigation, Auth-Zustand und Berechtigungen
  * =============================================================================
  */
 
@@ -9,6 +10,36 @@ window.App = {
     state: {
         currentUser: null,
         theme: localStorage.getItem('vm_theme') || 'dark'
+    },
+
+    /**
+     * Prüft, ob der aktuelle Benutzer eine bestimmte Aktion ausführen darf
+     * @param {string} action - Die zu prüfende Berechtigung (z.B. 'manage_members')
+     * @returns {boolean}
+     */
+    can: function(action) {
+        if (!this.state.currentUser) return false;
+        
+        const role = (this.state.currentUser.role || 'Mitglied').trim();
+        
+        // Super-Admins / Vorstände dürfen immer alles
+        const adminRoles = [
+            '1. Vorstand', '2. Vorstand', '3. Vorstand', '4. Vorstand', 
+            'Admin', 'Vorstand', 'Präsident', 'Vize-Präsident', 'Super Admin'
+        ];
+        
+        if (adminRoles.includes(role)) return true;
+
+        // Spezifische Berechtigungen für andere Rollen
+        const permissions = {
+            'manage_workhours': ['Kassenwart', 'Kassenprüfer', 'Trainer'],
+            'manage_news': ['Protokollant', 'Schriftführer'],
+            'manage_docs': ['Schriftführer'],
+            'manage_members': [], // Nur Admins
+            'manage_groups': ['Abteilungsleiter']
+        };
+
+        return permissions[action] ? permissions[action].includes(role) : false;
     },
 
     // Init Funktion
@@ -29,11 +60,13 @@ window.App = {
                     init: async () => { console.log("Fallback Store Init"); },
                     fetchTable: async () => {},
                     add: async () => {},
+                    update: async () => {},
+                    remove: async () => {},
                     get: () => []
                 };
             }
 
-            // 4. Store starten (in eigenem Try-Catch, damit App nicht stirbt)
+            // 4. Store starten
             try {
                 await Store.init();
                 // Listener setzen
@@ -41,7 +74,7 @@ window.App = {
                     if (this.state.currentUser) this.router(Store.state.currentView || 'dashboard');
                 };
             } catch (storeErr) {
-                console.error("Store Init fehlgeschlagen (nicht kritisch für Login):", storeErr);
+                console.error("Store Init fehlgeschlagen:", storeErr);
             }
 
             // 5. User laden
@@ -60,7 +93,6 @@ window.App = {
 
         } catch (e) {
             console.error("Kritischer Fehler im App Init:", e);
-            // Auch im Fehlerfall versuchen, den Login anzuzeigen
             document.getElementById('auth-view').classList.remove('hidden');
         }
     },
@@ -70,23 +102,21 @@ window.App = {
         if(e) e.preventDefault();
         const btn = e.target.querySelector('button');
         const originalText = btn ? btn.innerText : 'Login';
-        if(btn) btn.innerText = "Lade...";
+        if(btn) { btn.innerText = "Lade..."; btn.disabled = true; }
         
         const fd = new FormData(e.target);
         const email = fd.get('email');
         const password = fd.get('password');
 
         try {
-            // Supabase Check
             if(typeof supabase === 'undefined' || typeof CONFIG === 'undefined') {
-                alert("Fehler: Supabase Verbindung fehlt. (Prüfe Internet & Config)");
+                alert("Fehler: Supabase Verbindung fehlt.");
                 return;
             }
 
             const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
             const { data, error } = await _sb.auth.signInWithPassword({ email, password });
 
-            // Backdoor für Admin (falls Auth fehlschlägt oder DB leer)
             if (error) {
                 if(email === 'admin@gmail.com' && password === 'admin') {
                     console.log("Backdoor Admin Login");
@@ -96,18 +126,13 @@ window.App = {
                 throw error;
             }
 
-            // Erfolg
             localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
             
-            // User Daten abgleichen
-            let user = null;
-            if (typeof Store !== 'undefined' && Store.state.members) {
-                // Lade Members Tabelle falls leer
-                if(Store.state.members.length === 0) await Store.fetchTable('members');
-                user = Store.state.members.find(m => m.email === email);
+            if (typeof Store !== 'undefined' && Store.fetchTable) {
+                await Store.fetchTable('members');
             }
             
-            // Fallback User Objekt falls DB leer
+            let user = Store.state.members.find(m => m.email === email);
             if (!user) {
                 user = { id: data.user.id, email: email, firstName: 'User', role: 'Mitglied' };
             }
@@ -127,13 +152,11 @@ window.App = {
         this.state.currentUser = user;
         localStorage.setItem('vm_current_user_id', user.id);
         
-        // UI Umschalten
         const authView = document.getElementById('auth-view');
         const appView = document.getElementById('app-view');
         if(authView) authView.classList.add('hidden');
         if(appView) appView.classList.remove('hidden');
         
-        // Header Infos update
         const nameEl = document.getElementById('current-user-name');
         const roleEl = document.getElementById('current-user-role');
         if(nameEl) nameEl.textContent = user.firstName || 'User';
@@ -156,10 +179,8 @@ window.App = {
                 const session = JSON.parse(sessionStr);
                 if(!session || !session.user) return;
 
-                // Minimal User wiederherstellen
                 this.state.currentUser = { email: session.user.email, role: 'Mitglied', firstName: 'User', id: session.user.id };
                 
-                // Versuche echten User aus Store zu holen für mehr Details
                 if(typeof Store !== 'undefined' && Store.state.members) {
                      const realUser = Store.state.members.find(m => m.email === session.user.email);
                      if(realUser) {
@@ -181,7 +202,6 @@ window.App = {
 
         container.innerHTML = '';
         
-        // Versuche View Objekt zu finden (Unterstützt const und window Definitionen)
         let viewObj = null;
         try {
             switch(viewName) {
@@ -197,7 +217,6 @@ window.App = {
             }
         } catch(e) { console.warn("Router Switch Error", e); }
 
-        // Fallback: Suche global via window
         if (!viewObj) {
              const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
              if (typeof window[viewObjName] !== 'undefined') {
@@ -213,21 +232,14 @@ window.App = {
                 container.innerHTML = `<div class="text-red-400">Fehler in View ${viewName}: ${err.message}</div>`;
             }
         } else {
-            // Fallback
             if(viewName === 'dashboard') {
-                container.innerHTML = `
-                    <div class="p-6 bg-slate-800 rounded-xl text-white border border-slate-700">
-                        <h2 class="text-xl font-bold mb-2">Dashboard</h2>
-                        <p>Willkommen ${this.state.currentUser?.firstName || 'Gast'}!</p>
-                        <p class="text-sm mt-4 text-slate-400">Hinweis: Die Datei 'js/views/dashboard.js' scheint zu fehlen oder ist fehlerhaft.</p>
-                    </div>`;
+                container.innerHTML = `<div class="p-6 bg-slate-800 rounded-xl text-white border border-slate-700"><h2>Dashboard</h2><p>Willkommen ${this.state.currentUser?.firstName || 'Gast'}!</p></div>`;
             } else {
-                container.innerHTML = `<div class="text-slate-400 p-4">Lade Ansicht "${viewName}"...<br><small>(Falls nichts passiert: Datei js/views/${viewName}.js prüfen)</small></div>`;
+                container.innerHTML = `<div class="text-slate-400 p-4">Ansicht "${viewName}" wird geladen...</div>`;
             }
         }
     },
     
-    // UI Helpers
     showToast: function(msg) {
         const t = document.getElementById('toast');
         if(t) { t.textContent = msg; t.className = "show"; setTimeout(() => t.className = "", 3000); }
@@ -236,7 +248,7 @@ window.App = {
     openSettingsModal: function() { this.showToast('Einstellungen...'); }
 };
 
-// Start - sicherstellen, dass DOM geladen ist
+// Start
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => App.init());
 } else {
