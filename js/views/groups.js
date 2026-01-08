@@ -334,32 +334,40 @@ const GroupsView = {
         });
     },
 
-    // --- FIX: Async & Await für sicheres Speichern ---
+    // --- FIX: Async & Await für sicheres Speichern & Error Handling ---
     async addMemberDirect(groupId, memberId) {
         if(!App.can('manage_groups')) return;
         const group = Store.state.groups.find(g => g.id === groupId);
         const member = Store.state.members.find(m => m.id === memberId);
 
         if (member && group) {
-            // Arrays initialisieren falls nötig
-            if (!Array.isArray(member.groups)) {
-                member.groups = [];
-                if (member.group && member.group !== 'Keine') member.groups.push(member.group);
+            try {
+                // Arrays initialisieren falls nötig
+                if (!Array.isArray(member.groups)) {
+                    member.groups = [];
+                    if (member.group && member.group !== 'Keine') member.groups.push(member.group);
+                }
+                // Doppelte Einträge verhindern
+                if (!member.groups.includes(group.name)) {
+                    member.groups.push(group.name);
+                }
+                
+                // Aufräumen alter Felder
+                member.group = null; // Falls Spalte existiert, leeren
+                
+                // WICHTIG: Await nutzen, damit die Aktion abgeschlossen wird
+                await Store.update('members', member);
+                
+                // Sicherheitshalber neu laden
+                if(Store.fetchTable) await Store.fetchTable('members');
+
+                App.closeModal();
+                App.showToast(`${member.firstName} hinzugefügt`);
+                this.render(document.getElementById('content'));
+            } catch (e) {
+                console.error(e);
+                App.showToast("Fehler beim Speichern: " + e.message, "error");
             }
-            // Doppelte Einträge verhindern
-            if (!member.groups.includes(group.name)) {
-                member.groups.push(group.name);
-            }
-            
-            // Aufräumen alter Felder
-            member.group = null; // Falls Spalte existiert, leeren
-            
-            // WICHTIG: Await nutzen, damit die Aktion abgeschlossen wird
-            await Store.update('members', member);
-            
-            App.closeModal();
-            App.showToast(`${member.firstName} hinzugefügt`);
-            this.render(document.getElementById('content'));
         }
     },
 
@@ -371,16 +379,22 @@ const GroupsView = {
         if(confirm(`Entfernen aus '${group.name}'?`)) {
             const member = Store.state.members.find(m => m.id === memberId);
             if(member) {
-                if (Array.isArray(member.groups)) {
-                    member.groups = member.groups.filter(g => g !== group.name);
-                } else if (member.group === group.name) {
-                    member.group = 'Keine';
+                try {
+                    if (Array.isArray(member.groups)) {
+                        member.groups = member.groups.filter(g => g !== group.name);
+                    } else if (member.group === group.name) {
+                        member.group = 'Keine';
+                    }
+                    
+                    await Store.update('members', member);
+                    if(Store.fetchTable) await Store.fetchTable('members');
+                    
+                    this.render(document.getElementById('content'));
+                    App.showToast("Entfernt");
+                } catch (e) {
+                    console.error(e);
+                    App.showToast("Fehler beim Entfernen: " + e.message, "error");
                 }
-                
-                await Store.update('members', member);
-                
-                this.render(document.getElementById('content'));
-                App.showToast("Entfernt");
             }
         }
     },
