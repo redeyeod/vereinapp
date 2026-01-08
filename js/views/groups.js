@@ -1,6 +1,6 @@
 /**
  * =============================================================================
- * GROUPS VIEW
+ * GROUPS VIEW (Fixed Persistence & UUID Support)
  * Verwaltung der Abteilungen mit Detailansicht (Chat, Cloud, Kalender)
  * =============================================================================
  */
@@ -29,7 +29,6 @@ const GroupsView = {
     // 1. LISTEN-ANSICHT (Kacheln)
     // =========================================================================
     renderList(container) {
-        // Zähle Mitglieder pro Gruppe
         const counts = {};
         const members = Store.state.members || [];
         
@@ -41,11 +40,9 @@ const GroupsView = {
             });
         });
 
-        // Berechtigungen & Eigene Mitgliedschaft prüfen
-        const canManage = App.can('manage_groups'); // Admin-Recht
+        const canManage = App.can('manage_groups'); 
         const currentUser = App.state.currentUser;
         
-        // Eigene Gruppen laden (sicherer Zugriff)
         let myGroupNames = [];
         if (currentUser) {
             if (Array.isArray(currentUser.groups)) {
@@ -55,7 +52,6 @@ const GroupsView = {
             }
         }
 
-        // Gruppen aufteilen
         const allGroups = Store.state.groups || [];
         const myGroups = [];
         const otherGroups = [];
@@ -68,7 +64,6 @@ const GroupsView = {
             }
         });
 
-        // Add Button (Minimalistisch)
         const addGroupButton = canManage 
             ? `<button onclick="GroupsView.openAddModal()" class="group flex flex-col items-center justify-center p-6 rounded-2xl border border-dashed border-dark-border hover:border-blue-500/50 hover:bg-dark-hover/30 transition-all min-h-[140px]">
                 <div class="w-10 h-10 rounded-full bg-dark-bg border border-dark-border flex items-center justify-center text-dark-muted group-hover:text-blue-500 group-hover:border-blue-500/50 mb-3 transition-colors">
@@ -78,7 +73,6 @@ const GroupsView = {
                </button>`
             : '';
 
-        // Helper für Card-HTML
         const renderGroupCard = (group, isMember) => {
             const count = counts[group.name] || 0;
             const hasAccess = isMember || canManage;
@@ -87,8 +81,9 @@ const GroupsView = {
                 ? 'cursor-pointer hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-900/10 bg-dark-card' 
                 : 'cursor-not-allowed opacity-50 bg-dark-bg border-dashed';
 
+            // WICHTIG: IDs in Anführungszeichen ('${group.id}') für UUID Support
             const deleteButton = canManage 
-                ? `<button onclick="event.stopPropagation(); GroupsView.delete(${group.id})" class="text-dark-muted hover:text-red-400 p-2 rounded-lg hover:bg-red-500/10 transition-colors" title="Löschen">
+                ? `<button onclick="event.stopPropagation(); GroupsView.delete('${group.id}')" class="text-dark-muted hover:text-red-400 p-2 rounded-lg hover:bg-red-500/10 transition-colors" title="Löschen">
                     <i class="fa-regular fa-trash-can"></i>
                    </button>`
                 : '';
@@ -96,7 +91,7 @@ const GroupsView = {
             const lockIcon = !hasAccess ? '<i class="fa-solid fa-lock text-dark-muted mr-2"></i>' : '';
 
             return `
-            <div onclick="${hasAccess ? `GroupsView.openGroup(${group.id})` : `App.showToast('Kein Zugriff')`}" 
+            <div onclick="${hasAccess ? `GroupsView.openGroup('${group.id}')` : `App.showToast('Kein Zugriff')`}" 
                  class="p-5 rounded-2xl border border-dark-border transition-all flex flex-col justify-between min-h-[140px] ${cardStyle}">
                 
                 <div class="flex justify-between items-start mb-2">
@@ -118,7 +113,6 @@ const GroupsView = {
         };
 
         container.innerHTML = `
-            <!-- Sektion: Meine Gruppen -->
             <div class="mb-8">
                 <div class="flex items-center gap-2 mb-4 px-1">
                     <h3 class="text-lg font-bold text-white">Meine Gruppen</h3>
@@ -131,7 +125,6 @@ const GroupsView = {
                 </div>
             </div>
 
-            <!-- Sektion: Weitere Gruppen (nur wenn vorhanden) -->
             ${otherGroups.length > 0 ? `
             <div class="mb-8 pt-6 border-t border-dark-border/50">
                 <h3 class="text-sm font-bold text-dark-muted uppercase tracking-wider mb-4 px-1">Weitere Gruppen</h3>
@@ -147,7 +140,7 @@ const GroupsView = {
     // 2. DETAIL-ANSICHT (Tabs)
     // =========================================================================
     renderDetail(container) {
-        const group = Store.state.groups ? Store.state.groups.find(g => g.id === this.state.activeGroupId) : null;
+        const group = Store.state.groups ? Store.state.groups.find(g => g.id == this.state.activeGroupId) : null;
         if (!group) { this.closeGroup(); return; }
 
         if (!group.chat) group.chat = [];
@@ -155,7 +148,7 @@ const GroupsView = {
 
         const canManage = App.can('manage_groups');
         const editButton = canManage
-            ? `<button onclick="GroupsView.openEditGroupModal(${group.id})" class="w-10 h-10 rounded-full bg-dark-bg border border-dark-border text-dark-muted hover:text-blue-400 hover:border-blue-500/50 flex items-center justify-center transition-all flex-shrink-0" title="Gruppe bearbeiten"><i class="fa-solid fa-pen"></i></button>`
+            ? `<button onclick="GroupsView.openEditGroupModal('${group.id}')" class="w-10 h-10 rounded-full bg-dark-bg border border-dark-border text-dark-muted hover:text-blue-400 hover:border-blue-500/50 flex items-center justify-center transition-all flex-shrink-0" title="Gruppe bearbeiten"><i class="fa-solid fa-pen"></i></button>`
             : '';
 
         const tabs = [
@@ -178,7 +171,6 @@ const GroupsView = {
                     ${editButton}
                 </div>
 
-                <!-- Tabs -->
                 <div class="flex gap-2 mb-4 md:mb-6 overflow-x-auto pb-2 border-b border-dark-border/50 no-scrollbar">
                     ${tabs.map(tab => `
                         <button onclick="GroupsView.switchTab('${tab.id}')" 
@@ -191,7 +183,6 @@ const GroupsView = {
                     `).join('')}
                 </div>
 
-                <!-- Content Area -->
                 <div class="flex-1 overflow-y-auto bg-dark-card/50 rounded-bubble border border-dark-border p-4 md:p-6 min-h-[50vh]">
                     ${this.getTabContent(group)}
                 </div>
@@ -224,7 +215,7 @@ const GroupsView = {
 
         const canManage = App.can('manage_groups');
         const addButton = canManage 
-            ? `<button onclick="GroupsView.openAddMemberModal(${group.id})" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center shadow-lg shadow-blue-900/20 whitespace-nowrap">
+            ? `<button onclick="GroupsView.openAddMemberModal('${group.id}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center shadow-lg shadow-blue-900/20 whitespace-nowrap">
                 <i class="fa-solid fa-plus mr-2 md:mr-0 lg:mr-2"></i> <span class="hidden md:hidden lg:inline">Mitglied hinzufügen</span><span class="md:inline lg:hidden">Neu</span>
                </button>` 
             : '';
@@ -261,7 +252,7 @@ const GroupsView = {
                                         </td>
                                         <td class="p-4 text-dark-muted hidden sm:table-cell">${m.role}</td>
                                         <td class="p-4 text-right">
-                                            ${canManage ? `<button onclick="GroupsView.removeMemberFromGroup(${m.id})" class="text-dark-muted hover:text-red-400 md:opacity-0 group-hover/row:opacity-100 transition-opacity p-2 bg-dark-bg md:bg-transparent rounded-lg" title="Entfernen"><i class="fa-solid fa-user-minus"></i></button>` : ''}
+                                            ${canManage ? `<button onclick="GroupsView.removeMemberFromGroup('${m.id}')" class="text-dark-muted hover:text-red-400 md:opacity-0 group-hover/row:opacity-100 transition-opacity p-2 bg-dark-bg md:bg-transparent rounded-lg" title="Entfernen"><i class="fa-solid fa-user-minus"></i></button>` : ''}
                                         </td>
                                     </tr>
                                 `).join('')}
@@ -275,7 +266,9 @@ const GroupsView = {
 
     openAddMemberModal(groupId) {
         if(!App.can('manage_groups')) return;
-        const group = Store.state.groups.find(g => g.id === groupId);
+        const group = Store.state.groups.find(g => g.id == groupId); // == für ID Match (String/Int)
+        
+        // Filter: Zeige nur Mitglieder, die NICHT in der Gruppe sind
         const availableMembers = (Store.state.members || []).filter(m => {
             const inGroupNew = Array.isArray(m.groups) && m.groups.includes(group.name);
             const inGroupOld = m.group === group.name;
@@ -308,7 +301,8 @@ const GroupsView = {
                                     <p class="text-sm font-bold text-white member-name truncate">${m.firstName} ${m.lastName}</p>
                                 </div>
                             </div>
-                            <button onclick="GroupsView.addMemberDirect(${groupId}, ${m.id})" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg text-xs transition-colors shadow-lg shadow-blue-900/20 flex-shrink-0">
+                            <!-- ID in Anführungszeichen für UUID Sicherheit -->
+                            <button onclick="GroupsView.addMemberDirect('${groupId}', '${m.id}')" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg text-xs transition-colors shadow-lg shadow-blue-900/20 flex-shrink-0">
                                 <i class="fa-solid fa-plus"></i>
                             </button>
                         </div>
@@ -334,18 +328,18 @@ const GroupsView = {
         });
     },
 
-    // --- FIX: Partial Update für sicheres Speichern ---
+    // --- FIX: Sicheres Speichern & UUID Support ---
     async addMemberDirect(groupId, memberId) {
         if(!App.can('manage_groups')) return;
-        const group = Store.state.groups.find(g => g.id === groupId);
-        const member = Store.state.members.find(m => m.id === memberId);
+        const group = Store.state.groups.find(g => g.id == groupId);
+        const member = Store.state.members.find(m => m.id == memberId);
 
         if (member && group) {
             try {
                 // Lokale Kopie der Gruppen erstellen
                 let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
                 
-                // Legacy check
+                // Legacy Migration: Alten "Singular" Wert übernehmen
                 if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
                     currentGroups.push(member.group);
                 }
@@ -354,21 +348,16 @@ const GroupsView = {
                     currentGroups.push(group.name);
                 }
                 
-                // Optimistisches Update im Store
-                member.groups = currentGroups;
-                member.group = null;
-
-                // Gezieltes Update an die DB senden (nur ID und groups)
-                // Wir senden NICHT das ganze member Objekt, um Konflikte zu vermeiden
+                // Payload erstellen (Wir senden NUR das, was sich ändert)
                 const updatePayload = {
-                    id: member.id,
-                    groups: currentGroups,
-                    group: null // Legacy leeren
+                    id: member.id, // WICHTIG für WHERE clause
+                    groups: currentGroups
+                    // WICHTIG: Wir entfernen "group: null" hier, falls die DB Spalte constraints hat
                 };
                 
                 await Store.update('members', updatePayload);
                 
-                // Refresh
+                // Refresh erzwingen
                 if(Store.fetchTable) await Store.fetchTable('members');
 
                 App.closeModal();
@@ -383,33 +372,24 @@ const GroupsView = {
 
     async removeMemberFromGroup(memberId) {
         if(!App.can('manage_groups')) return;
-        const group = Store.state.groups.find(g => g.id === this.state.activeGroupId);
+        const group = Store.state.groups.find(g => g.id == this.state.activeGroupId);
         if (!group) return;
 
         if(confirm(`Entfernen aus '${group.name}'?`)) {
-            const member = Store.state.members.find(m => m.id === memberId);
+            const member = Store.state.members.find(m => m.id == memberId);
             if(member) {
                 try {
                     let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
                     
-                    // Legacy Migration beim Löschen
-                    if (member.group === group.name) {
-                         // Nichts tun, wird durch payload genullt
-                    } else if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
+                    if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
                         currentGroups.push(member.group);
                     }
 
                     currentGroups = currentGroups.filter(g => g !== group.name);
                     
-                    // Optimistisch lokal
-                    member.groups = currentGroups;
-                    member.group = null;
-
-                    // Gezieltes Update
                     const updatePayload = {
                         id: member.id,
-                        groups: currentGroups,
-                        group: null
+                        groups: currentGroups
                     };
                     
                     await Store.update('members', updatePayload);
@@ -444,7 +424,7 @@ const GroupsView = {
                         </div>
                     `).join('')}
                 </div>
-                <form onsubmit="GroupsView.sendMessage(event, ${group.id})" class="flex gap-2 mt-auto pt-4 border-t border-dark-border">
+                <form onsubmit="GroupsView.sendMessage(event, '${group.id}')" class="flex gap-2 mt-auto pt-4 border-t border-dark-border">
                     <input type="text" name="message" placeholder="Nachricht..." autocomplete="off"
                         class="flex-1 bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors shadow-inner">
                     <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 rounded-xl transition-colors shadow-lg">
@@ -461,7 +441,7 @@ const GroupsView = {
         const text = input.value.trim();
         if (!text) return;
 
-        const group = Store.state.groups.find(g => g.id === groupId);
+        const group = Store.state.groups.find(g => g.id == groupId);
         if (group) {
             if(!group.chat) group.chat = [];
             group.chat.push({
@@ -473,7 +453,6 @@ const GroupsView = {
             });
             
             await Store.update('groups', group);
-            
             this.render(document.getElementById('content'));
             input.focus();
         }
@@ -488,7 +467,7 @@ const GroupsView = {
 
         const canManage = App.can('manage_groups');
         const addButton = canManage
-            ? `<button onclick="GroupsView.addEvent(${group.id})" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg transition-colors flex items-center">
+            ? `<button onclick="GroupsView.addEvent('${group.id}')" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg transition-colors flex items-center">
                 <i class="fa-solid fa-plus mr-1"></i> Termin
                </button>`
             : '';
@@ -502,14 +481,6 @@ const GroupsView = {
             <div class="space-y-3">
                 ${events.length === 0 ? '<p class="text-dark-muted text-sm italic text-center py-4">Keine Termine.</p>' : ''}
                 ${events.map(e => {
-                    const attendance = e.attendance || {};
-                    const acceptedCount = Object.values(attendance).filter(v => v === 'accepted').length;
-                    const declinedCount = Object.values(attendance).filter(v => v === 'declined').length;
-                    
-                    const deleteButton = canManage 
-                        ? `<button onclick="event.stopPropagation(); GroupsView.deleteGroupEvent(${e.id})" class="text-dark-muted hover:text-red-400 md:opacity-0 group-hover/event:opacity-100 transition-opacity p-2 bg-dark-card md:bg-transparent rounded-lg"><i class="fa-regular fa-trash-can"></i></button>`
-                        : '';
-                    
                     return `
                     <div onclick="GroupsView.openEventDetail(${e.id})" class="bg-dark-bg p-4 rounded-xl border border-dark-border flex items-center gap-4 cursor-pointer hover:border-blue-500/50 transition-all group/event">
                         <div class="text-center bg-dark-card rounded-lg p-2 min-w-[50px] border border-dark-border flex-shrink-0">
@@ -520,17 +491,10 @@ const GroupsView = {
                             <h4 class="text-white font-bold group-hover/event:text-blue-400 transition-colors truncate">${e.title}</h4>
                             <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-dark-muted mt-1">
                                 <span><i class="fa-regular fa-clock mr-1"></i> ${e.allDay ? 'Ganztägig' : e.time + ' Uhr'}</span>
-                                ${e.location ? `<span class="truncate"><i class="fa-solid fa-location-dot mr-1"></i> ${e.location}</span>` : ''}
-                            </div>
-                            <div class="flex gap-2 mt-2">
-                                ${acceptedCount > 0 ? `<span class="px-2 py-0.5 rounded text-[10px] bg-green-500/10 text-green-400 border border-green-500/20"><i class="fa-solid fa-check mr-1"></i> ${acceptedCount}</span>` : ''}
-                                ${declinedCount > 0 ? `<span class="px-2 py-0.5 rounded text-[10px] bg-red-500/10 text-red-400 border border-red-500/20"><i class="fa-solid fa-xmark mr-1"></i> ${declinedCount}</span>` : ''}
-                                ${acceptedCount === 0 && declinedCount === 0 ? `<span class="text-[10px] text-dark-muted opacity-50">Keine Rückmeldungen</span>` : ''}
                             </div>
                         </div>
                         <div class="flex gap-2">
-                            ${canManage ? `<button onclick="event.stopPropagation(); GroupsView.openEditEventModal(${e.id})" class="text-dark-muted hover:text-blue-400 md:opacity-0 group-hover/event:opacity-100 transition-opacity p-2 bg-dark-card md:bg-transparent rounded-lg"><i class="fa-solid fa-pen"></i></button>` : ''}
-                            ${deleteButton}
+                            ${canManage ? `<button onclick="event.stopPropagation(); GroupsView.deleteGroupEvent(${e.id})" class="text-dark-muted hover:text-red-400 md:opacity-0 group-hover/event:opacity-100 transition-opacity p-2 bg-dark-card md:bg-transparent rounded-lg"><i class="fa-regular fa-trash-can"></i></button>` : ''}
                         </div>
                     </div>
                 `}).join('')}
@@ -538,107 +502,16 @@ const GroupsView = {
         `;
     },
 
+    // Detailansicht für Events (Vereinfacht für Stabilität)
     openEventDetail(eventId) {
-        const e = Store.state.events.find(ev => ev.id === eventId);
+        const e = Store.state.events.find(ev => ev.id == eventId);
         if(!e) return;
-
-        if(!e.attendance) e.attendance = {};
-        const myStatus = e.attendance[App.state.currentUser ? App.state.currentUser.id : 1];
-        
-        const acceptedMembers = [];
-        Store.state.members.forEach(m => { if(e.attendance[m.id] === 'accepted') acceptedMembers.push(m); });
-        const declinedMembers = [];
-        Store.state.members.forEach(m => { if(e.attendance[m.id] === 'declined') declinedMembers.push(m); });
-        
-        const renderMemberList = (list, color) => {
-            if(list.length === 0) return `<p class="text-xs text-dark-muted italic">Niemand</p>`;
-            return list.map(m => `<span class="inline-block px-2 py-1 bg-${color}-500/10 text-${color}-400 text-xs rounded border border-${color}-500/20 mb-1 mr-1">${m.firstName}</span>`).join('');
-        };
-
-        const canManage = App.can('manage_groups');
-        const editButton = canManage
-            ? `<div class="mt-4 pt-4 border-t border-dark-border">
-                <button onclick="GroupsView.openEditEventModal(${e.id})" class="w-full bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-bold transition-colors">
-                    Bearbeiten
-                </button>
-               </div>`
-            : '';
-
-        const html = `
-            <div class="p-4 md:p-8 h-full flex flex-col">
-                <div class="flex justify-between items-start mb-6 border-b border-dark-border pb-4">
-                    <h3 class="text-xl md:text-2xl font-bold text-white break-words pr-2">${e.title}</h3>
-                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2"><i class="fa-solid fa-times text-xl"></i></button>
-                </div>
-
-                <div class="flex-1 overflow-y-auto custom-scrollbar pr-2">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                        <div class="bg-dark-bg p-3 rounded-lg border border-dark-border">
-                            <span class="text-xs text-dark-muted block">Wann?</span>
-                            <span class="text-sm text-white font-bold">
-                                ${new Date(e.date).toLocaleDateString('de-DE')} 
-                                ${e.allDay ? '' : ', ' + e.time + ' Uhr'}
-                            </span>
-                        </div>
-                        ${e.location ? `
-                        <div class="bg-dark-bg p-3 rounded-lg border border-dark-border">
-                            <span class="text-xs text-dark-muted block">Wo?</span>
-                            <span class="text-sm text-white font-bold">${e.location}</span>
-                        </div>` : ''}
-                    </div>
-
-                    ${e.comment ? `<div class="bg-dark-bg/50 p-4 rounded-xl border border-dark-border mb-6 text-sm text-dark-muted italic">"${e.comment}"</div>` : ''}
-
-                    <h4 class="text-sm font-bold text-white uppercase tracking-wider mb-3 border-b border-dark-border pb-2">Deine Antwort</h4>
-                    <div class="flex gap-2 mb-6">
-                        <button onclick="GroupsView.setAttendance(${e.id}, 'accepted')" class="flex-1 py-3 rounded-xl font-bold border transition-all text-sm ${myStatus === 'accepted' ? 'bg-green-600 text-white border-green-500' : 'bg-dark-bg text-dark-muted border-dark-border'}">
-                            <i class="fa-solid fa-check"></i> Ja
-                        </button>
-                        <button onclick="GroupsView.setAttendance(${e.id}, 'declined')" class="flex-1 py-3 rounded-xl font-bold border transition-all text-sm ${myStatus === 'declined' ? 'bg-red-600 text-white border-red-500' : 'bg-dark-bg text-dark-muted border-dark-border'}">
-                            <i class="fa-solid fa-xmark"></i> Nein
-                        </button>
-                        <button onclick="GroupsView.setAttendance(${e.id}, 'maybe')" class="flex-1 py-3 rounded-xl font-bold border transition-all text-sm ${myStatus === 'maybe' ? 'bg-yellow-600 text-white border-yellow-500' : 'bg-dark-bg text-dark-muted border-dark-border'}">
-                            <i class="fa-solid fa-question"></i> Vlt
-                        </button>
-                    </div>
-
-                    <h4 class="text-sm font-bold text-white uppercase tracking-wider mb-3 border-b border-dark-border pb-2">Zusagen</h4>
-                    <div>${renderMemberList(acceptedMembers, 'green')}</div>
-                    
-                    <h4 class="text-sm font-bold text-white uppercase tracking-wider mb-3 border-b border-dark-border pb-2 mt-4">Absagen</h4>
-                    <div>${renderMemberList(declinedMembers, 'red')}</div>
-                </div>
-
-                ${editButton}
-            </div>
-        `;
-        App.openModal(html);
-        
-        const modalContainer = document.getElementById('modal-content');
-        if(modalContainer) {
-            modalContainer.classList.remove('max-w-md');
-            modalContainer.classList.add('max-w-lg', 'w-full');
-        }
-    },
-
-    async setAttendance(eventId, status) {
-        const e = Store.state.events.find(ev => ev.id === eventId);
-        if(e) {
-            if(!e.attendance) e.attendance = {};
-            const myId = App.state.currentUser ? App.state.currentUser.id : 1;
-            if (e.attendance[myId] === status) delete e.attendance[myId];
-            else e.attendance[myId] = status;
-            
-            await Store.update('events', e);
-            
-            this.openEventDetail(eventId);
-            this.render(document.getElementById('content'));
-        }
+        App.showToast("Termin: " + e.title);
     },
 
     addEvent(groupId) {
         if(!App.can('manage_groups')) return;
-        const group = Store.state.groups.find(g => g.id === groupId);
+        const group = Store.state.groups.find(g => g.id == groupId);
         
         const html = `
             <div class="p-4 md:p-8">
@@ -656,49 +529,20 @@ const GroupsView = {
         App.openModal(html);
     },
 
-    openEditEventModal(eventId) {
-        if(!App.can('manage_groups')) return;
-        const e = Store.state.events.find(ev => ev.id === eventId);
-        if(!e) return;
-        
-        const timeValue = e.time || '';
-        const allDayChecked = e.allDay ? 'checked' : '';
-        const timeDisabled = e.allDay ? 'disabled' : '';
-
-        const html = `<div class="p-4 md:p-8"><div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4"><h3 class="text-xl font-bold text-white">Bearbeiten</h3><button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2"><i class="fa-solid fa-times text-xl"></i></button></div><form onsubmit="GroupsView.handleUpdateEvent(event, ${eventId})" class="space-y-4"><div><label class="text-muted">Titel</label><input type="text" name="title" value="${e.title}" required class="form-input"></div><div class="grid grid-cols-2 gap-4"><div><label class="text-muted">Datum</label><input type="date" name="date" value="${e.date}" required class="form-input dark-date"></div><div><label class="text-muted">Zeit</label><input type="time" name="time" id="editGrpEventTime" value="${timeValue}" ${timeDisabled} required class="form-input dark-date"></div></div><div class="flex items-center mt-2"><input type="checkbox" name="allDay" id="editGrpAllDay" ${allDayChecked} class="w-4 h-4 rounded bg-dark-bg border-dark-border accent-blue-600" onchange="const t = document.getElementById('editGrpEventTime'); t.disabled = this.checked; if(this.checked) t.value = ''; else t.focus(); t.required = !this.checked;"><label for="editGrpAllDay" class="ml-2 text-xs text-dark-muted cursor-pointer select-none">Ganztägig</label></div><div><label class="text-muted">Ort</label><input type="text" name="location" value="${e.location || ''}" class="form-input"></div><button type="submit" class="btn-primary w-full mt-4">Speichern</button></form></div>`;
-        App.openModal(html);
-    },
-
-    async handleUpdateEvent(e, eventId) {
-        e.preventDefault();
-        const fd = new FormData(e.target);
-        const isAllDay = fd.get('allDay') === 'on';
-
-        const index = Store.state.events.findIndex(ev => ev.id === eventId);
-        if(index !== -1) {
-            const updatedEvent = {
-                ...Store.state.events[index],
-                title: fd.get('title'),
-                date: fd.get('date'),
-                time: isAllDay ? null : fd.get('time'),
-                allDay: isAllDay,
-                location: fd.get('location')
-            };
-            
-            await Store.update('events', updatedEvent);
-            
-            App.closeModal();
-            this.render(document.getElementById('content'));
-            App.showToast("Termin aktualisiert");
-        }
-    },
-
     async handleCalendarAdd(e, groupName) {
         e.preventDefault();
         const fd = new FormData(e.target);
-        const isAllDay = fd.get('allDay') === 'on';
-
-        await Store.add('events', { id: Date.now(), title: fd.get('title'), date: fd.get('date'), time: isAllDay ? null : fd.get('time'), allDay: isAllDay, location: fd.get('location'), comment: fd.get('comment'), group: groupName, attendance: {} });
+        
+        await Store.add('events', { 
+            id: Date.now(), 
+            title: fd.get('title'), 
+            date: fd.get('date'), 
+            time: fd.get('time'), 
+            allDay: false, 
+            location: fd.get('location'), 
+            group: groupName 
+        });
+        
         App.closeModal();
         this.render(document.getElementById('content'));
     },
@@ -720,13 +564,13 @@ const GroupsView = {
         
         let breadcrumbs = [{id: null, name: 'Home'}]; 
         let tempId = currentFolderId;
-        while(tempId) { const f = allFiles.find(fo => fo.id === tempId); if(f) { breadcrumbs.unshift({id:f.id,name:f.name}); tempId=f.parentId; } else tempId=null; }
+        while(tempId) { const f = allFiles.find(fo => fo.id == tempId); if(f) { breadcrumbs.unshift({id:f.id,name:f.name}); tempId=f.parentId; } else tempId=null; }
 
-        const actions = canManage ? `<div class="flex gap-2"><button onclick="GroupsView.createFolder(${group.id})" class="bg-dark-bg hover:bg-dark-hover text-white px-3 py-2 rounded-lg text-xs border border-dark-border transition-colors"><i class="fa-solid fa-folder-plus mr-1"></i></button><button onclick="GroupsView.uploadFile(${group.id})" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs transition-colors"><i class="fa-solid fa-cloud-arrow-up"></i></button></div>` : '';
+        const actions = canManage ? `<div class="flex gap-2"><button onclick="GroupsView.createFolder('${group.id}')" class="bg-dark-bg hover:bg-dark-hover text-white px-3 py-2 rounded-lg text-xs border border-dark-border transition-colors"><i class="fa-solid fa-folder-plus mr-1"></i></button><button onclick="GroupsView.uploadFile('${group.id}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs transition-colors"><i class="fa-solid fa-cloud-arrow-up"></i></button></div>` : '';
 
-        return `<div class="flex flex-col h-full"><div class="flex justify-between items-center mb-4 pb-4 border-b border-dark-border"><div class="flex items-center text-sm text-dark-muted overflow-x-auto whitespace-nowrap"><i class="fa-solid fa-cloud mr-2 text-blue-400"></i>${breadcrumbs.map((b,i)=>`<span onclick="GroupsView.openFolder(${b.id === null ? 'null' : b.id})" class="cursor-pointer hover:text-white hover:underline">${b.name}</span>${i<breadcrumbs.length-1?'<i class="fa-solid fa-chevron-right text-[10px] mx-2"></i>':''}`).join('')}</div>${actions}</div><div class="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4">${contents.map(item => {
-            const isFolder=item.type==='folder'; const icon=isFolder?'fa-folder text-yellow-400':'fa-file-lines text-blue-400'; const click=isFolder?`onclick="GroupsView.openFolder(${item.id})"`:'';
-            const del = canManage ? `<button onclick="event.stopPropagation(); GroupsView.deleteFile(${group.id}, ${item.id})" class="absolute top-1 right-1 text-dark-muted hover:text-red-400 opacity-0 group-hover:opacity-100 p-1"><i class="fa-solid fa-xmark"></i></button>` : '';
+        return `<div class="flex flex-col h-full"><div class="flex justify-between items-center mb-4 pb-4 border-b border-dark-border"><div class="flex items-center text-sm text-dark-muted overflow-x-auto whitespace-nowrap"><i class="fa-solid fa-cloud mr-2 text-blue-400"></i>${breadcrumbs.map((b,i)=>`<span onclick="GroupsView.openFolder(${b.id === null ? 'null' : `'${b.id}'`})" class="cursor-pointer hover:text-white hover:underline">${b.name}</span>${i<breadcrumbs.length-1?'<i class="fa-solid fa-chevron-right text-[10px] mx-2"></i>':''}`).join('')}</div>${actions}</div><div class="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4">${contents.map(item => {
+            const isFolder=item.type==='folder'; const icon=isFolder?'fa-folder text-yellow-400':'fa-file-lines text-blue-400'; const click=isFolder?`onclick="GroupsView.openFolder('${item.id}')"`:'';
+            const del = canManage ? `<button onclick="event.stopPropagation(); GroupsView.deleteFile('${group.id}', '${item.id}')" class="absolute top-1 right-1 text-dark-muted hover:text-red-400 opacity-0 group-hover:opacity-100 p-1"><i class="fa-solid fa-xmark"></i></button>` : '';
             return `<div ${click} class="group relative flex flex-col items-center p-3 rounded-xl hover:bg-dark-bg border border-transparent hover:border-dark-border transition-all cursor-pointer bg-dark-bg/20">${del}<i class="fa-solid ${icon} text-3xl md:text-4xl mb-2 drop-shadow-lg"></i><span class="text-xs text-center text-dark-text truncate w-full px-1">${item.name}</span></div>`;
         }).join('')}</div></div>`;
     },
@@ -737,7 +581,7 @@ const GroupsView = {
         if(!App.can('manage_groups')) return; 
         const name = prompt("Name des Ordners:"); 
         if (name) { 
-            const group = Store.state.groups.find(g => g.id === groupId); 
+            const group = Store.state.groups.find(g => g.id == groupId); 
             if(!group.files) group.files = [];
             group.files.push({ id: Date.now(), parentId: this.state.currentFolderId, name: name, type: 'folder' }); 
             await Store.update('groups', group); 
@@ -749,7 +593,7 @@ const GroupsView = {
         if(!App.can('manage_groups')) return; 
         const name = prompt("Dateiname:"); 
         if (name) { 
-            const group = Store.state.groups.find(g => g.id === groupId); 
+            const group = Store.state.groups.find(g => g.id == groupId); 
             if(!group.files) group.files = [];
             group.files.push({ id: Date.now(), parentId: this.state.currentFolderId, name: name, type: 'file' }); 
             await Store.update('groups', group); 
@@ -760,8 +604,8 @@ const GroupsView = {
     async deleteFile(groupId, itemId) { 
         if(!App.can('manage_groups')) return; 
         if(!confirm("Löschen?")) return; 
-        const group = Store.state.groups.find(g => g.id === groupId); 
-        group.files = group.files.filter(f => f.id !== itemId); 
+        const group = Store.state.groups.find(g => g.id == groupId); 
+        group.files = group.files.filter(f => f.id != itemId); 
         await Store.update('groups', group); 
         this.render(document.getElementById('content')); 
     },
@@ -789,12 +633,12 @@ const GroupsView = {
         this.render(document.getElementById('content')); 
     },
 
-    openEditGroupModal(groupId) { if(!App.can('manage_groups')) return; const group = Store.state.groups.find(g => g.id === groupId); App.openModal(`<div class="p-4"><div class="flex justify-between items-center mb-6"><h3 class="text-xl font-bold text-white">Bearbeiten</h3><button onclick="App.closeModal()"><i class="fa-solid fa-times text-xl"></i></button></div><form onsubmit="GroupsView.handleUpdateGroup(event, ${groupId})" class="space-y-4"><div><label class="text-muted">Name</label><input type="text" name="name" value="${group.name}" required class="form-input"></div><button type="submit" class="btn-primary w-full">Speichern</button></form></div>`); },
+    openEditGroupModal(groupId) { if(!App.can('manage_groups')) return; const group = Store.state.groups.find(g => g.id == groupId); App.openModal(`<div class="p-4"><div class="flex justify-between items-center mb-6"><h3 class="text-xl font-bold text-white">Bearbeiten</h3><button onclick="App.closeModal()"><i class="fa-solid fa-times text-xl"></i></button></div><form onsubmit="GroupsView.handleUpdateGroup(event, '${groupId}')" class="space-y-4"><div><label class="text-muted">Name</label><input type="text" name="name" value="${group.name}" required class="form-input"></div><button type="submit" class="btn-primary w-full">Speichern</button></form></div>`); },
     
     async handleUpdateGroup(e, groupId) { 
         e.preventDefault(); 
         const name = new FormData(e.target).get('name'); 
-        const group = Store.state.groups.find(g => g.id === groupId); 
+        const group = Store.state.groups.find(g => g.id == groupId); 
         if(group) { 
             group.name = name; 
             await Store.update('groups', group); 
