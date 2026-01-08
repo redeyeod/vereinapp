@@ -1,6 +1,7 @@
 /**
  * =============================================================================
- * MEMBERS VIEW (Fix: 'group' Column entfernt)
+ * MEMBERS VIEW
+ * Verwaltung der Vereinsmitglieder (Grid-Ansicht & Detail-Modals)
  * =============================================================================
  */
 
@@ -56,19 +57,19 @@ const MembersView = {
         if(!container) return;
 
         const canManage = App.can('manage_members');
+        const members = Store.state.members || [];
 
-        const filtered = Store.state.members.filter(m => {
-            const searchStr = (m.firstName + ' ' + m.lastName + ' ' + m.role).toLowerCase();
-            // Nur noch 'groups' Array nutzen
+        const filtered = members.filter(m => {
+            const searchStr = ((m.firstName || '') + ' ' + (m.lastName || '') + ' ' + (m.role || '')).toLowerCase();
             const groupStr = Array.isArray(m.groups) ? m.groups.join(' ') : '';
             return searchStr.includes(filter.toLowerCase()) || groupStr.toLowerCase().includes(filter.toLowerCase());
         });
 
         if (filtered.length === 0) {
-            emptyState.classList.remove('hidden');
+            if(emptyState) emptyState.classList.remove('hidden');
             container.innerHTML = '';
         } else {
-            emptyState.classList.add('hidden');
+            if(emptyState) emptyState.classList.add('hidden');
             container.innerHTML = filtered.map(m => {
                 let groupsText = 'Keine Gruppen';
                 if (Array.isArray(m.groups) && m.groups.length > 0) groupsText = m.groups.join(', ');
@@ -81,12 +82,12 @@ const MembersView = {
                     <div class="absolute right-3 top-3 w-2 h-2 ${statusColor} rounded-full shadow-sm"></div>
 
                     <div class="w-12 h-12 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center text-sm font-bold border border-slate-700 flex-shrink-0">
-                        ${m.firstName.charAt(0)}${m.lastName.charAt(0)}
+                        ${(m.firstName || '?').charAt(0)}${(m.lastName || '?').charAt(0)}
                     </div>
                     
                     <div class="flex-1 min-w-0">
-                        <h4 class="font-bold text-white truncate pr-4 text-base">${m.firstName} ${m.lastName}</h4>
-                        <p class="text-xs text-blue-400 font-medium truncate mb-0.5">${m.role}</p>
+                        <h4 class="font-bold text-white truncate pr-4 text-base">${m.firstName || ''} ${m.lastName || ''}</h4>
+                        <p class="text-xs text-blue-400 font-medium truncate mb-0.5">${m.role || 'Mitglied'}</p>
                         <p class="text-[10px] text-dark-muted truncate flex items-center">
                             <i class="fa-solid fa-users mr-1.5 opacity-70"></i> ${groupsText}
                         </p>
@@ -103,15 +104,17 @@ const MembersView = {
     },
 
     filter() { 
-        const val = document.getElementById('memberSearch').value;
-        this.updateList(val); 
+        const searchInput = document.getElementById('memberSearch');
+        if(searchInput) this.updateList(searchInput.value); 
     },
 
     async delete(id) {
         if(!App.can('manage_members')) return;
-        if(confirm("Möchtest du dieses Mitglied wirklich löschen?")) { 
+        if(confirm("Möchten Sie dieses Mitglied wirklich löschen?")) { 
             await Store.remove('members', id); 
             App.showToast('Mitglied gelöscht'); 
+            // Refresh via Store.onUpdate oder manuell
+            this.updateList();
         }
     },
 
@@ -154,11 +157,11 @@ const MembersView = {
                 <div class="flex justify-between items-start mb-6 border-b border-dark-border pb-6">
                     <div class="flex items-center gap-4 min-w-0 flex-1 pr-2">
                         <div class="w-14 h-14 md:w-20 md:h-20 rounded-full bg-blue-600 flex items-center justify-center text-xl md:text-3xl font-bold text-white shadow-lg flex-shrink-0">
-                            ${m.firstName.charAt(0)}${m.lastName.charAt(0)}
+                            ${(m.firstName || '?').charAt(0)}${(m.lastName || '?').charAt(0)}
                         </div>
                         <div class="min-w-0">
-                            <h2 class="text-lg md:text-3xl font-bold text-white leading-tight truncate pr-1">${m.firstName} ${m.lastName}</h2>
-                            <p class="text-blue-400 font-medium text-xs md:text-lg mt-0.5 truncate">${m.role}</p>
+                            <h2 class="text-lg md:text-3xl font-bold text-white leading-tight truncate pr-1">${m.firstName || ''} ${m.lastName || ''}</h2>
+                            <p class="text-blue-400 font-medium text-xs md:text-lg mt-0.5 truncate">${m.role || 'Mitglied'}</p>
                         </div>
                     </div>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors flex-shrink-0 bg-dark-bg/50 rounded-lg"><i class="fa-solid fa-times text-lg md:text-xl"></i></button>
@@ -187,7 +190,10 @@ const MembersView = {
         `;
         App.openModal(html);
         const modalContainer = document.getElementById('modal-content');
-        if(modalContainer) modalContainer.classList.add('max-w-4xl', 'w-full', 'max-h-[90vh]', 'overflow-y-auto', 'custom-scrollbar');
+        if(modalContainer) {
+            modalContainer.classList.remove('max-w-md');
+            modalContainer.classList.add('max-w-4xl', 'w-full', 'max-h-[90vh]', 'overflow-y-auto', 'custom-scrollbar');
+        }
     },
 
     openAddModal() {
@@ -195,45 +201,43 @@ const MembersView = {
         const roleOptions = this.standardRoles.map(r => `<option value="${r}">${r}</option>`).join('');
 
         const html = `
-            <div class="p-4 md:p-8 max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div class="p-4 md:p-8">
                 <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 sticky top-0 bg-dark-card z-10">
                     <h3 class="text-lg md:text-xl font-bold text-white">Neues Mitglied</h3>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
                 <form onsubmit="MembersView.handleAdd(event)" class="space-y-5">
                     <div class="grid grid-cols-2 gap-4">
-                        <div><label class="text-muted">Vorname *</label><input type="text" name="firstName" required class="form-input" placeholder="Max"></div>
-                        <div><label class="text-muted">Nachname *</label><input type="text" name="lastName" required class="form-input" placeholder="Mustermann"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Vorname *</label><input type="text" name="firstName" required class="form-input" placeholder="Max"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Nachname *</label><input type="text" name="lastName" required class="form-input" placeholder="Mustermann"></div>
                     </div>
                     <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mt-6 mb-3">Adresse</h4>
                     <div class="grid grid-cols-3 gap-3">
-                        <div class="col-span-2"><label class="text-muted">Straße</label><input type="text" name="street" class="form-input"></div>
-                        <div><label class="text-muted">Nr.</label><input type="text" name="houseNumber" class="form-input"></div>
+                        <div class="col-span-2"><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Straße</label><input type="text" name="street" class="form-input"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Nr.</label><input type="text" name="houseNumber" class="form-input"></div>
                     </div>
                     <div class="grid grid-cols-3 gap-3">
-                        <div><label class="text-muted">PLZ</label><input type="text" name="zip" class="form-input"></div>
-                        <div class="col-span-2"><label class="text-muted">Ort</label><input type="text" name="city" class="form-input"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">PLZ</label><input type="text" name="zip" class="form-input"></div>
+                        <div class="col-span-2"><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ort</label><input type="text" name="city" class="form-input"></div>
                     </div>
                     <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mt-6 mb-3">Kontakt</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label class="text-muted">Email</label><input type="email" name="email" class="form-input"></div>
-                        <div><label class="text-muted">Telefon</label><input type="tel" name="phone" class="form-input"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Email</label><input type="email" name="email" class="form-input"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Telefon</label><input type="tel" name="phone" class="form-input"></div>
                     </div>
-                    <div><label class="text-muted">Geburtsdatum</label><input type="date" name="birthdate" class="form-input dark-date"></div>
+                    <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Geburtsdatum</label><input type="date" name="birthdate" class="form-input dark-date"></div>
                     <div class="mt-4">
-                        <label class="text-muted">Rolle *</label>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Rolle *</label>
                         <select name="roleSelect" class="form-input cursor-pointer" onchange="document.getElementById('customRoleInput').classList.toggle('hidden', this.value !== 'custom'); if(this.value === 'custom') document.getElementById('customRoleInput').focus();">
                             ${roleOptions}<option value="" disabled>──────────</option><option value="custom">✎ Eigene...</option>
                         </select>
                         <input type="text" name="customRole" id="customRoleInput" class="form-input mt-2 hidden" placeholder="Bezeichnung der Rolle eingeben">
                     </div>
-                    <button type="submit" class="btn-primary w-full mt-2">Speichern</button>
+                    <button type="submit" class="btn-primary w-full mt-4">Speichern</button>
                 </form>
             </div>
         `;
         App.openModal(html);
-        const modalContainer = document.getElementById('modal-content');
-        if(modalContainer) modalContainer.classList.add('max-h-[90vh]', 'overflow-y-auto', 'custom-scrollbar');
     },
 
     openEditModal(id) {
@@ -248,52 +252,50 @@ const MembersView = {
         const roleOptions = this.standardRoles.map(r => `<option value="${r}" ${member.role === r ? 'selected' : ''}>${r}</option>`).join('');
 
         const html = `
-            <div class="p-4 md:p-8 max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div class="p-4 md:p-8">
                 <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 sticky top-0 bg-dark-card z-10">
                     <h3 class="text-lg md:text-xl font-bold text-white">Mitglied bearbeiten</h3>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
                 <form onsubmit="MembersView.handleUpdate(event, ${id})" class="space-y-5">
                     <div class="grid grid-cols-2 gap-4">
-                        <div><label class="text-muted">Vorname</label><input type="text" name="firstName" value="${member.firstName || ''}" required class="form-input"></div>
-                        <div><label class="text-muted">Nachname</label><input type="text" name="lastName" value="${member.lastName || ''}" required class="form-input"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Vorname</label><input type="text" name="firstName" value="${member.firstName || ''}" required class="form-input"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Nachname</label><input type="text" name="lastName" value="${member.lastName || ''}" required class="form-input"></div>
                     </div>
                     <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mt-6 mb-3">Adresse</h4>
                     <div class="grid grid-cols-3 gap-3">
-                        <div class="col-span-2"><label class="text-muted">Straße</label><input type="text" name="street" value="${member.street || ''}" class="form-input"></div>
-                        <div><label class="text-muted">Nr.</label><input type="text" name="houseNumber" value="${member.houseNumber || ''}" class="form-input"></div>
+                        <div class="col-span-2"><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Straße</label><input type="text" name="street" value="${member.street || ''}" class="form-input"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Nr.</label><input type="text" name="houseNumber" value="${member.houseNumber || ''}" class="form-input"></div>
                     </div>
                     <div class="grid grid-cols-3 gap-3">
-                        <div><label class="text-muted">PLZ</label><input type="text" name="zip" value="${member.zip || ''}" class="form-input"></div>
-                        <div class="col-span-2"><label class="text-muted">Ort</label><input type="text" name="city" value="${member.city || ''}" class="form-input"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">PLZ</label><input type="text" name="zip" value="${member.zip || ''}" class="form-input"></div>
+                        <div class="col-span-2"><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ort</label><input type="text" name="city" value="${member.city || ''}" class="form-input"></div>
                     </div>
                     <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mt-6 mb-3">Kontakt</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label class="text-muted">Email</label><input type="email" name="email" value="${member.email || ''}" class="form-input"></div>
-                        <div><label class="text-muted">Telefon</label><input type="tel" name="phone" value="${member.phone || ''}" class="form-input"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Email</label><input type="email" name="email" value="${member.email || ''}" class="form-input"></div>
+                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Telefon</label><input type="tel" name="phone" value="${member.phone || ''}" class="form-input"></div>
                     </div>
-                    <div><label class="text-muted">Geburtsdatum</label><input type="date" name="birthdate" value="${member.birthdate || ''}" class="form-input dark-date"></div>
+                    <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Geburtsdatum</label><input type="date" name="birthdate" value="${member.birthdate || ''}" class="form-input dark-date"></div>
                     <div class="mt-6">
-                        <label class="text-muted">Rolle</label>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Rolle</label>
                         <select name="roleSelect" class="form-input cursor-pointer" onchange="document.getElementById('editCustomRoleInput').classList.toggle('hidden', this.value !== 'custom'); if(this.value === 'custom') document.getElementById('editCustomRoleInput').focus();">
                             ${roleOptions}<option value="" disabled>──────────</option><option value="custom" ${roleSelectValue === 'custom' ? 'selected' : ''}>✎ Eigene...</option>
                         </select>
                         <input type="text" name="customRole" id="editCustomRoleInput" value="${customRoleValue}" class="form-input mt-2 ${customInputHidden}" placeholder="Rollenbezeichnung">
                     </div>
                     <div>
-                        <label class="text-muted">Status</label>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Status</label>
                         <select name="status" class="form-input cursor-pointer">
                             <option value="active" ${member.status === 'active' ? 'selected' : ''}>Aktiv</option>
                             <option value="inactive" ${member.status === 'inactive' ? 'selected' : ''}>Inaktiv</option>
                         </select>
                     </div>
-                    <button type="submit" class="btn-primary w-full mt-2">Änderungen speichern</button>
+                    <button type="submit" class="btn-primary w-full mt-4">Änderungen speichern</button>
                 </form>
             </div>
         `;
         App.openModal(html);
-        const modalContainer = document.getElementById('modal-content');
-        if(modalContainer) modalContainer.classList.add('max-h-[90vh]', 'overflow-y-auto', 'custom-scrollbar');
     },
 
     async handleAdd(e) {
@@ -302,9 +304,7 @@ const MembersView = {
         let role = fd.get('roleSelect');
         if (role === 'custom') role = fd.get('customRole') || 'Mitglied';
 
-        // ACHTUNG: Hier KEIN 'group' Feld senden!
         const newMember = { 
-            id: Date.now(), 
             firstName: fd.get('firstName'), 
             lastName: fd.get('lastName'),
             street: fd.get('street'),
@@ -316,12 +316,12 @@ const MembersView = {
             birthdate: fd.get('birthdate'),
             role: role, 
             status: 'active',
-            groups: [], // JSONB Array in Supabase
-            // 'group': 'Keine' <-- ENTFERNT, da Spalte in DB nicht existiert
+            groups: [] // JSONB Array in Supabase
         };
         
         await Store.add('members', newMember);
         App.closeModal(); 
+        this.updateList();
     },
 
     async handleUpdate(e, id) {
@@ -348,6 +348,10 @@ const MembersView = {
             };
             await Store.update('members', updated);
             App.closeModal();
+            this.updateList();
         }
     }
 };
+
+// WICHTIG: Global verfügbar machen für die neue App.js
+window.MembersView = MembersView;
