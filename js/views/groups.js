@@ -212,10 +212,9 @@ const GroupsView = {
     // --- TAB 1: MITGLIEDER ---
     renderTabMembers(group) {
         const members = (Store.state.members || []).filter(m => {
-            const groups = Array.isArray(m.groups) ? m.groups : [];
-            // Legacy Support
+            if (Array.isArray(m.groups) && m.groups.includes(group.name)) return true;
             if (m.group === group.name) return true;
-            return groups.includes(group.name);
+            return false;
         });
 
         const canManage = App.can('manage_groups');
@@ -271,8 +270,9 @@ const GroupsView = {
 
     openAddMemberModal(groupId) {
         if(!App.can('manage_groups')) return;
-        const group = Store.state.groups.find(g => g.id == groupId);
+        const group = Store.state.groups.find(g => g.id == groupId); // == für ID Match (String/Int)
         
+        // Filter: Zeige nur Mitglieder, die NICHT in der Gruppe sind
         const availableMembers = (Store.state.members || []).filter(m => {
             const inGroupNew = Array.isArray(m.groups) && m.groups.includes(group.name);
             const inGroupOld = m.group === group.name;
@@ -305,6 +305,7 @@ const GroupsView = {
                                     <p class="text-sm font-bold text-white member-name truncate">${m.firstName} ${m.lastName}</p>
                                 </div>
                             </div>
+                            <!-- ID in Anführungszeichen für UUID Sicherheit -->
                             <button onclick="GroupsView.addMemberDirect('${groupId}', '${m.id}')" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg text-xs transition-colors shadow-lg shadow-blue-900/20 flex-shrink-0">
                                 <i class="fa-solid fa-plus"></i>
                             </button>
@@ -331,10 +332,11 @@ const GroupsView = {
         });
     },
 
-    // --- FIX: Sicheres Speichern (Ohne 'group: null') ---
+    // --- FIX: Sicherer Sync ohne Legacy 'group' Feld ---
     async addMemberDirect(groupId, memberId) {
         if(!App.can('manage_groups')) return;
         
+        // IDs für Vergleich sicherstellen
         const group = Store.state.groups.find(g => g.id == groupId);
         const member = Store.state.members.find(m => m.id == memberId);
 
@@ -350,7 +352,7 @@ const GroupsView = {
                     currentGroups.push(group.name);
                 }
                 
-                // Update Payload OHNE das 'group' Feld, um Fehler zu vermeiden
+                // Payload erstellen (Wir senden NUR das Array und die ID)
                 const updatePayload = {
                     id: member.id,
                     groups: currentGroups
@@ -363,6 +365,7 @@ const GroupsView = {
                 App.closeModal();
                 App.showToast(`${member.firstName} hinzugefügt`, "success");
                 
+                // Manuell neu laden
                 if(Store.fetchTable) await Store.fetchTable('members');
                 this.render(document.getElementById('content'));
 
@@ -384,24 +387,24 @@ const GroupsView = {
                 try {
                     let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
                     
-                    // Filtert die Gruppe raus
+                    // Gruppe entfernen
                     currentGroups = currentGroups.filter(g => g !== group.name);
                     
                     const updatePayload = {
                         id: member.id,
                         groups: currentGroups
-                        // Auch hier kein 'group: null' senden!
                     };
                     
                     await Store.update('members', updatePayload);
                     
+                    // Neu laden & Rendern
                     if(Store.fetchTable) await Store.fetchTable('members');
                     this.render(document.getElementById('content'));
                     App.showToast("Entfernt", "success");
                     
                 } catch (e) {
                     console.error(e);
-                    App.showToast("Fehler: " + e.message, "error");
+                    App.showToast("Fehler beim Entfernen: " + e.message, "error");
                 }
             }
         }
@@ -493,6 +496,7 @@ const GroupsView = {
                             <h4 class="text-white font-bold group-hover/event:text-blue-400 transition-colors truncate">${e.title}</h4>
                             <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-dark-muted mt-1">
                                 <span><i class="fa-regular fa-clock mr-1"></i> ${e.allDay ? 'Ganztägig' : e.time + ' Uhr'}</span>
+                                ${e.location ? `<span class="truncate"><i class="fa-solid fa-location-dot mr-1"></i> ${e.location}</span>` : ''}
                             </div>
                         </div>
                         <div class="flex gap-2">
