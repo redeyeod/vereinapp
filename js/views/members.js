@@ -1,24 +1,17 @@
 /**
  * =============================================================================
- * MEMBERS VIEW
- * Verwaltung der Mitgliederliste (Anzeigen, Suchen, Hinzufügen, Löschen, Bearbeiten)
+ * MEMBERS VIEW (Fix: 'group' Column entfernt)
  * =============================================================================
  */
 
 const MembersView = {
-    // Definierte Standard-Rollen für den Verein
     standardRoles: [
         "1. Vorstand", "2. Vorstand", "3. Vorstand", "4. Vorstand",
         "Präsident", "Vize-Präsident",
         "Kassenwart", "Protokollant", "Ehren-Mitglied", "Beisitzer", "Mitglied"
     ],
 
-    /**
-     * Rendert die Grundstruktur der Mitglieder-Ansicht
-     * @param {HTMLElement} container 
-     */
     render(container) {
-        // Berechtigungs-Check für den "Hinzufügen"-Button
         const canManage = App.can('manage_members');
         const addButtonHtml = canManage 
             ? `<button onclick="MembersView.openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white w-10 h-10 md:w-auto md:px-4 md:py-2 rounded-lg text-sm font-bold flex-shrink-0 flex items-center justify-center transition-all shadow-lg shadow-blue-900/30">
@@ -56,9 +49,6 @@ const MembersView = {
         this.updateList();
     },
 
-    /**
-     * Aktualisiert die Liste basierend auf dem Suchfilter
-     */
     updateList(filter = "") {
         const container = document.getElementById('membersListContainer');
         const emptyState = document.getElementById('noMembersFound');
@@ -69,7 +59,8 @@ const MembersView = {
 
         const filtered = Store.state.members.filter(m => {
             const searchStr = (m.firstName + ' ' + m.lastName + ' ' + m.role).toLowerCase();
-            const groupStr = Array.isArray(m.groups) ? m.groups.join(' ') : (m.group || '');
+            // Nur noch 'groups' Array nutzen
+            const groupStr = Array.isArray(m.groups) ? m.groups.join(' ') : '';
             return searchStr.includes(filter.toLowerCase()) || groupStr.toLowerCase().includes(filter.toLowerCase());
         });
 
@@ -79,18 +70,14 @@ const MembersView = {
         } else {
             emptyState.classList.add('hidden');
             container.innerHTML = filtered.map(m => {
-                // Gruppen Text
                 let groupsText = 'Keine Gruppen';
                 if (Array.isArray(m.groups) && m.groups.length > 0) groupsText = m.groups.join(', ');
-                else if (m.group && m.group !== "Keine") groupsText = m.group;
-
-                // Status Indikator
+                
                 const isActive = m.status === 'active';
                 const statusColor = isActive ? 'bg-green-500' : 'bg-red-500';
 
                 return `
                 <div onclick="MembersView.openDetailModal(${m.id})" class="bg-dark-card p-4 rounded-xl border border-dark-border flex items-center gap-4 hover:border-blue-500/50 transition-all cursor-pointer group shadow-sm relative overflow-hidden">
-                    <!-- Status Dot -->
                     <div class="absolute right-3 top-3 w-2 h-2 ${statusColor} rounded-full shadow-sm"></div>
 
                     <div class="w-12 h-12 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center text-sm font-bold border border-slate-700 flex-shrink-0">
@@ -120,11 +107,10 @@ const MembersView = {
         this.updateList(val); 
     },
 
-    delete(id) {
+    async delete(id) {
         if(!App.can('manage_members')) return;
         if(confirm("Möchtest du dieses Mitglied wirklich löschen?")) { 
-            Store.remove('members', id); 
-            this.updateList(document.getElementById('memberSearch') ? document.getElementById('memberSearch').value : "");
+            await Store.remove('members', id); 
             App.showToast('Mitglied gelöscht'); 
         }
     },
@@ -138,8 +124,6 @@ const MembersView = {
         let groupsHtml = '<span class="text-dark-muted text-xs italic">Keine Gruppen</span>';
         if (Array.isArray(m.groups) && m.groups.length > 0) {
             groupsHtml = m.groups.map(g => `<span class="bg-blue-900/30 text-blue-300 px-2 py-1 rounded-md text-xs border border-blue-500/30">${g}</span>`).join('');
-        } else if (m.group && m.group !== "Keine") {
-            groupsHtml = `<span class="bg-blue-900/30 text-blue-300 px-2 py-1 rounded-md text-xs border border-blue-500/30">${m.group}</span>`;
         }
 
         const hasAddress = m.street || m.city;
@@ -167,7 +151,6 @@ const MembersView = {
 
         const html = `
             <div class="p-4 md:p-8">
-                <!-- Header mit Avatar und Name (Optimiert für Mobile) -->
                 <div class="flex justify-between items-start mb-6 border-b border-dark-border pb-6">
                     <div class="flex items-center gap-4 min-w-0 flex-1 pr-2">
                         <div class="w-14 h-14 md:w-20 md:h-20 rounded-full bg-blue-600 flex items-center justify-center text-xl md:text-3xl font-bold text-white shadow-lg flex-shrink-0">
@@ -176,17 +159,12 @@ const MembersView = {
                         <div class="min-w-0">
                             <h2 class="text-lg md:text-3xl font-bold text-white leading-tight truncate pr-1">${m.firstName} ${m.lastName}</h2>
                             <p class="text-blue-400 font-medium text-xs md:text-lg mt-0.5 truncate">${m.role}</p>
-                            <span class="inline-flex items-center mt-1.5 px-2 py-0.5 text-[10px] rounded-full border ${m.status === 'active' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}">
-                                ${m.status === 'active' ? '● Aktiv' : '○ Inaktiv'}
-                            </span>
                         </div>
                     </div>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors flex-shrink-0 bg-dark-bg/50 rounded-lg"><i class="fa-solid fa-times text-lg md:text-xl"></i></button>
                 </div>
 
-                <!-- Info Grid -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                    <!-- Kontakt & Adresse -->
                     <div class="space-y-4">
                         <div class="bg-dark-bg p-4 rounded-xl border border-dark-border">
                             <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-3">Kontakt</h4>
@@ -197,29 +175,19 @@ const MembersView = {
                             ${addressHtml}
                         </div>
                     </div>
-
-                    <!-- Gruppen -->
                     <div class="bg-dark-bg p-4 rounded-xl border border-dark-border h-fit">
                         <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-3">Gruppen</h4>
                         <div class="flex flex-wrap gap-2">
                             ${groupsHtml}
                         </div>
-                        ${canManage ? `<p class="text-[10px] text-dark-muted mt-3 pt-3 border-t border-dark-border/50">Gruppenzuordnungen können im Bereich "Abteilungen" verwaltet werden.</p>` : ''}
                     </div>
                 </div>
-
                 ${footerHtml}
             </div>
         `;
-        
         App.openModal(html);
-        
-        // Modal breiter machen für Detailansicht
         const modalContainer = document.getElementById('modal-content');
-        if(modalContainer) {
-            modalContainer.classList.remove('max-w-md');
-            modalContainer.classList.add('max-w-4xl', 'w-full', 'max-h-[90vh]', 'overflow-y-auto', 'custom-scrollbar');
-        }
+        if(modalContainer) modalContainer.classList.add('max-w-4xl', 'w-full', 'max-h-[90vh]', 'overflow-y-auto', 'custom-scrollbar');
     },
 
     openAddModal() {
@@ -232,13 +200,11 @@ const MembersView = {
                     <h3 class="text-lg md:text-xl font-bold text-white">Neues Mitglied</h3>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
-                
                 <form onsubmit="MembersView.handleAdd(event)" class="space-y-5">
                     <div class="grid grid-cols-2 gap-4">
                         <div><label class="text-muted">Vorname *</label><input type="text" name="firstName" required class="form-input" placeholder="Max"></div>
                         <div><label class="text-muted">Nachname *</label><input type="text" name="lastName" required class="form-input" placeholder="Mustermann"></div>
                     </div>
-
                     <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mt-6 mb-3">Adresse</h4>
                     <div class="grid grid-cols-3 gap-3">
                         <div class="col-span-2"><label class="text-muted">Straße</label><input type="text" name="street" class="form-input"></div>
@@ -248,14 +214,12 @@ const MembersView = {
                         <div><label class="text-muted">PLZ</label><input type="text" name="zip" class="form-input"></div>
                         <div class="col-span-2"><label class="text-muted">Ort</label><input type="text" name="city" class="form-input"></div>
                     </div>
-
                     <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mt-6 mb-3">Kontakt</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div><label class="text-muted">Email</label><input type="email" name="email" class="form-input"></div>
                         <div><label class="text-muted">Telefon</label><input type="tel" name="phone" class="form-input"></div>
                     </div>
                     <div><label class="text-muted">Geburtsdatum</label><input type="date" name="birthdate" class="form-input dark-date"></div>
-                    
                     <div class="mt-4">
                         <label class="text-muted">Rolle *</label>
                         <select name="roleSelect" class="form-input cursor-pointer" onchange="document.getElementById('customRoleInput').classList.toggle('hidden', this.value !== 'custom'); if(this.value === 'custom') document.getElementById('customRoleInput').focus();">
@@ -263,11 +227,6 @@ const MembersView = {
                         </select>
                         <input type="text" name="customRole" id="customRoleInput" class="form-input mt-2 hidden" placeholder="Bezeichnung der Rolle eingeben">
                     </div>
-
-                    <div class="p-3 bg-dark-bg rounded-lg border border-dark-border text-xs text-dark-muted mt-4">
-                        <i class="fa-solid fa-info-circle mr-1 text-blue-400"></i> Gruppen werden später zugewiesen.
-                    </div>
-                    
                     <button type="submit" class="btn-primary w-full mt-2">Speichern</button>
                 </form>
             </div>
@@ -286,7 +245,6 @@ const MembersView = {
         const roleSelectValue = isStandardRole ? member.role : 'custom';
         const customRoleValue = isStandardRole ? '' : member.role;
         const customInputHidden = isStandardRole ? 'hidden' : '';
-
         const roleOptions = this.standardRoles.map(r => `<option value="${r}" ${member.role === r ? 'selected' : ''}>${r}</option>`).join('');
 
         const html = `
@@ -295,13 +253,11 @@ const MembersView = {
                     <h3 class="text-lg md:text-xl font-bold text-white">Mitglied bearbeiten</h3>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
-                
                 <form onsubmit="MembersView.handleUpdate(event, ${id})" class="space-y-5">
                     <div class="grid grid-cols-2 gap-4">
                         <div><label class="text-muted">Vorname</label><input type="text" name="firstName" value="${member.firstName || ''}" required class="form-input"></div>
                         <div><label class="text-muted">Nachname</label><input type="text" name="lastName" value="${member.lastName || ''}" required class="form-input"></div>
                     </div>
-
                     <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mt-6 mb-3">Adresse</h4>
                     <div class="grid grid-cols-3 gap-3">
                         <div class="col-span-2"><label class="text-muted">Straße</label><input type="text" name="street" value="${member.street || ''}" class="form-input"></div>
@@ -311,22 +267,19 @@ const MembersView = {
                         <div><label class="text-muted">PLZ</label><input type="text" name="zip" value="${member.zip || ''}" class="form-input"></div>
                         <div class="col-span-2"><label class="text-muted">Ort</label><input type="text" name="city" value="${member.city || ''}" class="form-input"></div>
                     </div>
-
                     <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mt-6 mb-3">Kontakt</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div><label class="text-muted">Email</label><input type="email" name="email" value="${member.email || ''}" class="form-input"></div>
                         <div><label class="text-muted">Telefon</label><input type="tel" name="phone" value="${member.phone || ''}" class="form-input"></div>
                     </div>
                     <div><label class="text-muted">Geburtsdatum</label><input type="date" name="birthdate" value="${member.birthdate || ''}" class="form-input dark-date"></div>
-                    
                     <div class="mt-6">
                         <label class="text-muted">Rolle</label>
                         <select name="roleSelect" class="form-input cursor-pointer" onchange="document.getElementById('editCustomRoleInput').classList.toggle('hidden', this.value !== 'custom'); if(this.value === 'custom') document.getElementById('editCustomRoleInput').focus();">
                             ${roleOptions}<option value="" disabled>──────────</option><option value="custom" ${roleSelectValue === 'custom' ? 'selected' : ''}>✎ Eigene...</option>
                         </select>
-                        <input type="text" name="customRole" id="editCustomRoleInput" value="${customRoleValue}" class="form-input mt-2 ${customInputHidden}" placeholder="Bezeichnung der Rolle eingeben">
+                        <input type="text" name="customRole" id="editCustomRoleInput" value="${customRoleValue}" class="form-input mt-2 ${customInputHidden}" placeholder="Rollenbezeichnung">
                     </div>
-
                     <div>
                         <label class="text-muted">Status</label>
                         <select name="status" class="form-input cursor-pointer">
@@ -334,20 +287,22 @@ const MembersView = {
                             <option value="inactive" ${member.status === 'inactive' ? 'selected' : ''}>Inaktiv</option>
                         </select>
                     </div>
-                    
                     <button type="submit" class="btn-primary w-full mt-2">Änderungen speichern</button>
                 </form>
             </div>
         `;
         App.openModal(html);
+        const modalContainer = document.getElementById('modal-content');
+        if(modalContainer) modalContainer.classList.add('max-h-[90vh]', 'overflow-y-auto', 'custom-scrollbar');
     },
 
-    handleAdd(e) {
+    async handleAdd(e) {
         e.preventDefault(); 
         const fd = new FormData(e.target);
         let role = fd.get('roleSelect');
         if (role === 'custom') role = fd.get('customRole') || 'Mitglied';
 
+        // ACHTUNG: Hier KEIN 'group' Feld senden!
         const newMember = { 
             id: Date.now(), 
             firstName: fd.get('firstName'), 
@@ -361,26 +316,24 @@ const MembersView = {
             birthdate: fd.get('birthdate'),
             role: role, 
             status: 'active',
-            groups: [],
-            group: 'Keine'
+            groups: [], // JSONB Array in Supabase
+            // 'group': 'Keine' <-- ENTFERNT, da Spalte in DB nicht existiert
         };
         
-        Store.add('members', newMember);
+        await Store.add('members', newMember);
         App.closeModal(); 
-        App.showToast('Mitglied erstellt'); 
-        this.updateList();
     },
 
-    handleUpdate(e, id) {
+    async handleUpdate(e, id) {
         e.preventDefault();
         const fd = new FormData(e.target);
         let role = fd.get('roleSelect');
         if (role === 'custom') role = fd.get('customRole') || 'Mitglied';
 
-        const index = Store.state.members.findIndex(m => m.id === id);
-        if (index !== -1) {
-            Store.state.members[index] = {
-                ...Store.state.members[index],
+        const member = Store.state.members.find(m => m.id === id);
+        if (member) {
+            const updated = {
+                ...member,
                 firstName: fd.get('firstName'),
                 lastName: fd.get('lastName'),
                 street: fd.get('street'),
@@ -393,10 +346,8 @@ const MembersView = {
                 role: role,
                 status: fd.get('status')
             };
-            Store.save();
+            await Store.update('members', updated);
             App.closeModal();
-            App.showToast('Aktualisiert');
-            this.updateList();
         }
     }
 };
