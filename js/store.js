@@ -3,10 +3,11 @@
  * STORE MODULE
  * Verwaltet den State (Daten) der Anwendung.
  * Jetzt MANDANTENFÄHIG: Trennt Daten basierend auf der Vereins-ID.
+ * MIT OPTIMISTIC UPDATES: Änderungen werden sofort angezeigt.
  * =============================================================================
  */
 
-// Supabase Client Variable (wird in init erstellt)
+// Supabase Client Variable
 let _supabase = null;
 
 const Store = {
@@ -30,18 +31,16 @@ const Store = {
      * Initialisiert die Verbindung zur Cloud und lädt Daten
      */
     async init() {
-        // Prüfen ob Config vorhanden
         if (typeof CONFIG === 'undefined' || !CONFIG.SUPABASE_URL || CONFIG.SUPABASE_URL.includes('HIER')) {
             console.error("Supabase Config fehlt in js/config.js!");
-            alert("Bitte trage deine Supabase URL und Key in js/config.js ein.");
             return;
         }
 
-        // Supabase Client initialisieren
+        // Client erstellen (global)
         const { createClient } = supabase;
         _supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
 
-        // Zuletzt genutzten Verein laden
+        // Verein laden
         const storedClubId = localStorage.getItem('vm_active_club_id');
         if (storedClubId) {
             this.clubId = storedClubId;
@@ -49,11 +48,11 @@ const Store = {
 
         console.log(`Store initialisiert für Verein: ${this.clubId}`);
 
-        // Echtzeit-Updates abonnieren
+        // Echtzeit-Updates abonnieren (für Änderungen von anderen Nutzern)
         _supabase.channel('public-db-changes')
             .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
-                console.log('Änderung empfangen:', payload);
-                this.fetchTable(payload.table); // Tabelle neu laden
+                // Wir laden die betroffene Tabelle neu, um sicherzugehen
+                this.fetchTable(payload.table); 
             })
             .subscribe();
 
@@ -64,111 +63,96 @@ const Store = {
         }
     },
 
-    /**
-     * Wechselt den Verein und lädt die Daten neu
-     * (In dieser einfachen Version laden wir einfach alles neu. 
-     * In einer echten App würde man hier filtern.)
-     */
     switchClub(newClubId) {
         this.clubId = newClubId;
         localStorage.setItem('vm_active_club_id', newClubId);
-        // Trigger Re-Fetch oder Reset
-        // Da wir aktuell keine serverseitige Trennung haben (alles in einer DB), 
-        // bleibt der Datenbestand gleich, aber die clubId ändert sich für neue Einträge (falls wir das implementieren würden).
-        // Für diesen Prototyp laden wir neu.
         this.init(); 
         if(typeof App !== 'undefined') App.router('dashboard');
     },
 
-    /**
-     * Lädt eine komplette Tabelle
-     */
     async fetchTable(table) {
         if(!_supabase) return;
-        
         const { data, error } = await _supabase.from(table).select('*');
         
         if(error) {
             console.error(`Fehler beim Laden von ${table}:`, error);
         } else {
             this.state[table] = data;
-            // App Bescheid geben, dass sich Daten geändert haben
+            // Trigger Rerender
             if (this.onUpdate) this.onUpdate();
         }
     },
 
-    // --- CRUD OPERATIONEN (Cloud) ---
+    // --- CRUD OPERATIONEN MIT OPTIMISTIC UI ---
+    // Das bedeutet: Erst lokal ändern (sofort sichtbar), dann an Server senden.
 
-    /**
-     * Fügt ein Item hinzu (oder überschreibt es bei ID-Konflikt -> Upsert)
-     */
     async add(table, item) {
         if(!_supabase) return;
 
-        // Klonen um Original nicht zu ändern
+        // 1. Optimistic Update (Sofort anzeigen)
+        if (this.state[table]) {
+            // Prüfen ob Item schon existiert (Update) oder neu ist (Add)
+            const index = this.state[table].findIndex(i => i.id === item.id);
+            if (index !== -1) {
+                this.state[table][index] = item;
+            } else {
+                this.state[table].push(item);
+                // Sortierung beibehalten (optional)
+                if(table === 'news' || table === 'docs' || table === 'work_entries') {
+                    this.state[table].sort((a,b) => b.id - a.id);
+                }
+            }
+            if (this.onUpdate) this.onUpdate();
+        }
+
+        // 2. Cloud Update
+        // ID entfernen wenn es eine lokale Zeitstempel-ID ist, damit die DB eine generieren kann.
+        // ABER: Für diesen Prototyp behalten wir die ID bei, damit das Optimistic Update nicht flackert.
+        // In einer Profi-App würde man die ID vom Server zurückbekommen und lokal austauschen.
         const payload = { ...item };
         
-        // ID-Handling: 
-        // Wenn die ID sehr groß ist (Date.now()), ist es eine lokale ID.
-        // Wir entfernen sie normalerweise, damit die DB eine ID generiert (auto-increment).
-        // Ausnahme: Der Admin-User (999) soll fest bleiben.
-        if (payload.id && typeof payload.id === 'number' && payload.id > 1000000000) {
-             delete payload.id; 
-        }
-        
-        // Wir nutzen upsert, um sowohl Insert als auch Update (bei fester ID) abzudecken
+        // Wir nutzen upsert (Insert oder Update)
         const { error } = await _supabase.from(table).upsert(payload);
         
         if(error) {
             console.error("Fehler beim Speichern:", error);
             if(typeof App !== 'undefined') App.showToast('Fehler: ' + error.message);
+            // Hier könnte man das optimistische Update rückgängig machen (Rollback)
         } else {
             if(typeof App !== 'undefined') App.showToast('Gespeichert');
         }
     },
 
-    /**
-     * Aktualisiert ein Item
-     */
     async update(table, item) {
-        if(!_supabase) return;
-
-        const { error } = await _supabase.from(table).update(item).eq('id', item.id);
-        
-        if(error) {
-            console.error("Fehler beim Aktualisieren:", error);
-            if(typeof App !== 'undefined') App.showToast('Fehler beim Aktualisieren');
-        } else {
-            if(typeof App !== 'undefined') App.showToast('Aktualisiert');
-        }
+        // Alias für add, da unsere Logik oben beides abdeckt
+        await this.add(table, item);
     },
 
-    /**
-     * Entfernt ein Item
-     */
     async remove(table, id) {
         if(!_supabase) return;
 
+        // 1. Optimistic Delete (Sofort entfernen)
+        if (this.state[table]) {
+            this.state[table] = this.state[table].filter(i => i.id !== id);
+            if (this.onUpdate) this.onUpdate();
+        }
+
+        // 2. Cloud Delete
         const { error } = await _supabase.from(table).delete().eq('id', id);
         
         if(error) {
             console.error("Fehler beim Löschen:", error);
             if(typeof App !== 'undefined') App.showToast('Fehler beim Löschen');
+            // Rollback wäre hier: Item wieder in den State pushen
         } else {
             if(typeof App !== 'undefined') App.showToast('Gelöscht');
         }
     },
 
-    /**
-     * Alias für add (fügt am Anfang hinzu - DB sortiert aber meist anders)
-     */
     async addFirst(table, item) {
         await this.add(table, item);
     },
 
-    /**
-     * Hilfsfunktion zum Abrufen lokaler Daten
-     */
     get(collection) {
         return this.state[collection] || [];
     }
