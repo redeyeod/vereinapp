@@ -328,9 +328,11 @@ const GroupsView = {
         });
     },
 
-    // --- FIX: Sicheres Speichern & UUID Support ---
+    // --- FIX: Optimistic Update für sofortiges Feedback ---
     async addMemberDirect(groupId, memberId) {
         if(!App.can('manage_groups')) return;
+        
+        // IDs für Vergleich sicherstellen
         const group = Store.state.groups.find(g => g.id == groupId);
         const member = Store.state.members.find(m => m.id == memberId);
 
@@ -348,24 +350,35 @@ const GroupsView = {
                     currentGroups.push(group.name);
                 }
                 
-                // Payload erstellen (Wir senden NUR das, was sich ändert)
+                // 1. Optimistisches Update: Lokal sofort anwenden!
+                member.groups = currentGroups;
+                member.group = null; // Legacy leeren
+                
+                // UI sofort aktualisieren
+                App.closeModal();
+                this.render(document.getElementById('content'));
+                App.showToast(`${member.firstName} hinzugefügt`);
+
+                // 2. Im Hintergrund an DB senden
                 const updatePayload = {
-                    id: member.id, // WICHTIG für WHERE clause
-                    groups: currentGroups
-                    // WICHTIG: Wir entfernen "group: null" hier, falls die DB Spalte constraints hat
+                    id: member.id,
+                    groups: currentGroups,
+                    group: null
                 };
                 
                 await Store.update('members', updatePayload);
                 
-                // Refresh erzwingen
+                // 3. Zur Sicherheit neu laden, um konsistenten State zu haben
                 if(Store.fetchTable) await Store.fetchTable('members');
 
-                App.closeModal();
-                App.showToast(`${member.firstName} hinzugefügt`);
-                this.render(document.getElementById('content'));
             } catch (e) {
                 console.error(e);
                 App.showToast("Fehler beim Speichern: " + e.message, "error");
+                // Fallback: Neu laden, falls es schiefging
+                if(Store.fetchTable) {
+                    await Store.fetchTable('members');
+                    this.render(document.getElementById('content'));
+                }
             }
         }
     },
@@ -387,19 +400,32 @@ const GroupsView = {
 
                     currentGroups = currentGroups.filter(g => g !== group.name);
                     
+                    // 1. Optimistisches Update
+                    member.groups = currentGroups;
+                    member.group = null;
+                    
+                    // UI Update
+                    this.render(document.getElementById('content'));
+                    App.showToast("Entfernt");
+
+                    // 2. DB Update
                     const updatePayload = {
                         id: member.id,
-                        groups: currentGroups
+                        groups: currentGroups,
+                        group: null
                     };
                     
                     await Store.update('members', updatePayload);
                     if(Store.fetchTable) await Store.fetchTable('members');
                     
-                    this.render(document.getElementById('content'));
-                    App.showToast("Entfernt");
                 } catch (e) {
                     console.error(e);
                     App.showToast("Fehler beim Entfernen: " + e.message, "error");
+                    // Rollback
+                    if(Store.fetchTable) {
+                        await Store.fetchTable('members');
+                        this.render(document.getElementById('content'));
+                    }
                 }
             }
         }
