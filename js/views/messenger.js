@@ -18,7 +18,7 @@ const MessengerView = {
 
     // Helper um die aktuelle User-ID zu holen
     getMyId() {
-        return (App.state.currentUser && App.state.currentUser.id) || 1;
+        return (App.state.currentUser && App.state.currentUser.id) || localStorage.getItem('vm_current_user_id') || 1;
     },
 
     /**
@@ -39,7 +39,7 @@ const MessengerView = {
                     <!-- Suchleiste -->
                     <div class="p-3 md:p-4 border-b border-dark-border sticky top-0 bg-dark-card z-10">
                         <div class="relative">
-                            <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted text-xs"></i>
+                            <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted text-sm"></i>
                             <input type="text" id="messenger-search" onkeyup="MessengerView.handleSearch(this.value)" placeholder="Suchen..." 
                                 class="w-full bg-dark-bg border border-dark-border rounded-xl pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors placeholder-dark-muted shadow-inner"
                                 value="${this.state.filterTerm}">
@@ -94,7 +94,9 @@ const MessengerView = {
 
         const term = this.state.filterTerm;
         const myId = this.getMyId();
-        const me = Store.state.members.find(m => m.id === myId) || { groups: [] };
+        const members = Store.state.members || [];
+        const groups = Store.state.groups || [];
+        const me = members.find(m => m.id == myId) || { groups: [] };
         
         const myGroupNames = Array.isArray(me.groups) ? me.groups : (me.group && me.group !== 'Keine' ? [me.group] : []);
 
@@ -109,7 +111,7 @@ const MessengerView = {
         }
 
         // 2. GRUPPEN
-        const myGroups = Store.state.groups.filter(g => myGroupNames.includes(g.name));
+        const myGroups = groups.filter(g => myGroupNames.includes(g.name));
         const filteredGroups = myGroups.filter(g => g.name.toLowerCase().includes(term));
         
         let groupsHTML = '';
@@ -124,7 +126,7 @@ const MessengerView = {
         }
 
         // 3. PRIVAT
-        const allMembers = Store.state.members.filter(m => m.id !== myId);
+        const allMembers = members.filter(m => m.id != myId);
         let membersToShow = [];
 
         if (term === '') {
@@ -226,7 +228,7 @@ const MessengerView = {
         if (type === 'news') {
             title = "Ankündigungen";
             icon = "fa-bullhorn";
-            messages = Store.state.news.map(n => ({
+            messages = (Store.state.news || []).map(n => ({
                 id: n.id,
                 sender: 'Vorstand',
                 text: `<strong>${n.title}</strong><br>${n.content}`,
@@ -428,7 +430,7 @@ const MessengerView = {
                 contentHtml = `
                     <div class="min-w-[180px] bg-white/5 p-2 rounded-lg border border-white/10 flex items-center gap-3 cursor-pointer hover:bg-white/10 transition-colors" onclick="MessengerView.showUserProfile(${c.id})">
                         <div class="w-9 h-9 rounded-full bg-slate-600 flex items-center justify-center text-white font-bold text-xs">
-                            ${c.name.charAt(0)}
+                            ${(c.name || 'U').charAt(0)}
                         </div>
                         <div class="flex-1 min-w-0">
                             <p class="text-xs font-bold truncate">${c.name}</p>
@@ -440,7 +442,7 @@ const MessengerView = {
                 `;
             } else if (msg.type === 'poll') {
                 const poll = msg.content;
-                const totalVotes = poll.options.reduce((acc, opt) => acc + opt.votes.length, 0);
+                const totalVotes = poll.options.reduce((acc, opt) => acc + (opt.votes ? opt.votes.length : 0), 0);
                 const myId = this.getMyId();
                 
                 contentHtml = `
@@ -448,13 +450,14 @@ const MessengerView = {
                         <p class="font-bold text-sm mb-3 border-b border-white/10 pb-2">${poll.question}</p>
                         <div class="space-y-2">
                             ${poll.options.map(opt => {
-                                const percent = totalVotes > 0 ? Math.round((opt.votes.length / totalVotes) * 100) : 0;
-                                const hasVoted = opt.votes.includes(myId);
+                                const votesCount = opt.votes ? opt.votes.length : 0;
+                                const percent = totalVotes > 0 ? Math.round((votesCount / totalVotes) * 100) : 0;
+                                const hasVoted = opt.votes && opt.votes.includes(myId);
                                 return `
                                 <div onclick="MessengerView.votePoll(${msg.id}, ${opt.id})" class="cursor-pointer group/poll relative">
                                     <div class="flex justify-between text-xs mb-1 relative z-10">
                                         <span class="${hasVoted ? 'font-bold text-white' : ''}">${opt.text} ${hasVoted ? '<i class="fa-solid fa-check-circle ml-1"></i>' : ''}</span>
-                                        <span>${opt.votes.length}</span>
+                                        <span>${votesCount}</span>
                                     </div>
                                     <div class="h-2 bg-black/30 rounded-full overflow-hidden">
                                         <div class="h-full bg-white/80 group-hover/poll:bg-white transition-all" style="width: ${percent}%"></div>
@@ -475,7 +478,7 @@ const MessengerView = {
         if (canDelete || canEdit) {
             const menuId = `msg-menu-${msg.id}`;
             actionsHtml = `
-                <div class="absolute top-1 right-2 z-20 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+                <div class="absolute top-1 right-2 z-20 opacity-0 group-hover/msg:opacity-100 transition-opacity text-start">
                     <button onclick="event.stopPropagation(); document.getElementById('${menuId}').classList.toggle('hidden')" 
                         class="text-white/60 hover:text-white p-1 rounded-full hover:bg-black/20 transition-colors w-6 h-6 flex items-center justify-center">
                         <i class="fa-solid fa-ellipsis-vertical text-[10px]"></i>
@@ -504,7 +507,7 @@ const MessengerView = {
         return `
             <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-300 group/msg relative mb-1">
                 <div class="flex items-end gap-2 max-w-[85%] relative">
-                    ${!isMe ? `<div class="w-6 h-6 rounded-full bg-slate-700 text-slate-400 text-[9px] flex items-center justify-center font-bold border border-slate-600 shrink-0 mb-1 select-none">${msg.sender.charAt(0)}</div>` : ''}
+                    ${!isMe ? `<div class="w-6 h-6 rounded-full bg-slate-700 text-slate-400 text-[9px] flex items-center justify-center font-bold border border-slate-600 shrink-0 mb-1 select-none">${(msg.sender || '?').charAt(0)}</div>` : ''}
                     
                     <div class="relative ${paddingClass} shadow-sm text-sm leading-relaxed ${bubbleClass}">
                         ${actionsHtml}
@@ -543,7 +546,7 @@ const MessengerView = {
     },
 
     getEmojiList() {
-        return ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🧐', '🤓', '😎', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '😈', '👿', '👹', '👺', '🤡', '💩', '👻', '💀', '☠️', '👽', '👾', '🤖', '🎃', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾', '👋', '🤚', '🖐', '✋', '🖖', '👌', '🤏', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '💋', '👄', '🦷', '👅', '👂', '🦻', '👃', '👣', '👁', '👀', '🧠', '🫀', '🫁', '🦴', '👶', '👧', '🧒', '👦', '👩', '🧑', '👨', '👵', '🧓', '👴', '👲', '👳‍♀️', '👳', '🧕', '👮‍♀️', '👮', '👷‍♀️', '👷', '💂‍♀️', '💂', '🕵️‍♀️', '🕵️', '👩‍⚕️', '👨‍⚕️', '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '⚽', '🏀', '🏈', '⚾', '🥎', 'bmx', '🏐', '🏉', '🥏', '🎱', '🪀', '🏓', '🏸', '🏒', '🏑', '🥍', '🏏', '🥅', '⛳', '🪁', '🏹', '🎣', '🤿', '🥊', '🥋', '🎽', '🛹', '🛼', '🛷', '⛸', '🥌', '🎿', '⛷', '🏂', '🪂', '🏋️‍♀️', '🏋️', '🤼‍♀️', '🤼', '🤸‍♀️', '🤸', '⛹️‍♀️', '⛹️', '🤺', '🤾‍♀️', '🤾', '🏌️‍♀️', '🏌️', '🏇', '🧘‍♀️', '🧘', '🏄‍♀️', '🏄', '🏊‍♀️', '🏊', '🤽‍♀️', '🤽', '🚣‍♀️', '🚣', '🧗‍♀️', '🧗', '🚵‍♀️', '🚵', '🚴‍♀️', '🚴', '🏆', '🥇', '🥈', '🥉', '🏅', '🎖', '🏵', '🎗', '🎫', '🎟', '🎪', '🤹', '🎭', '🎨', '🎬', '🎤', '🎧', '🎼', '🎹', '🥁', '🎷', '🎺', '🎸', '🪕', '🎻', '🎲', '♟', '🎯', '🎳', '🎮', '🎰', '🧩'];
+        return ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🧐', '🤓', '😎', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '😈', '👿', '👹', '👺', '🤡', '💩', '👻', '💀', '☠️', '👽', '👾', '🤖', '🎃', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾', '👋', '🤚', '🖐', '✋', '🖖', '👌', '🤏', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '💋', '👄', '🦷', '👅', '👂', '🦻', '👃', '👣', '👁', '👀', '🧠', '🫀', '🫁', '🦴', '👶', '👧', '🧒', '👦', '👩', '🧑', '👨', '👵', '🧓', '👴', '👲', '👳‍♀️', '👳', '🧕', '👮‍♀️', '👮', '👷‍♀️', '👷', '💂‍♀️', '💂', '🕵️‍♀️', '🕵️', '👩‍⚕️', '👨‍⚕️', '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '⚽', '🏀', '🏈', '⚾', '🥎', '🏐', '🏉', '🥏', '🎱', '🏓', '🏸', '🏒', '🏑', '🏏', '🥅', '⛳', '🏹', '🎣', '🥊', '🥋', '🛹', '🛼', '⛷', '🏂', '🏋️‍♀️', '🏋️', '🤼‍♀️', '🤸‍♀️', '⛹️‍♀️', '⛹️', '🤺', '🤾‍♀️', '🏌️‍♀️', '🏇', '🧘‍♀️', '🧘', '🏄‍♀️', '🏊‍♀️', '🤽‍♀️', '🚣‍♀️', '🧗‍♀️', '🚵‍♀️', '🚴‍♀️', '🏆', '🥇', '🥈', '🥉', '🏅', '🎖', '🏵', '🎗', '🎫', '🎟', '🎪', '🤹', '🎭', '🎨', '🎬', '🎤', '🎧', '🎼', '🎹', '🥁', '🎷', '🎺', '🎸', '🎻', '🎲', '♟', '🎯', '🎳', '🎮', '🎰', '🧩'];
     },
 
     addEmoji(emoji) {
@@ -593,20 +596,10 @@ const MessengerView = {
         this.addMessageToChat({ text: text, type: type, content: content });
     },
 
-    insertEmoji() {
-        const input = document.getElementById('chat-input');
-        if(input) {
-            const emojis = ['👍', '😂', '🎉', '⚽', '🔥', '😊', '👋', '❤️'];
-            const random = emojis[Math.floor(Math.random() * emojis.length)];
-            input.value += random;
-            input.focus();
-        }
-    },
-
     // --- CONTACT SHARING ---
 
     openContactSelectModal() {
-        const allMembers = Store.state.members;
+        const allMembers = Store.state.members || [];
         
         const html = `
             <div class="p-6 h-[500px] flex flex-col">
@@ -624,7 +617,7 @@ const MessengerView = {
                              onclick="MessengerView.confirmShareContact(${m.id}, '${m.firstName} ${m.lastName}', '${m.role}')">
                             <div class="flex items-center gap-3">
                                 <div class="w-10 h-10 rounded-full bg-slate-700 text-white flex items-center justify-center font-bold">
-                                    ${m.firstName.charAt(0)}${m.lastName.charAt(0)}
+                                    ${(m.firstName || 'U').charAt(0)}${(m.lastName || '').charAt(0)}
                                 </div>
                                 <div>
                                     <p class="text-sm font-bold text-white contact-name">${m.firstName} ${m.lastName}</p>
@@ -655,7 +648,7 @@ const MessengerView = {
     },
 
     showUserProfile(id) {
-        const m = Store.state.members.find(mem => mem.id === id);
+        const m = Store.state.members.find(mem => mem.id == id);
         if(!m) return;
 
         const html = `
@@ -663,7 +656,7 @@ const MessengerView = {
                 <div class="flex justify-between items-start mb-8 border-b border-dark-border pb-6">
                     <div class="flex items-center gap-5">
                         <div class="w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center text-3xl font-bold text-white shadow-lg">
-                            ${m.firstName.charAt(0)}${m.lastName.charAt(0)}
+                            ${(m.firstName || 'U').charAt(0)}${(m.lastName || '').charAt(0)}
                         </div>
                         <div>
                             <h2 class="text-3xl font-bold text-white leading-tight">${m.firstName} ${m.lastName}</h2>
@@ -737,20 +730,29 @@ const MessengerView = {
         const type = this.state.activeType;
         const id = this.state.activeId;
         let chat = null;
+        let parentObj = null;
+        let table = '';
 
         if (type === 'group') {
-            const group = Store.state.groups.find(g => g.id === id);
-            if(group) chat = group.chat;
+            parentObj = Store.state.groups.find(g => g.id === id);
+            if(parentObj) {
+                chat = parentObj.chat;
+                table = 'groups';
+            }
         } else if (type === 'private') {
-            const member = Store.state.members.find(m => m.id === id);
-            if(member) chat = member.privateChat;
+            parentObj = Store.state.members.find(m => m.id === id);
+            if(parentObj) {
+                chat = parentObj.privateChat;
+                table = 'members';
+            }
         }
 
-        if(chat) {
+        if(chat && parentObj) {
             const msg = chat.find(m => m.id === msgId);
             if(msg) {
                 updateFn(msg);
-                Store.save();
+                // UPDATE STATT SAVE
+                Store.update(table, parentObj);
                 const chatArea = document.getElementById('messenger-chat-area');
                 if (chatArea) chatArea.innerHTML = this.renderActiveChat();
             }
@@ -843,16 +845,24 @@ const MessengerView = {
         const type = this.state.activeType;
         const id = this.state.activeId;
         let messages = null;
+        let parentObj = null;
+        let table = '';
 
         if (type === 'group') {
-            const group = Store.state.groups.find(g => g.id === id);
-            if(group) messages = group.chat;
+            parentObj = Store.state.groups.find(g => g.id === id);
+            if(parentObj) {
+                messages = parentObj.chat;
+                table = 'groups';
+            }
         } else if (type === 'private') {
-            const member = Store.state.members.find(m => m.id === id);
-            if(member) messages = member.privateChat;
+            parentObj = Store.state.members.find(m => m.id === id);
+            if(parentObj) {
+                messages = parentObj.privateChat;
+                table = 'members';
+            }
         }
 
-        if(messages) {
+        if(messages && parentObj) {
             const msg = messages.find(m => m.id === msgId);
             if(msg && msg.type === 'poll') {
                 const poll = msg.content;
@@ -861,18 +871,22 @@ const MessengerView = {
                 const option = poll.options.find(o => o.id === optionId);
                 
                 if(option) {
+                    if(!option.votes) option.votes = [];
                     const hasVoted = option.votes.includes(myId);
                     
                     if(hasVoted) {
                         option.votes = option.votes.filter(v => v !== myId);
                     } else {
                         if(!poll.multiple) {
-                            poll.options.forEach(o => o.votes = o.votes.filter(v => v !== myId));
+                            poll.options.forEach(o => {
+                                if(o.votes) o.votes = o.votes.filter(v => v !== myId);
+                            });
                         }
                         option.votes.push(myId);
                     }
                     
-                    Store.save();
+                    // UPDATE STATT SAVE
+                    Store.update(table, parentObj);
                     const chatArea = document.getElementById('messenger-chat-area');
                     if (chatArea) chatArea.innerHTML = this.renderActiveChat();
                 }
@@ -883,12 +897,15 @@ const MessengerView = {
     // --- HELPER ---
 
     addMessageToChat(msgData) {
+        const myId = this.getMyId();
+        const me = Store.state.members.find(m => m.id == myId) || { firstName: 'Ich' };
+        
         const newMessage = {
             id: Date.now(),
             text: msgData.text,
             type: msgData.type || 'text',
             content: msgData.content || null,
-            sender: 'Ich', // Hier könnte man auch den echten Namen holen
+            sender: me.firstName, 
             isMe: true,
             isEdited: false,
             isDeleted: false,
@@ -897,52 +914,36 @@ const MessengerView = {
 
         const type = this.state.activeType;
         const id = this.state.activeId;
+        let parentObj = null;
+        let table = '';
 
         if (type === 'group') {
-            const group = Store.state.groups.find(g => g.id === id);
-            if (group) {
-                if(!group.chat) group.chat = [];
-                group.chat.push(newMessage);
-                // AUTOMATISCHE ANTWORT DEAKTIVIERT
-                // if(msgData.type === 'text') this.simulateReply(group.chat, 'Gruppe');
+            parentObj = Store.state.groups.find(g => g.id === id);
+            if (parentObj) {
+                if(!parentObj.chat) parentObj.chat = [];
+                parentObj.chat.push(newMessage);
+                table = 'groups';
             }
         } else if (type === 'private') {
-            const member = Store.state.members.find(m => m.id === id);
-            if (member) {
-                if(!member.privateChat) member.privateChat = [];
-                member.privateChat.push(newMessage);
-                // AUTOMATISCHE ANTWORT DEAKTIVIERT
-                // if(msgData.type === 'text') this.simulateReply(member.privateChat, member.firstName);
+            parentObj = Store.state.members.find(m => m.id === id);
+            if (parentObj) {
+                if(!parentObj.privateChat) parentObj.privateChat = [];
+                parentObj.privateChat.push(newMessage);
+                table = 'members';
             }
         }
 
-        Store.save();
-        
-        const chatArea = document.getElementById('messenger-chat-area');
-        if (chatArea) {
-            chatArea.innerHTML = this.renderActiveChat();
-            this.scrollToBottom();
-        }
-        if (this.state.filterTerm === '') this.renderSidebarList();
-    },
-
-    simulateReply(chatArray, senderName) {
-        setTimeout(() => {
-            chatArray.push({
-                id: Date.now(),
-                text: 'Das ist eine automatische Antwort.',
-                sender: senderName,
-                isMe: false,
-                time: new Date().toISOString()
-            });
-            Store.save();
+        if(parentObj) {
+            // UPDATE STATT SAVE
+            Store.update(table, parentObj);
             
             const chatArea = document.getElementById('messenger-chat-area');
             if (chatArea) {
                 chatArea.innerHTML = this.renderActiveChat();
                 this.scrollToBottom();
             }
-        }, 1500);
+            if (this.state.filterTerm === '') this.renderSidebarList();
+        }
     },
 
     scrollToBottom() {
@@ -952,3 +953,6 @@ const MessengerView = {
         }
     }
 };
+
+// WICHTIG: Global verfügbar machen für die neue App.js
+window.MessengerView = MessengerView;
