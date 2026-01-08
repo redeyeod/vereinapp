@@ -160,12 +160,11 @@ const GroupsView = {
 
         const tabs = [
             { id: 'members', label: 'Mitglieder', icon: 'fa-users' },
-            { id: 'chat', label: 'Chat', icon: 'fa-comments' }, // Label verkürzt für Mobile
-            { id: 'calendar', label: 'Termine', icon: 'fa-calendar-days' }, // Label verkürzt
-            { id: 'files', label: 'Dateien', icon: 'fa-folder-tree' } // Label verkürzt
+            { id: 'chat', label: 'Chat', icon: 'fa-comments' },
+            { id: 'calendar', label: 'Termine', icon: 'fa-calendar-days' },
+            { id: 'files', label: 'Dateien', icon: 'fa-folder-tree' }
         ];
 
-        // Layout für Detailansicht optimiert: Flexibel, keine starren Höhen
         container.innerHTML = `
             <div class="fade-in h-full flex flex-col">
                 <div class="flex items-center gap-3 md:gap-4 mb-4 md:mb-6">
@@ -179,7 +178,7 @@ const GroupsView = {
                     ${editButton}
                 </div>
 
-                <!-- Tabs: Scrollbar verstecken für cleaner Look auf Mobile -->
+                <!-- Tabs -->
                 <div class="flex gap-2 mb-4 md:mb-6 overflow-x-auto pb-2 border-b border-dark-border/50 no-scrollbar">
                     ${tabs.map(tab => `
                         <button onclick="GroupsView.switchTab('${tab.id}')" 
@@ -192,7 +191,7 @@ const GroupsView = {
                     `).join('')}
                 </div>
 
-                <!-- Content Area: Responsive Padding -->
+                <!-- Content Area -->
                 <div class="flex-1 overflow-y-auto bg-dark-card/50 rounded-bubble border border-dark-border p-4 md:p-6 min-h-[50vh]">
                     ${this.getTabContent(group)}
                 </div>
@@ -283,7 +282,6 @@ const GroupsView = {
             return !inGroupNew && !inGroupOld;
         });
 
-        // Responsive Modal: p-4 statt p-8 auf Mobile
         const html = `
             <div class="p-4 md:p-8 h-[500px] flex flex-col">
                 <div class="flex justify-between items-center mb-4 border-b border-dark-border pb-4">
@@ -336,22 +334,28 @@ const GroupsView = {
         });
     },
 
-    addMemberDirect(groupId, memberId) {
+    // --- FIX: Async & Await für sicheres Speichern ---
+    async addMemberDirect(groupId, memberId) {
         if(!App.can('manage_groups')) return;
         const group = Store.state.groups.find(g => g.id === groupId);
         const member = Store.state.members.find(m => m.id === memberId);
 
         if (member && group) {
+            // Arrays initialisieren falls nötig
             if (!Array.isArray(member.groups)) {
                 member.groups = [];
                 if (member.group && member.group !== 'Keine') member.groups.push(member.group);
             }
+            // Doppelte Einträge verhindern
             if (!member.groups.includes(group.name)) {
                 member.groups.push(group.name);
             }
-            member.group = null;
-            // UPDATE STATT SAVE
-            Store.update('members', member);
+            
+            // Aufräumen alter Felder
+            member.group = null; // Falls Spalte existiert, leeren
+            
+            // WICHTIG: Await nutzen, damit die Aktion abgeschlossen wird
+            await Store.update('members', member);
             
             App.closeModal();
             App.showToast(`${member.firstName} hinzugefügt`);
@@ -359,7 +363,7 @@ const GroupsView = {
         }
     },
 
-    removeMemberFromGroup(memberId) {
+    async removeMemberFromGroup(memberId) {
         if(!App.can('manage_groups')) return;
         const group = Store.state.groups.find(g => g.id === this.state.activeGroupId);
         if (!group) return;
@@ -372,8 +376,8 @@ const GroupsView = {
                 } else if (member.group === group.name) {
                     member.group = 'Keine';
                 }
-                // UPDATE STATT SAVE
-                Store.update('members', member);
+                
+                await Store.update('members', member);
                 
                 this.render(document.getElementById('content'));
                 App.showToast("Entfernt");
@@ -411,7 +415,7 @@ const GroupsView = {
         `;
     },
 
-    sendMessage(e, groupId) {
+    async sendMessage(e, groupId) {
         e.preventDefault();
         const input = e.target.elements.message;
         const text = input.value.trim();
@@ -423,12 +427,12 @@ const GroupsView = {
             group.chat.push({
                 id: Date.now(),
                 text: text,
-                sender: 'Ich', // Hier könnte man den echten Namen holen
+                sender: 'Ich',
                 isMe: true,
                 time: new Date().toISOString()
             });
-            // UPDATE STATT SAVE
-            Store.update('groups', group);
+            
+            await Store.update('groups', group);
             
             this.render(document.getElementById('content'));
             input.focus();
@@ -528,7 +532,6 @@ const GroupsView = {
                 </div>
 
                 <div class="flex-1 overflow-y-auto custom-scrollbar pr-2">
-                    <!-- Infos Mobil untereinander -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                         <div class="bg-dark-bg p-3 rounded-lg border border-dark-border">
                             <span class="text-xs text-dark-muted block">Wann?</span>
@@ -578,7 +581,7 @@ const GroupsView = {
         }
     },
 
-    setAttendance(eventId, status) {
+    async setAttendance(eventId, status) {
         const e = Store.state.events.find(ev => ev.id === eventId);
         if(e) {
             if(!e.attendance) e.attendance = {};
@@ -586,8 +589,7 @@ const GroupsView = {
             if (e.attendance[myId] === status) delete e.attendance[myId];
             else e.attendance[myId] = status;
             
-            // UPDATE STATT SAVE
-            Store.update('events', e);
+            await Store.update('events', e);
             
             this.openEventDetail(eventId);
             this.render(document.getElementById('content'));
@@ -627,14 +629,13 @@ const GroupsView = {
         App.openModal(html);
     },
 
-    handleUpdateEvent(e, eventId) {
+    async handleUpdateEvent(e, eventId) {
         e.preventDefault();
         const fd = new FormData(e.target);
         const isAllDay = fd.get('allDay') === 'on';
 
         const index = Store.state.events.findIndex(ev => ev.id === eventId);
         if(index !== -1) {
-            // Wir erstellen ein Update-Objekt basierend auf dem Original
             const updatedEvent = {
                 ...Store.state.events[index],
                 title: fd.get('title'),
@@ -644,8 +645,7 @@ const GroupsView = {
                 location: fd.get('location')
             };
             
-            // UPDATE STATT SAVE
-            Store.update('events', updatedEvent);
+            await Store.update('events', updatedEvent);
             
             App.closeModal();
             this.render(document.getElementById('content'));
@@ -653,19 +653,22 @@ const GroupsView = {
         }
     },
 
-    handleCalendarAdd(e, groupName) {
+    async handleCalendarAdd(e, groupName) {
         e.preventDefault();
         const fd = new FormData(e.target);
         const isAllDay = fd.get('allDay') === 'on';
 
-        Store.add('events', { id: Date.now(), title: fd.get('title'), date: fd.get('date'), time: isAllDay ? null : fd.get('time'), allDay: isAllDay, location: fd.get('location'), comment: fd.get('comment'), group: groupName, attendance: {} });
+        await Store.add('events', { id: Date.now(), title: fd.get('title'), date: fd.get('date'), time: isAllDay ? null : fd.get('time'), allDay: isAllDay, location: fd.get('location'), comment: fd.get('comment'), group: groupName, attendance: {} });
         App.closeModal();
         this.render(document.getElementById('content'));
     },
 
-    deleteGroupEvent(id) {
+    async deleteGroupEvent(id) {
         if(!App.can('manage_groups')) return;
-        if(confirm("Löschen?")) { Store.remove('events', id); this.render(document.getElementById('content')); }
+        if(confirm("Löschen?")) { 
+            await Store.remove('events', id); 
+            this.render(document.getElementById('content')); 
+        }
     },
 
     // --- TAB 4: CLOUD / DATEIEN ---
@@ -690,36 +693,36 @@ const GroupsView = {
 
     openFolder(folderId) { this.state.currentFolderId = folderId; this.render(document.getElementById('content')); },
     
-    createFolder(groupId) { 
+    async createFolder(groupId) { 
         if(!App.can('manage_groups')) return; 
         const name = prompt("Name des Ordners:"); 
         if (name) { 
             const group = Store.state.groups.find(g => g.id === groupId); 
             if(!group.files) group.files = [];
             group.files.push({ id: Date.now(), parentId: this.state.currentFolderId, name: name, type: 'folder' }); 
-            Store.update('groups', group); 
+            await Store.update('groups', group); 
             this.render(document.getElementById('content')); 
         } 
     },
     
-    uploadFile(groupId) { 
+    async uploadFile(groupId) { 
         if(!App.can('manage_groups')) return; 
         const name = prompt("Dateiname:"); 
         if (name) { 
             const group = Store.state.groups.find(g => g.id === groupId); 
             if(!group.files) group.files = [];
             group.files.push({ id: Date.now(), parentId: this.state.currentFolderId, name: name, type: 'file' }); 
-            Store.update('groups', group); 
+            await Store.update('groups', group); 
             this.render(document.getElementById('content')); 
         } 
     },
     
-    deleteFile(groupId, itemId) { 
+    async deleteFile(groupId, itemId) { 
         if(!App.can('manage_groups')) return; 
         if(!confirm("Löschen?")) return; 
         const group = Store.state.groups.find(g => g.id === groupId); 
         group.files = group.files.filter(f => f.id !== itemId); 
-        Store.update('groups', group); 
+        await Store.update('groups', group); 
         this.render(document.getElementById('content')); 
     },
 
@@ -728,21 +731,33 @@ const GroupsView = {
     closeGroup() { this.state.activeGroupId = null; this.render(document.getElementById('content')); },
     switchTab(id) { this.state.activeTab = id; this.render(document.getElementById('content')); },
     
-    delete(id) { if(!App.can('manage_groups')) return; if(confirm("Löschen?")) { Store.remove('groups', id); this.render(document.getElementById('content')); } },
+    async delete(id) { 
+        if(!App.can('manage_groups')) return; 
+        if(confirm("Löschen?")) { 
+            await Store.remove('groups', id); 
+            this.render(document.getElementById('content')); 
+        } 
+    },
     
-    openAddModal() { if(!App.can('manage_groups')) return; App.openModal(`<div class="p-4"><div class="flex justify-between items-center mb-6"><h3 class="text-xl font-bold text-white">Neu</h3><button onclick="App.closeModal()"><i class="fa-solid fa-times text-xl"></i></button></div><form onsubmit="GroupsView.handleAdd(event)" class="space-y-4"><div><label class="text-muted">Name</label><input type="text" name="name" required class="form-input"></div><button type="submit" class="btn-primary w-full">Erstellen</button></form></div>`); },
+    openAddModal() { if(!App.can('manage_groups')) return; App.openModal(`<div class="p-4"><div class="flex justify-between items-center mb-6"><h3 class="text-xl font-bold text-white">Neu</h3><button onclick="App.closeModal()"><i class="fa-solid fa-times text-xl"></i></button></div><form onsubmit="GroupsView.handleAdd(event)" class="space-y-4"><div><label class="text-muted">Name</label><input type="text" name="name" required class="form-input"></div><button type="submit" class="btn-green w-full">Erstellen</button></form></div>`); },
     
-    handleAdd(e) { e.preventDefault(); const name = new FormData(e.target).get('name'); Store.add('groups', { id: Date.now(), name: name, chat: [], files: [] }); App.closeModal(); this.render(document.getElementById('content')); },
+    async handleAdd(e) { 
+        e.preventDefault(); 
+        const name = new FormData(e.target).get('name'); 
+        await Store.add('groups', { id: Date.now(), name: name, chat: [], files: [] }); 
+        App.closeModal(); 
+        this.render(document.getElementById('content')); 
+    },
 
     openEditGroupModal(groupId) { if(!App.can('manage_groups')) return; const group = Store.state.groups.find(g => g.id === groupId); App.openModal(`<div class="p-4"><div class="flex justify-between items-center mb-6"><h3 class="text-xl font-bold text-white">Bearbeiten</h3><button onclick="App.closeModal()"><i class="fa-solid fa-times text-xl"></i></button></div><form onsubmit="GroupsView.handleUpdateGroup(event, ${groupId})" class="space-y-4"><div><label class="text-muted">Name</label><input type="text" name="name" value="${group.name}" required class="form-input"></div><button type="submit" class="btn-primary w-full">Speichern</button></form></div>`); },
     
-    handleUpdateGroup(e, groupId) { 
+    async handleUpdateGroup(e, groupId) { 
         e.preventDefault(); 
         const name = new FormData(e.target).get('name'); 
         const group = Store.state.groups.find(g => g.id === groupId); 
         if(group) { 
             group.name = name; 
-            Store.update('groups', group); 
+            await Store.update('groups', group); 
             App.closeModal(); 
             this.render(document.getElementById('content')); 
         } 
