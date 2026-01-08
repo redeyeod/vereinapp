@@ -195,8 +195,14 @@ const MembersView = {
         }
     },
 
+    // --- NEUE FUNKTIONEN FÜR PASSWORT & MODAL ---
+
     openAddModal() {
-        if(!App.can('manage_members')) return;
+        if(!App.can('manage_members')) {
+            App.showToast("Keine Berechtigung", "error");
+            return;
+        }
+        
         const roleOptions = this.standardRoles.map(r => `<option value="${r}">${r}</option>`).join('');
 
         const html = `
@@ -318,72 +324,89 @@ const MembersView = {
 
     async handleAdd(e) {
         e.preventDefault(); 
-        const fd = new FormData(e.target);
-        let role = fd.get('roleSelect');
-        if (role === 'custom') role = fd.get('customRole') || 'Mitglied';
+        // Button Feedback
+        const btn = e.target.querySelector('button[type="submit"]');
+        const originalText = btn ? btn.innerText : 'Speichern';
+        if(btn) {
+            btn.innerText = "Speichere...";
+            btn.disabled = true;
+        }
 
-        // Passwort generieren
-        const generatedPassword = this.generatePassword();
-        const email = fd.get('email');
-        const firstName = fd.get('firstName');
+        try {
+            const fd = new FormData(e.target);
+            let role = fd.get('roleSelect');
+            if (role === 'custom') role = fd.get('customRole') || 'Mitglied';
 
-        const newMember = { 
-            firstName: firstName, 
-            lastName: fd.get('lastName'),
-            street: fd.get('street'),
-            houseNumber: fd.get('houseNumber'),
-            zip: fd.get('zip'),
-            city: fd.get('city'),
-            email: email,
-            phone: fd.get('phone'),
-            birthdate: fd.get('birthdate'),
-            role: role, 
-            status: 'active',
-            groups: []
-            // Hinweis: In einem echten Szenario würden wir das Passwort hier NICHT im Klartext speichern,
-            // sondern über eine Edge Function den Auth-User anlegen. 
-            // Für diese Simulation speichern wir es nicht, sondern zeigen es nur an.
-        };
-        
-        await Store.add('members', newMember);
-        
-        // Modal zur Bestätigung & Email Simulation
-        const mailSubject = encodeURIComponent("Willkommen im Verein!");
-        const mailBody = encodeURIComponent(`Hallo ${firstName},\n\ndein Account wurde erfolgreich angelegt.\n\nDeine Zugangsdaten:\nE-Mail: ${email}\nPasswort: ${generatedPassword}\n\nBitte melde dich an und ändere dein Passwort.\n\nViele Grüße,\nDer Vorstand`);
-        const mailtoLink = `mailto:${email}?subject=${mailSubject}&body=${mailBody}`;
+            const firstName = fd.get('firstName');
+            const email = fd.get('email');
+            
+            // Zufälliges Passwort generieren (wird sicher über MembersView referenziert)
+            const generatedPassword = MembersView.generatePassword();
 
-        const successHtml = `
-            <div class="p-8 text-center">
-                <div class="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center text-green-500 text-3xl mx-auto mb-4 border border-green-500/20">
-                    <i class="fa-solid fa-check"></i>
-                </div>
-                <h3 class="text-2xl font-bold text-white mb-2">Mitglied angelegt!</h3>
-                <p class="text-dark-muted text-sm mb-6">Das Profil wurde erfolgreich gespeichert.</p>
-                
-                <div class="bg-dark-bg border border-dark-border rounded-xl p-4 mb-6 text-left relative group">
-                    <p class="text-xs text-dark-muted uppercase font-bold mb-1">Generiertes Passwort</p>
-                    <div class="flex justify-between items-center">
-                        <code class="text-blue-400 font-mono text-lg select-all">${generatedPassword}</code>
-                        <button onclick="navigator.clipboard.writeText('${generatedPassword}'); App.showToast('Passwort kopiert')" class="text-dark-muted hover:text-white p-2" title="Kopieren">
-                            <i class="fa-regular fa-copy"></i>
-                        </button>
+            const newMember = { 
+                firstName: firstName, 
+                lastName: fd.get('lastName'),
+                street: fd.get('street'),
+                houseNumber: fd.get('houseNumber'),
+                zip: fd.get('zip'),
+                city: fd.get('city'),
+                email: email,
+                phone: fd.get('phone'),
+                birthdate: fd.get('birthdate'),
+                role: role, 
+                status: 'active',
+                groups: []
+            };
+            
+            await Store.add('members', newMember);
+            
+            // --- SUCCESS MODAL ---
+            const mailSubject = encodeURIComponent("Willkommen im Verein!");
+            const mailBody = encodeURIComponent(`Hallo ${firstName},\n\ndein Account wurde erfolgreich angelegt.\n\nDeine Zugangsdaten:\nE-Mail: ${email}\nPasswort: ${generatedPassword}\n\nBitte melde dich an und ändere dein Passwort.\n\nViele Grüße,\nDer Vorstand`);
+            const mailtoLink = `mailto:${email}?subject=${mailSubject}&body=${mailBody}`;
+
+            const successHtml = `
+                <div class="p-8 text-center">
+                    <div class="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center text-green-500 text-3xl mx-auto mb-4 border border-green-500/20">
+                        <i class="fa-solid fa-check"></i>
                     </div>
-                    <p class="text-[10px] text-red-400 mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Bitte sofort notieren oder versenden!</p>
-                </div>
+                    <h3 class="text-2xl font-bold text-white mb-2">Mitglied angelegt!</h3>
+                    <p class="text-dark-muted text-sm mb-6">Das Profil wurde erfolgreich gespeichert.</p>
+                    
+                    <div class="bg-dark-bg border border-dark-border rounded-xl p-4 mb-6 text-left relative group">
+                        <p class="text-xs text-dark-muted uppercase font-bold mb-1">Generiertes Passwort</p>
+                        <div class="flex justify-between items-center">
+                            <code class="text-blue-400 font-mono text-lg select-all">${generatedPassword}</code>
+                            <button onclick="navigator.clipboard.writeText('${generatedPassword}'); App.showToast('Passwort kopiert')" class="text-dark-muted hover:text-white p-2 transition-colors" title="Kopieren">
+                                <i class="fa-regular fa-copy"></i>
+                            </button>
+                        </div>
+                        <p class="text-[10px] text-red-400 mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Bitte sofort notieren oder versenden!</p>
+                    </div>
 
-                <div class="flex gap-3">
-                    <button onclick="App.closeModal()" class="flex-1 py-3 rounded-xl border border-dark-border text-dark-muted hover:text-white transition-colors">
-                        Schließen
-                    </button>
-                    <a href="${mailtoLink}" target="_blank" class="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-envelope"></i> E-Mail senden
-                    </a>
+                    <div class="flex gap-3">
+                        <button onclick="App.closeModal()" class="flex-1 py-3 rounded-xl border border-dark-border text-dark-muted hover:text-white transition-colors">
+                            Schließen
+                        </button>
+                        <a href="${mailtoLink}" target="_blank" class="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-envelope"></i> E-Mail senden
+                        </a>
+                    </div>
                 </div>
-            </div>
-        `;
-        
-        App.openModal(successHtml);
-        this.updateList();
+            `;
+            
+            App.openModal(successHtml);
+            // Liste aktualisieren
+            this.updateList();
+
+        } catch(err) {
+            console.error("Fehler beim Erstellen:", err);
+            App.showToast("Fehler: " + err.message, "error");
+            if(btn) {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
+        }
     },
 
     async handleUpdate(e, id) {
