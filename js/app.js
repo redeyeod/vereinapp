@@ -1,283 +1,303 @@
 /**
  * =============================================================================
- * APP CORE LOGIC (Safe Mode v2.2)
- * Enthält Navigation, Auth-Zustand und Berechtigungen mit Admin-Override
+ * APP CORE LOGIC (Fixed Global Scope)
+ * Steuert Navigation, Login, Berechtigungen und UI
  * =============================================================================
  */
 
-// 1. App SOFORT global verfügbar machen
-window.App = {
+const App = {
+    // Lokaler State
     state: {
-        currentUser: null,
-        theme: localStorage.getItem('vm_theme') || 'dark'
+        lastRead: parseInt(localStorage.getItem('vm_last_read')) || 0,
+        theme: localStorage.getItem('vm_theme') || 'dark',
+        currentUser: null 
     },
 
     /**
-     * Prüft, ob der aktuelle Benutzer eine bestimmte Aktion ausführen darf
-     * @param {string} action - Die zu prüfende Berechtigung
-     * @returns {boolean}
+     * Startet die Anwendung
      */
-    can: function(action) {
-        if (!this.state.currentUser) return false;
-        
-        // Hard-Override für die Admin-Email
-        if (this.state.currentUser.email === 'admin@gmail.com') return true;
-        
-        const role = (this.state.currentUser.role || 'Mitglied').trim();
-        
-        // Super-Admins / Vorstände dürfen immer alles
-        const adminRoles = [
-            '1. Vorstand', '2. Vorstand', '3. Vorstand', '4. Vorstand', 
-            'Admin', 'Vorstand', 'Präsident', 'Vize-Präsident', 'Super Admin'
-        ];
-        
-        if (adminRoles.includes(role)) return true;
+    async init() {
+        console.log("App Init gestartet...");
 
-        const permissions = {
-            'manage_workhours': ['Kassenwart', 'Kassenprüfer', 'Trainer'],
-            'manage_news': ['Protokollant', 'Schriftführer'],
-            'manage_docs': ['Schriftführer'],
-            'manage_members': [], 
-            'manage_groups': ['Abteilungsleiter']
+        // 1. Warte auf Store
+        let attempts = 0;
+        while (typeof Store === 'undefined' && attempts < 20) {
+            await new Promise(r => setTimeout(r, 100));
+            attempts++;
+        }
+
+        if (typeof Store === 'undefined') {
+            console.error("Store.js nicht geladen!");
+            return;
+        }
+
+        // 2. Store initialisieren
+        await Store.init();
+
+        // 3. Reaktivität: Wenn Daten aus der Cloud kommen -> UI Update
+        Store.onUpdate = () => {
+            this.updateNotificationDot();
+            
+            const activeTag = document.activeElement ? document.activeElement.tagName : '';
+            // Kein automatischer Refresh während der User tippt (verhindert Cursor-Sprünge)
+            if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+                 if (this.state.currentUser) {
+                     this.router(Store.state.currentView || 'dashboard');
+                 }
+            }
         };
 
-        return permissions[action] ? permissions[action].includes(role) : false;
-    },
-
-    // Init Funktion
-    init: async function() {
-        console.log("App: Init gestartet...");
+        // 4. Setup
+        this.loadCurrentUser();
+        this.initTheme();
+        this.injectStyles();
         
-        try {
-            if (typeof Store === 'undefined') {
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-
-            if (typeof Store === 'undefined') {
-                console.warn("WARNUNG: Store.js nicht gefunden. Nutze lokalen Fallback.");
-                window.Store = {
-                    state: { members: [], groups: [], news: [], currentView: 'dashboard' },
-                    init: async () => { console.log("Fallback Store Init"); },
-                    fetchTable: async () => {},
-                    add: async () => {},
-                    update: async () => {},
-                    remove: async () => {},
-                    get: () => []
-                };
-            }
-
-            try {
-                await Store.init();
-                Store.onUpdate = () => {
-                    if (this.state.currentUser) this.router(Store.state.currentView || 'dashboard');
-                };
-            } catch (storeErr) {
-                console.error("Store Init fehlgeschlagen:", storeErr);
-            }
-
-            this.loadCurrentUser();
-
-            if (this.state.currentUser) {
-                this.router('dashboard');
-            } else {
-                const authView = document.getElementById('auth-view');
-                const appView = document.getElementById('app-view');
-                if(authView) authView.classList.remove('hidden');
-                if(appView) appView.classList.add('hidden');
-            }
-
-        } catch (e) {
-            console.error("Kritischer Fehler im App Init:", e);
-            document.getElementById('auth-view').classList.remove('hidden');
+        // 5. Routing Start
+        if (this.state.currentUser || localStorage.getItem('vm_current_user_id')) {
+            const startView = Store.state.currentView || 'dashboard';
+            this.router(startView);
+            this.updateNotificationDot();
+        } else {
+            this.showAuthView();
         }
     },
 
-    // Login Handler
-    handleLogin: async function(e) {
+    // --- AUTHENTICATION ---
+
+    async handleLogin(e) {
         if(e) e.preventDefault();
-        const btn = e.target.querySelector('button');
-        const originalText = btn ? btn.innerText : 'Login';
-        if(btn) { btn.innerText = "Lade..."; btn.disabled = true; }
         
+        const btn = e.target.querySelector('button');
+        const originalText = btn.innerText;
+        btn.innerText = "Lade...";
+        btn.disabled = true;
+
+        const errorDiv = document.getElementById('login-error');
+        if(errorDiv) errorDiv.classList.add('hidden');
+
         const fd = new FormData(e.target);
         const email = fd.get('email');
         const password = fd.get('password');
 
         try {
-            if(typeof supabase === 'undefined' || typeof CONFIG === 'undefined') {
-                alert("Fehler: Supabase Verbindung fehlt.");
-                return;
+            if (typeof supabase === 'undefined' || typeof CONFIG === 'undefined') {
+                throw new Error("Verbindungsinformationen fehlen.");
             }
-
             const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
             const { data, error } = await _sb.auth.signInWithPassword({ email, password });
 
             if (error) {
+                // Backdoor für Admin
                 if(email === 'admin@gmail.com' && password === 'admin') {
-                    this.loginSuccess({ id: '999', firstName: 'Admin', role: 'Admin', email: email });
+                    this.loginSuccess({ 
+                        id: '999', firstName: 'Super', lastName: 'Admin', 
+                        email: email, role: 'Admin', status: 'active' 
+                    });
                     return;
                 }
-                throw error;
+                throw new Error("Login fehlgeschlagen. Daten prüfen.");
             }
 
             localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
-            
-            if (typeof Store !== 'undefined' && Store.fetchTable) {
-                await Store.fetchTable('members');
-            }
+            if (Store.state.members.length === 0) await Store.fetchTable('members');
             
             let user = Store.state.members.find(m => m.email === email);
             if (!user) {
-                const isSystemAdmin = email === 'admin@gmail.com';
-                user = { 
-                    id: data.user.id, 
-                    email: email, 
-                    firstName: isSystemAdmin ? 'System' : 'User', 
-                    lastName: isSystemAdmin ? 'Admin' : '',
-                    role: isSystemAdmin ? 'Admin' : 'Mitglied' 
-                };
+                user = { id: data.user.id, email: email, firstName: 'User', role: email === 'admin@gmail.com' ? 'Admin' : 'Mitglied' };
             }
-            
-            // Sicherstellen, dass die Rolle für diesen Account immer Admin ist
-            if (email === 'admin@gmail.com') user.role = 'Admin';
 
             this.loginSuccess(user);
 
         } catch (err) {
             console.error(err);
-            alert("Login fehlgeschlagen: " + (err.message || "Unbekannter Fehler"));
+            if(errorDiv) {
+                errorDiv.textContent = err.message;
+                errorDiv.classList.remove('hidden');
+            } else {
+                this.showToast(err.message);
+            }
         } finally {
-            if(btn) { btn.innerText = originalText; btn.disabled = false; }
+            btn.innerText = originalText;
+            btn.disabled = false;
         }
     },
 
-    loginSuccess: function(user) {
+    loginSuccess(user) {
         if (!user) return;
-        
-        // Finaler Check vor dem Setzen des State
         if (user.email === 'admin@gmail.com') user.role = 'Admin';
         
-        this.state.currentUser = user;
         localStorage.setItem('vm_current_user_id', user.id);
+        this.state.currentUser = user;
         
-        const authView = document.getElementById('auth-view');
-        const appView = document.getElementById('app-view');
-        if(authView) authView.classList.add('hidden');
-        if(appView) appView.classList.remove('hidden');
+        document.getElementById('auth-view').classList.add('hidden');
+        document.getElementById('app-view').classList.remove('hidden');
         
-        const nameEl = document.getElementById('current-user-name');
-        const roleEl = document.getElementById('current-user-role');
-        if(nameEl) nameEl.textContent = user.firstName || 'User';
-        if(roleEl) roleEl.textContent = user.role || 'Mitglied';
-
+        this.updateHeaderUI();
         this.router('dashboard');
     },
 
-    logout: function() {
+    logout() {
         if(confirm("Abmelden?")) {
-            localStorage.clear();
+            localStorage.removeItem('vm_current_user_id');
+            localStorage.removeItem('vm_supabase_session');
             location.reload();
         }
     },
 
-    loadCurrentUser: function() {
+    loadCurrentUser() {
         const sessionStr = localStorage.getItem('vm_supabase_session');
-        if(sessionStr) {
-            try {
-                const session = JSON.parse(sessionStr);
-                if(!session || !session.user) return;
+        if(!sessionStr || sessionStr === "undefined") return;
 
-                const email = session.user.email;
-                const isSystemAdmin = email === 'admin@gmail.com';
-
-                // Temporäres Objekt
-                let userObj = { 
-                    email: email, 
-                    role: isSystemAdmin ? 'Admin' : 'Mitglied', 
-                    firstName: isSystemAdmin ? 'System' : 'User', 
-                    id: session.user.id 
-                };
-                
-                if(typeof Store !== 'undefined' && Store.state.members) {
-                     const realUser = Store.state.members.find(m => m.email === email);
-                     if(realUser) {
-                         userObj = { ...realUser };
-                     }
-                }
-                
-                // FORCE ADMIN ROLLEN-OVERRIDE
-                if (email === 'admin@gmail.com') userObj.role = 'Admin';
-
-                this.state.currentUser = userObj;
-                
-                // UI Update
-                const nameEl = document.getElementById('current-user-name');
-                const roleEl = document.getElementById('current-user-role');
-                if(nameEl) nameEl.textContent = userObj.firstName;
-                if(roleEl) roleEl.textContent = userObj.role;
-
-            } catch(e) { console.error("Session Restore Error", e); }
-        }
-    },
-
-    router: function(viewName) {
-        const container = document.getElementById('content');
-        if(!container) return;
-        
-        const subtitle = document.getElementById('page-subtitle');
-        if(subtitle) subtitle.textContent = viewName.charAt(0).toUpperCase() + viewName.slice(1);
-
-        container.innerHTML = '';
-        
-        let viewObj = null;
         try {
-            switch(viewName) {
-                case 'dashboard': viewObj = (typeof DashboardView !== 'undefined') ? DashboardView : null; break;
-                case 'members': viewObj = (typeof MembersView !== 'undefined') ? MembersView : null; break;
-                case 'groups': viewObj = (typeof GroupsView !== 'undefined') ? GroupsView : null; break;
-                case 'calendar': viewObj = (typeof CalendarView !== 'undefined') ? CalendarView : null; break;
-                case 'news': viewObj = (typeof NewsView !== 'undefined') ? NewsView : null; break;
-                case 'documents': viewObj = (typeof DocsView !== 'undefined') ? DocsView : null; break;
-                case 'messenger': viewObj = (typeof MessengerView !== 'undefined') ? MessengerView : null; break;
-                case 'profile': viewObj = (typeof ProfileView !== 'undefined') ? ProfileView : null; break;
-                case 'workhours': viewObj = (typeof WorkHoursView !== 'undefined') ? WorkHoursView : null; break;
-            }
-        } catch(e) { console.warn("Router Switch Error", e); }
+            const session = JSON.parse(sessionStr);
+            if (!session || !session.user) return;
 
-        if (!viewObj) {
-             const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
-             if (typeof window[viewObjName] !== 'undefined') {
-                 viewObj = window[viewObjName];
-             }
-        }
-        
-        if (viewObj && typeof viewObj.render === 'function') {
-            try {
-                viewObj.render(container);
-            } catch(err) {
-                console.error(`Fehler beim Rendern von ${viewName}:`, err);
-                container.innerHTML = `<div class="text-red-400">Fehler in View ${viewName}: ${err.message}</div>`;
+            const email = session.user.email;
+            let user = Store.state.members.find(m => m.email === email);
+            
+            if(!user) {
+                user = { id: session.user.id, email: email, firstName: 'User', role: email === 'admin@gmail.com' ? 'Admin' : 'Mitglied' };
             }
-        } else {
-            if(viewName === 'dashboard') {
-                container.innerHTML = `<div class="p-6 bg-slate-800 rounded-xl text-white border border-slate-700"><h2>Dashboard</h2><p>Willkommen ${this.state.currentUser?.firstName || 'Gast'}!</p></div>`;
-            } else {
-                container.innerHTML = `<div class="text-slate-400 p-4">Ansicht "${viewName}" wird geladen...</div>`;
-            }
+
+            if (email === 'admin@gmail.com') user.role = 'Admin';
+            this.state.currentUser = user;
+            this.updateHeaderUI();
+        } catch(e) { 
+            console.error("User Load Error", e); 
+            localStorage.removeItem('vm_supabase_session');
         }
     },
+
+    updateHeaderUI() {
+        const user = this.state.currentUser;
+        if(!user) return;
+        const nameEl = document.getElementById('current-user-name');
+        const roleEl = document.getElementById('current-user-role');
+        if(nameEl) nameEl.textContent = user.firstName;
+        if(roleEl) roleEl.textContent = user.role;
+    },
+
+    // --- ROUTER ---
     
-    showToast: function(msg) {
-        const t = document.getElementById('toast');
-        if(t) { t.textContent = msg; t.className = "show"; setTimeout(() => t.className = "", 3000); }
+    router(viewName) {
+        if(!viewName) viewName = 'dashboard';
+        Store.state.currentView = viewName;
+        
+        const container = document.getElementById('content');
+        const subtitle = document.getElementById('page-subtitle');
+        
+        if (container) {
+            container.innerHTML = ''; 
+        }
+
+        const titles = {
+            'dashboard': 'Dashboard',
+            'members': 'Mitglieder',
+            'groups': 'Abteilungen',
+            'calendar': 'Kalender',
+            'news': 'News',
+            'documents': 'Dokumente',
+            'messenger': 'Chat',
+            'profile': 'Profil',
+            'workhours': 'Stunden'
+        };
+        if(subtitle) subtitle.textContent = titles[viewName] || 'Übersicht';
+
+        // View-Lookup über das globale window Objekt (daher muss jede View dort registriert sein)
+        const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
+        // Spezialfall für messenger -> MessengerView etc.
+        let viewObj = window[viewObjName];
+
+        // Fallback für manuelle Switch-Logik
+        if(!viewObj) {
+            switch(viewName) {
+                case 'dashboard': viewObj = window.DashboardView; break;
+                case 'members': viewObj = window.MembersView; break;
+                case 'groups': viewObj = window.GroupsView; break;
+                case 'calendar': viewObj = window.CalendarView; break;
+                case 'news': viewObj = window.NewsView; break;
+                case 'documents': viewObj = window.DocsView; break;
+                case 'messenger': viewObj = window.MessengerView; break;
+                case 'profile': viewObj = window.ProfileView; break;
+                case 'workhours': viewObj = window.WorkHoursView; break;
+            }
+        }
+
+        if (viewObj && typeof viewObj.render === 'function') {
+            viewObj.render(container);
+        } else {
+            console.warn(`View "${viewName}" konnte nicht geladen werden.`);
+            if(container) container.innerHTML = `<p class="text-dark-muted">Lade ${viewName}...</p>`;
+        }
     },
-    toggleNotifications: function() { this.showToast('Keine Nachrichten'); },
-    openSettingsModal: function() { this.showToast('Einstellungen...'); }
+
+    // --- PERMISSIONS ---
+    can(action) {
+        const user = this.state.currentUser;
+        if (!user) return false; 
+        if (user.email === 'admin@gmail.com') return true;
+
+        const role = user.role || 'Mitglied';
+        const adminRoles = ['1. Vorstand', '2. Vorstand', '3. Vorstand', '4. Vorstand', 'Präsident', 'Vize-Präsident', 'Admin', 'Vorstand'];
+        const managerRoles = ['Kassenwart', 'Protokollant', 'Trainer', 'Abteilungsleiter'];
+
+        if (adminRoles.includes(role)) return true;
+
+        const permissions = {
+            'manage_workhours': managerRoles.includes(role),
+            'manage_members': false,
+            'manage_groups': role === 'Abteilungsleiter',
+            'manage_news': role === 'Protokollant'
+        };
+
+        return permissions[action] || false;
+    },
+
+    // --- UI HELPERS ---
+    showAuthView() {
+        document.getElementById('auth-view').classList.remove('hidden');
+        document.getElementById('app-view').classList.add('hidden');
+    },
+
+    openModal(htmlContent) { 
+        const overlay = document.getElementById('modal-overlay');
+        const content = document.getElementById('modal-content');
+        if (overlay && content) {
+            content.innerHTML = htmlContent;
+            overlay.classList.remove('hidden');
+        }
+    },
+
+    closeModal() { 
+        const overlay = document.getElementById('modal-overlay');
+        if (overlay) overlay.classList.add('hidden');
+    },
+
+    showToast(message) { 
+        const toast = document.getElementById("toast"); 
+        if (toast) { 
+            toast.textContent = message; 
+            toast.classList.add('show'); 
+            setTimeout(() => { toast.classList.remove('show'); }, 3000); 
+        } 
+    },
+
+    updateNotificationDot() { /* Logik für den roten Punkt am Bell-Icon */ },
+    initTheme() { this.applyTheme(); },
+    toggleTheme() { 
+        this.state.theme = this.state.theme === 'dark' ? 'light' : 'dark'; 
+        localStorage.setItem('vm_theme', this.state.theme); 
+        this.applyTheme(); 
+    },
+    applyTheme() {
+        const root = document.documentElement;
+        if (this.state.theme === 'dark') root.classList.add('dark');
+        else root.classList.remove('dark');
+    },
+    injectStyles() { /* Form-Styles etc. */ }
 };
 
-// Start
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => App.init());
-} else {
-    App.init();
-}
+// WICHTIG: App global verfügbar machen!
+window.App = App;
+
+document.addEventListener('DOMContentLoaded', () => { App.init(); });
