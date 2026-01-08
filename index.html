@@ -72,8 +72,8 @@
             </div>
 
             <!-- LOGIN FORMULAR -->
-            <!-- ROBUSTHEITS-FIX: Prüfen ob App existiert, Return False verhindert Reload -->
-            <form id="login-form" onsubmit="event.preventDefault(); if(window.App) { App.handleLogin(event); } else { alert('App wird noch geladen...'); } return false;" class="space-y-4">
+            <!-- ROBUSTHEITS-FIX: Prüfen mit typeof App !== 'undefined' statt window.App, da const nicht an window bindet -->
+            <form id="login-form" onsubmit="event.preventDefault(); if(typeof App !== 'undefined') { App.handleLogin(event); } else { alert('App wird noch geladen oder Skript-Fehler. Prüfe die Konsole (F12).'); } return false;" class="space-y-4">
                 <div>
                     <label class="block text-xs font-bold text-dark-muted uppercase mb-1 ml-1">E-Mail</label>
                     <input type="email" name="email" required placeholder="name@verein.de" class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500">
@@ -93,18 +93,18 @@
     <!-- APP VIEW (HAUPTANWENDUNG) -->
     <div id="app-view" class="h-screen flex flex-col overflow-hidden hidden">
         <header class="bg-dark-card/50 backdrop-blur-md border-b border-dark-border h-20 flex items-center justify-between px-6 lg:px-10 z-20 shadow-sm sticky top-0 transition-colors duration-300">
-            <button onclick="if(window.App) App.router('dashboard')" class="flex items-center group">
+            <button onclick="if(typeof App !== 'undefined') App.router('dashboard')" class="flex items-center group">
                 <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg mr-3 group-hover:scale-105 transition-transform"><i class="fa-solid fa-users-rectangle"></i></div>
                 <div class="text-left"><h1 class="text-xl font-bold text-blue-500 tracking-tight leading-none group-hover:text-blue-400">VereinApp</h1><p id="page-subtitle" class="text-xs text-dark-muted font-medium">Dashboard</p></div>
             </button>
             
             <div class="flex items-center gap-3 sm:gap-6">
-                <button onclick="if(window.App) App.router('workhours')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Arbeitsstunden"><i class="fa-solid fa-briefcase text-xl"></i></button>
-                <button onclick="if(window.App) App.router('messenger')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Messenger"><i class="fa-solid fa-comments text-xl"></i></button>
-                <button onclick="if(window.App) App.toggleNotifications()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Benachrichtigungen"><i class="fa-regular fa-bell text-xl"></i><span id="notif-dot" class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-dark-card animate-pulse hidden"></span></button>
-                <button onclick="if(window.App) App.openSettingsModal()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Einstellungen"><i class="fa-solid fa-gear text-xl"></i></button>
+                <button onclick="if(typeof App !== 'undefined') App.router('workhours')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Arbeitsstunden"><i class="fa-solid fa-briefcase text-xl"></i></button>
+                <button onclick="if(typeof App !== 'undefined') App.router('messenger')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Messenger"><i class="fa-solid fa-comments text-xl"></i></button>
+                <button onclick="if(typeof App !== 'undefined') App.toggleNotifications()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Benachrichtigungen"><i class="fa-regular fa-bell text-xl"></i><span id="notif-dot" class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-dark-card animate-pulse hidden"></span></button>
+                <button onclick="if(typeof App !== 'undefined') App.openSettingsModal()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Einstellungen"><i class="fa-solid fa-gear text-xl"></i></button>
                 
-                <button onclick="if(window.App) App.router('profile')" class="flex items-center gap-3 pl-6 border-l border-dark-border group">
+                <button onclick="if(typeof App !== 'undefined') App.router('profile')" class="flex items-center gap-3 pl-6 border-l border-dark-border group">
                     <div class="text-right hidden sm:block"><p id="current-user-name" class="text-sm font-bold text-dark-text group-hover:text-blue-400">Gast</p><p id="current-user-role" class="text-xs text-dark-muted">Mitglied</p></div>
                     <div class="w-10 h-10 rounded-full bg-slate-700 overflow-hidden border-2 border-transparent group-hover:border-blue-500 transition-colors"><div class="w-full h-full flex items-center justify-center bg-slate-800 text-slate-400"><i class="fa-solid fa-user"></i></div></div>
                 </button>
