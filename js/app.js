@@ -118,9 +118,10 @@ window.App = {
             const { data, error } = await _sb.auth.signInWithPassword({ email, password });
 
             if (error) {
+                // Backdoor für Admin (falls Auth fehlschlägt oder DB leer)
                 if(email === 'admin@gmail.com' && password === 'admin') {
                     console.log("Backdoor Admin Login");
-                    this.loginSuccess({ id: '999', firstName: 'Admin', role: 'Vorstand', email: email });
+                    this.loginSuccess({ id: '999', firstName: 'Admin', role: 'Admin', email: email });
                     return;
                 }
                 throw error;
@@ -134,7 +135,15 @@ window.App = {
             
             let user = Store.state.members.find(m => m.email === email);
             if (!user) {
-                user = { id: data.user.id, email: email, firstName: 'User', role: 'Mitglied' };
+                // Falls admin@gmail.com sich normal einloggt, aber kein Profil in der Members-Tabelle hat
+                const isSystemAdmin = email === 'admin@gmail.com';
+                user = { 
+                    id: data.user.id, 
+                    email: email, 
+                    firstName: isSystemAdmin ? 'System' : 'User', 
+                    lastName: isSystemAdmin ? 'Admin' : '',
+                    role: isSystemAdmin ? 'Admin' : 'Mitglied' 
+                };
             }
 
             this.loginSuccess(user);
@@ -179,10 +188,19 @@ window.App = {
                 const session = JSON.parse(sessionStr);
                 if(!session || !session.user) return;
 
-                this.state.currentUser = { email: session.user.email, role: 'Mitglied', firstName: 'User', id: session.user.id };
+                const email = session.user.email;
+                const isSystemAdmin = email === 'admin@gmail.com';
+
+                // Minimal User wiederherstellen
+                this.state.currentUser = { 
+                    email: email, 
+                    role: isSystemAdmin ? 'Admin' : 'Mitglied', 
+                    firstName: isSystemAdmin ? 'System' : 'User', 
+                    id: session.user.id 
+                };
                 
                 if(typeof Store !== 'undefined' && Store.state.members) {
-                     const realUser = Store.state.members.find(m => m.email === session.user.email);
+                     const realUser = Store.state.members.find(m => m.email === email);
                      if(realUser) {
                          this.state.currentUser = realUser;
                          const nameEl = document.getElementById('current-user-name');
