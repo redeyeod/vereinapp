@@ -324,11 +324,10 @@ const MembersView = {
 
     async handleAdd(e) {
         e.preventDefault(); 
-        // Button Feedback
         const btn = e.target.querySelector('button[type="submit"]');
         const originalText = btn ? btn.innerText : 'Speichern';
         if(btn) {
-            btn.innerText = "Speichere...";
+            btn.innerText = "Registriere...";
             btn.disabled = true;
         }
 
@@ -339,11 +338,36 @@ const MembersView = {
 
             const firstName = fd.get('firstName');
             const email = fd.get('email');
-            
-            // Zufälliges Passwort generieren (wird sicher über MembersView referenziert)
             const generatedPassword = MembersView.generatePassword();
 
+            // 1. Authentifizierungs-User in Supabase anlegen (ohne Login)
+            const { error: signUpError, data: authData } = await fetch(CONFIG.SUPABASE_URL + '/auth/v1/signup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': CONFIG.SUPABASE_KEY
+                },
+                body: JSON.stringify({
+                    email: email,
+                    password: generatedPassword
+                })
+            }).then(r => r.json().then(data => ({ status: r.status, body: data })))
+              .then(res => {
+                  if (res.status >= 400) return { error: res.body, data: null };
+                  return { error: null, data: res.body };
+              });
+
+            if (signUpError) {
+                console.error("Auth Error:", signUpError);
+                throw new Error("Login-Erstellung fehlgeschlagen: " + (signUpError.msg || signUpError.message || "Unbekannter Fehler"));
+            }
+
+            // 2. Profil-Daten in die Datenbank schreiben
+            // Wir nutzen die ID, die Supabase Auth generiert hat
+            const newUserId = authData.user ? authData.user.id : Date.now();
+
             const newMember = { 
+                id: newUserId, // WICHTIG: Verknüpfung Auth <-> Profil
                 firstName: firstName, 
                 lastName: fd.get('lastName'),
                 street: fd.get('street'),
@@ -371,17 +395,16 @@ const MembersView = {
                         <i class="fa-solid fa-check"></i>
                     </div>
                     <h3 class="text-2xl font-bold text-white mb-2">Mitglied angelegt!</h3>
-                    <p class="text-dark-muted text-sm mb-6">Das Profil wurde erfolgreich gespeichert.</p>
+                    <p class="text-dark-muted text-sm mb-6">Login-Zugang wurde erstellt.</p>
                     
                     <div class="bg-dark-bg border border-dark-border rounded-xl p-4 mb-6 text-left relative group">
-                        <p class="text-xs text-dark-muted uppercase font-bold mb-1">Generiertes Passwort</p>
+                        <p class="text-xs text-dark-muted uppercase font-bold mb-1">Passwort</p>
                         <div class="flex justify-between items-center">
                             <code class="text-blue-400 font-mono text-lg select-all">${generatedPassword}</code>
                             <button onclick="navigator.clipboard.writeText('${generatedPassword}'); App.showToast('Passwort kopiert')" class="text-dark-muted hover:text-white p-2 transition-colors" title="Kopieren">
                                 <i class="fa-regular fa-copy"></i>
                             </button>
                         </div>
-                        <p class="text-[10px] text-red-400 mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Bitte sofort notieren oder versenden!</p>
                     </div>
 
                     <div class="flex gap-3">
@@ -396,12 +419,11 @@ const MembersView = {
             `;
             
             App.openModal(successHtml);
-            // Liste aktualisieren
             this.updateList();
 
         } catch(err) {
             console.error("Fehler beim Erstellen:", err);
-            App.showToast("Fehler: " + err.message, "error");
+            App.showToast(err.message, "error");
             if(btn) {
                 btn.innerText = originalText;
                 btn.disabled = false;
