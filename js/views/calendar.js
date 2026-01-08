@@ -11,9 +11,12 @@ const CalendarView = {
      * @param {HTMLElement} container 
      */
     render(container) {
+        // Sicherheits-Check: Falls Events noch undefined sind
+        const allEvents = Store.state.events || [];
+
         // Filtere Events: NUR globale Events anzeigen (keine Gruppen-Events)
         // Sortiere Events nach Datum (nächste zuerst)
-        const sortedEvents = Store.state.events
+        const sortedEvents = allEvents
             .filter(e => !e.group) // Nur Events ohne Gruppe
             .sort((a, b) => new Date(a.date) - new Date(b.date));
         
@@ -110,7 +113,7 @@ const CalendarView = {
      * Öffnet die Detail-Ansicht eines Termins (Großes Modal)
      */
     openDetailModal(id) {
-        const e = Store.state.events.find(ev => ev.id === id);
+        const e = Store.state.events ? Store.state.events.find(ev => ev.id === id) : null;
         if(!e) return;
         
         const canManage = App.can('manage_events');
@@ -258,7 +261,8 @@ const CalendarView = {
 
         if(confirm("Termin wirklich löschen?")) {
             Store.remove('events', id);
-            this.render(document.getElementById('content'));
+            // Render wird automatisch durch Store.onUpdate getriggert, aber wir rufen es sicherheitshalber auf
+            setTimeout(() => this.render(document.getElementById('content')), 100);
             App.showToast('Termin gelöscht');
         }
     },
@@ -391,7 +395,6 @@ const CalendarView = {
         if (!endDate || new Date(endDate) < new Date(startDate)) endDate = startDate;
 
         const newEvent = {
-            id: Date.now(),
             title: fd.get('title'),
             date: startDate,
             endDate: endDate,
@@ -406,10 +409,9 @@ const CalendarView = {
         Store.add('events', newEvent);
         App.closeModal();
         App.showToast('Termin erstellt');
-        this.render(document.getElementById('content'));
     },
 
-    handleUpdate(e, id) {
+    async handleUpdate(e, id) {
         e.preventDefault();
         const fd = new FormData(e.target);
         const isAllDay = fd.get('allDay') === 'on';
@@ -417,10 +419,12 @@ const CalendarView = {
         let endDate = fd.get('endDate');
         if (!endDate || new Date(endDate) < new Date(startDate)) endDate = startDate;
 
-        const index = Store.state.events.findIndex(ev => ev.id === id);
-        if (index !== -1) {
-            Store.state.events[index] = {
-                ...Store.state.events[index],
+        // Wir holen das Original-Objekt, um die ID und andere Felder zu behalten
+        const originalEvent = Store.state.events.find(ev => ev.id === id);
+        
+        if (originalEvent) {
+            const updatedEvent = {
+                ...originalEvent,
                 title: fd.get('title'),
                 date: startDate,
                 endDate: endDate,
@@ -429,7 +433,13 @@ const CalendarView = {
                 location: fd.get('location'),
                 comment: fd.get('comment')
             };
-            Store.save();
+
+            await Store.update('events', updatedEvent);
+            
+            // Lokales Update für sofortiges Feedback (Optinal, da Realtime oft schnell genug ist)
+            const index = Store.state.events.indexOf(originalEvent);
+            if(index !== -1) Store.state.events[index] = updatedEvent;
+
             App.closeModal();
             App.showToast('Stammdaten gespeichert');
             // Zurück zur Detail-Ansicht um Änderungen zu sehen
@@ -437,15 +447,28 @@ const CalendarView = {
         }
     },
 
-    handleDescriptionUpdate(e, id) {
+    async handleDescriptionUpdate(e, id) {
         e.preventDefault();
         const fd = new FormData(e.target);
-        const index = Store.state.events.findIndex(ev => ev.id === id);
-        if (index !== -1) {
-            Store.state.events[index].description = fd.get('description');
-            Store.save();
+        const originalEvent = Store.state.events.find(ev => ev.id === id);
+        
+        if (originalEvent) {
+            const updatedEvent = {
+                ...originalEvent,
+                description: fd.get('description')
+            };
+
+            await Store.update('events', updatedEvent);
+            
+            // Lokales Update
+            const index = Store.state.events.indexOf(originalEvent);
+            if(index !== -1) Store.state.events[index] = updatedEvent;
+
             App.showToast('Inhalt gespeichert');
             this.openDetailModal(id);
         }
     }
 };
+
+// WICHTIG: Global verfügbar machen für die neue App.js
+window.CalendarView = CalendarView;
