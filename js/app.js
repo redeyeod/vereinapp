@@ -1,20 +1,25 @@
 /**
  * =============================================================================
  * APP CORE LOGIC
+ * Steuert Navigation (Router), Initialisierung, Theming und globale UI-Elemente
  * =============================================================================
  */
 
 const App = {
+    // Lokaler State für die App-Steuerung
     state: {
         lastRead: parseInt(localStorage.getItem('vm_last_read')) || 0,
         theme: localStorage.getItem('vm_theme') || 'dark',
-        currentUser: null
+        currentUser: null // Speichert das volle User-Objekt inkl. Rolle
     },
 
+    /**
+     * Startet die Anwendung
+     */
     async init() {
         console.log("App wird initialisiert...");
 
-        // 1. Warte auf Store (Retry-Logik)
+        // 1. Warte auf Store, falls er als Modul verzögert geladen wird (Sicherheitsnetz)
         let attempts = 0;
         while (typeof Store === 'undefined' && attempts < 20) {
             await new Promise(r => setTimeout(r, 100));
@@ -22,18 +27,25 @@ const App = {
         }
 
         if (typeof Store === 'undefined') {
-            console.error("Store nicht gefunden!");
+            console.error("KRITISCHER FEHLER: Store.js wurde nicht geladen!");
+            document.getElementById('content').innerHTML = '<div class="p-10 text-center text-red-500">Fehler: Datenbank-Verbindung konnte nicht geladen werden.</div>';
             return;
         }
 
-        // 2. Store initialisieren
+        // 2. Daten-Store initialisieren
         await Store.init();
 
-        // 3. Reaktivität einrichten
+        // 3. Reaktivität einrichten: Wenn Daten aus der Cloud kommen, UI aktualisieren
         Store.onUpdate = () => {
             this.updateNotificationDot();
+            
+            // Prüfen, ob der User gerade tippt. Wenn ja, KEIN komplettes Neurendern,
+            // da sonst das Textfeld den Fokus verliert.
             const activeTag = document.activeElement ? document.activeElement.tagName : '';
-            if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+            const isTyping = (activeTag === 'INPUT' || activeTag === 'TEXTAREA');
+
+            // Spezielle Ausnahme: Messenger kümmert sich selbst um Updates wenn offen
+            if (!isTyping || Store.state.currentView !== 'messenger') {
                  this.router(Store.state.currentView);
             }
         };
@@ -43,138 +55,80 @@ const App = {
         this.injectStyles();
         this.updateNotificationDot();
         
-        // Starten
+        // Start-View laden
         this.router('dashboard');
     },
 
     loadCurrentUser() {
+        // Wir laden die Session vom Supabase Auth
         const sessionStr = localStorage.getItem('vm_supabase_session');
         if(sessionStr && typeof Store !== 'undefined') {
             try {
                 const session = JSON.parse(sessionStr);
                 const email = session.user.email;
-                const user = Store.state.members.find(m => m.email === email);
                 
+                // User im Store finden
+                const user = Store.state.members.find(m => m.email === email);
                 if(user) {
                     this.state.currentUser = user;
+                    
+                    // Header-Infos aktualisieren (falls Header schon im DOM)
                     const nameEl = document.getElementById('current-user-name');
                     const roleEl = document.getElementById('current-user-role');
                     if(nameEl) nameEl.textContent = user.firstName;
                     if(roleEl) roleEl.textContent = user.role;
-                    
-                    if(typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
-                    if(typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
-                    if(typeof WorkHoursView !== 'undefined') WorkHoursView.state.myId = user.id;
+
+                    // IDs für Views setzen (damit diese wissen, wer "Ich" ist)
+                    if (typeof MessengerView !== 'undefined') MessengerView.state.myId = user.id;
+                    if (typeof GroupsView !== 'undefined') GroupsView.state.myId = user.id;
+                    if (typeof WorkHoursView !== 'undefined') WorkHoursView.state.myId = user.id;
                 }
-            } catch(e) { console.error("User Load Error:", e); }
-        }
-    },
-
-    // --- ROUTER MIT EXPLIZITEM MAPPING ---
-    router(viewName) {
-        if (typeof Store !== 'undefined') Store.state.currentView = viewName;
-        
-        const container = document.getElementById('content');
-        const subtitle = document.getElementById('page-subtitle');
-        
-        if (container) {
-            container.classList.remove('fade-in');
-            void container.offsetWidth; // Trigger Reflow
-            container.classList.add('fade-in');
-            container.innerHTML = ''; 
-        }
-
-        // Titel setzen
-        const titles = {
-            'dashboard': 'Dashboard',
-            'members': 'Mitglieder',
-            'groups': 'Abteilungen',
-            'calendar': 'Kalender',
-            'news': 'Ankündigungen',
-            'documents': 'Dokumente',
-            'messenger': 'Messenger',
-            'profile': 'Profil',
-            'workhours': 'Arbeitsstunden'
-        };
-        if(subtitle) subtitle.textContent = titles[viewName] || 'Übersicht';
-
-        // View Object finden
-        // Wir prüfen direkt auf die Variablen, da window['Name'] bei const/let nicht geht
-        let viewObj = null;
-
-        try {
-            switch(viewName) {
-                case 'dashboard': 
-                    if(typeof DashboardView !== 'undefined') viewObj = DashboardView; 
-                    break;
-                case 'members': 
-                    if(typeof MembersView !== 'undefined') viewObj = MembersView; 
-                    break;
-                case 'groups': 
-                    if(typeof GroupsView !== 'undefined') viewObj = GroupsView; 
-                    break;
-                case 'calendar': 
-                    if(typeof CalendarView !== 'undefined') viewObj = CalendarView; 
-                    break;
-                case 'news': 
-                    if(typeof NewsView !== 'undefined') viewObj = NewsView; 
-                    break;
-                case 'documents': 
-                    if(typeof DocsView !== 'undefined') viewObj = DocsView; 
-                    break;
-                case 'messenger': 
-                    if(typeof MessengerView !== 'undefined') viewObj = MessengerView; 
-                    break;
-                case 'profile': 
-                    if(typeof ProfileView !== 'undefined') viewObj = ProfileView; 
-                    break;
-                case 'workhours': 
-                    if(typeof WorkHoursView !== 'undefined') viewObj = WorkHoursView; 
-                    break;
+            } catch(e) { 
+                console.error("Fehler beim Laden des Benutzers:", e); 
             }
-        } catch (e) {
-            console.error("Router Error:", e);
-        }
-
-        if (viewObj) {
-            viewObj.render(container);
-        } else {
-            console.warn(`View "${viewName}" nicht gefunden oder nicht geladen.`);
-            if(container) container.innerHTML = `<div class="p-10 text-center text-dark-muted">Lade Ansicht "${viewName}"...<br><span class="text-xs opacity-50">(Falls nichts passiert: Seite neu laden)</span></div>`;
-            
-            // Retry Mechanism (falls Skript noch lädt)
-            setTimeout(() => {
-                if(Store.state.currentView === viewName) this.router(viewName);
-            }, 500);
         }
     },
 
-    // --- PERMISSIONS ---
+    // --- PERMISSION SYSTEM (RBAC) ---
     can(action) {
         if (!this.state.currentUser) this.loadCurrentUser();
         const user = this.state.currentUser;
         if (!user) return false; 
 
         const role = user.role || 'Mitglied';
-        const admins = ['1. Vorstand', '2. Vorstand', '3. Vorstand', '4. Vorstand', 'Präsident', 'Vize-Präsident', 'Admin', 'Vorstand'];
-        const managers = ['Kassenwart', 'Protokollant', 'Trainer', 'Abteilungsleiter'];
+        
+        // Definition der Rollen-Gruppen
+        const roles = {
+            admin: ['1. Vorstand', '2. Vorstand', '3. Vorstand', '4. Vorstand', 'Präsident', 'Vize-Präsident', 'Admin', 'Vorstand'], 
+            manager: ['Kassenwart', 'Protokollant', 'Trainer', 'Abteilungsleiter'], 
+            member: ['Mitglied', 'Ehren-Mitglied', 'Beisitzer', 'Gast'] 
+        };
 
-        if (admins.includes(role)) return true;
-        if (managers.includes(role)) {
-             if (['manage_workhours', 'view_members_detail'].includes(action)) return true;
-        }
+        // Rechte pro Gruppe
+        const permissions = {
+            admin:   ['manage_members', 'manage_groups', 'manage_events', 'manage_news', 'manage_docs', 'manage_workhours', 'settings', 'delete_content'],
+            manager: ['manage_workhours'], 
+            member:  [] 
+        };
 
-        return false;
+        let userGroup = 'member';
+        if (roles.admin.includes(role)) userGroup = 'admin';
+        else if (roles.manager.includes(role)) userGroup = 'manager';
+
+        return permissions[userGroup].includes(action);
     },
 
-    // --- THEME & STYLES ---
+    // --- THEMING & ROUTING ---
     initTheme() { this.applyTheme(); },
+    
     toggleTheme() { 
         this.state.theme = this.state.theme === 'dark' ? 'light' : 'dark'; 
         localStorage.setItem('vm_theme', this.state.theme); 
         this.applyTheme(); 
+        // Falls Einstellungen-Modal offen ist, Button aktualisieren (einfach neu rendern)
         if(document.getElementById('settings-modal')) this.openSettingsModal(); 
     },
+    
     applyTheme() {
         const root = document.documentElement;
         if (this.state.theme === 'dark') { 
@@ -193,6 +147,84 @@ const App = {
             root.style.setProperty('--muted-color', '#64748b'); 
         }
     },
+
+    // --- ROBUST ROUTER ---
+    router(viewName) {
+        if (typeof Store !== 'undefined') Store.state.currentView = viewName;
+        
+        const container = document.getElementById('content');
+        const subtitle = document.getElementById('page-subtitle');
+        
+        if (container) {
+            container.classList.remove('fade-in');
+            void container.offsetWidth; // Trigger Reflow
+            container.classList.add('fade-in');
+            container.innerHTML = ''; 
+        }
+
+        // Titel Mapping
+        const titles = {
+            'dashboard': 'Dashboard',
+            'members': 'Mitgliederverwaltung',
+            'groups': 'Abteilungen',
+            'calendar': 'Kalender',
+            'news': 'Ankündigungen',
+            'documents': 'Dokumente',
+            'messenger': 'Messenger',
+            'profile': 'Mein Profil',
+            'workhours': 'Arbeitsstunden'
+        };
+        if(subtitle) subtitle.textContent = titles[viewName] || 'Übersicht';
+
+        // Explizites Mapping der globalen View-Objekte
+        // Das ist sicherer als window['ViewName'], da const Variablen nicht immer am window hängen
+        const views = {
+            'dashboard': typeof DashboardView !== 'undefined' ? DashboardView : null,
+            'members': typeof MembersView !== 'undefined' ? MembersView : null,
+            'groups': typeof GroupsView !== 'undefined' ? GroupsView : null,
+            'calendar': typeof CalendarView !== 'undefined' ? CalendarView : null,
+            'news': typeof NewsView !== 'undefined' ? NewsView : null,
+            'documents': typeof DocsView !== 'undefined' ? DocsView : null,
+            'messenger': typeof MessengerView !== 'undefined' ? MessengerView : null,
+            'profile': typeof ProfileView !== 'undefined' ? ProfileView : null,
+            'workhours': typeof WorkHoursView !== 'undefined' ? WorkHoursView : null
+        };
+
+        const currentViewObj = views[viewName];
+
+        if (currentViewObj) {
+            try {
+                currentViewObj.render(container);
+            } catch (e) {
+                console.error(`Fehler beim Rendern von ${viewName}:`, e);
+                container.innerHTML = `<div class="p-8 text-center text-red-400">Fehler beim Laden der Ansicht:<br>${e.message}</div>`;
+            }
+        } else {
+            console.warn(`View "${viewName}" Objekt nicht gefunden.`);
+            if(container) {
+                container.innerHTML = `
+                    <div class="flex flex-col items-center justify-center h-64 text-dark-muted">
+                        <i class="fa-solid fa-spinner fa-spin text-3xl mb-4"></i>
+                        <p>Lade Modul... (${viewName})</p>
+                        <p class="text-xs mt-2 opacity-50">Falls dies lange dauert, bitte Seite neu laden.</p>
+                    </div>`;
+            }
+            
+            // Retry Mechanism (falls Skripte langsam laden)
+            setTimeout(() => {
+                // Erneut prüfen, ob wir immer noch auf dieser Seite sein wollen
+                if (Store.state.currentView === viewName) {
+                    // Wir versuchen es erneut über das Mapping (da views oben const war, müssen wir neu prüfen)
+                    const retryView = (typeof window[viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View'] !== 'undefined') 
+                                    ? window[viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View'] 
+                                    : null;
+                                    
+                    if (retryView) retryView.render(container);
+                }
+            }, 1000);
+        }
+    },
+
     injectStyles() {
          if(document.getElementById('app-styles')) return;
          const style = document.createElement('style');
@@ -210,9 +242,10 @@ const App = {
     },
 
     // --- UI HELPERS ---
+    
     openSettingsModal() { 
         const isDark = this.state.theme === 'dark';
-        this.openModal(`<div class="p-6"><h3 class="text-xl font-bold text-dark-text mb-4">Einstellungen</h3><div class="flex items-center justify-between p-4 rounded-xl bg-dark-bg border border-dark-border"><p class="text-dark-text">Dark Mode</p><button onclick="App.toggleTheme()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold">${isDark ? 'An' : 'Aus'}</button></div><div class="p-4 rounded-xl bg-dark-bg border border-dark-border text-center mt-6"><p class="text-sm text-dark-muted mb-2">VereinsManager App v1.2.2</p><button onclick="if(confirm('Alle lokalen Daten löschen?')) { localStorage.clear(); location.reload(); }" class="text-xs text-red-400 hover:underline">Reset Cache</button></div></div>`);
+        this.openModal(`<div class="p-6"><h3 class="text-xl font-bold text-dark-text mb-4">Einstellungen</h3><div class="flex items-center justify-between p-4 rounded-xl bg-dark-bg border border-dark-border"><p class="text-dark-text">Dark Mode</p><button onclick="App.toggleTheme()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold">${isDark ? 'An' : 'Aus'}</button></div><div class="p-4 rounded-xl bg-dark-bg border border-dark-border text-center mt-6"><p class="text-sm text-dark-muted mb-2">VereinsManager App v1.3.0</p><button onclick="if(confirm('Alle lokalen Daten löschen und abmelden?')) { localStorage.clear(); location.reload(); }" class="text-xs text-red-400 hover:underline">App zurücksetzen & Cache leeren</button></div></div>`);
     },
     
     toggleNotifications() {
@@ -222,24 +255,100 @@ const App = {
         const lastRead = this.state.lastRead;
         const news = Store.state.news.filter(n => new Date(n.date).getTime() > lastRead);
         const chats = [];
-        Store.state.groups.forEach(g => { if (g.chat && g.chat.length > 0) { const lastMsg = g.chat[g.chat.length - 1]; if (new Date(lastMsg.time).getTime() > lastRead) { chats.push({ groupName: g.name, groupId: g.id, message: lastMsg.text, sender: lastMsg.sender, time: lastMsg.time }); } } });
+        
+        Store.state.groups.forEach(g => { 
+            if (g.chat && g.chat.length > 0) { 
+                const lastMsg = g.chat[g.chat.length - 1]; 
+                if (new Date(lastMsg.time).getTime() > lastRead) { 
+                    chats.push({ groupName: g.name, groupId: g.id, message: lastMsg.text, sender: lastMsg.sender, time: lastMsg.time }); 
+                } 
+            } 
+        });
         chats.sort((a, b) => new Date(b.time) - new Date(a.time));
 
         let html = `<div class="absolute top-20 right-6 w-96 bg-dark-card border border-dark-border rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-[500px]" onclick="event.stopPropagation()"><div class="p-4 border-b border-dark-border bg-dark-bg/95 backdrop-blur flex justify-between items-center sticky top-0"><h3 class="font-bold text-dark-text"><i class="fa-regular fa-bell mr-2"></i>Benachrichtigungen</h3><button onclick="document.getElementById('notification-overlay').classList.add('hidden')" class="text-dark-muted hover:text-dark-text transition-colors"><i class="fa-solid fa-times"></i></button></div><div class="overflow-y-auto notif-scrollbar flex-1">`;
-        if (news.length === 0 && chats.length === 0) { html += `<div class="p-8 text-center text-dark-muted flex flex-col items-center"><i class="fa-regular fa-bell-slash text-3xl mb-2 opacity-50"></i><p class="text-sm">Keine neuen Nachrichten.</p></div>`; } 
-        else {
-            if (news.length > 0) { html += `<div class="px-4 py-2 text-[10px] font-bold text-blue-400 uppercase tracking-wider bg-dark-bg/50 sticky top-0 backdrop-blur-sm">Ankündigungen</div>`; news.forEach(n => { html += `<div onclick="App.router('news'); document.getElementById('notification-overlay').classList.add('hidden')" class="p-4 border-b border-dark-border hover:bg-dark-hover cursor-pointer transition-colors group"><div class="flex justify-between items-start mb-1"><p class="text-sm text-dark-text font-bold truncate pr-2 group-hover:text-blue-400 transition-colors">${n.title}</p><span class="text-[10px] text-dark-muted whitespace-nowrap">${new Date(n.date).toLocaleDateString()}</span></div><p class="text-xs text-dark-muted line-clamp-2">${n.content}</p></div>`; }); }
-            if (chats.length > 0) { html += `<div class="px-4 py-2 text-[10px] font-bold text-green-400 uppercase tracking-wider bg-dark-bg/50 sticky top-0 backdrop-blur-sm mt-2">Neue Chats</div>`; chats.forEach(c => { html += `<div onclick="GroupsView.openGroup(${c.groupId}); GroupsView.switchTab('chat'); document.getElementById('notification-overlay').classList.add('hidden')" class="p-4 border-b border-dark-border hover:bg-dark-hover cursor-pointer transition-colors group"><div class="flex justify-between items-center mb-1"><span class="text-xs font-bold text-dark-text bg-dark-bg border border-dark-border px-2 py-0.5 rounded-md">${c.groupName}</span><span class="text-[10px] text-dark-muted">${new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div><div class="text-xs mt-1"><span class="text-dark-text font-medium mr-1">${c.sender}:</span><span class="text-dark-muted group-hover:text-dark-text transition-colors">${c.message}</span></div></div>`; }); }
+
+        if (news.length === 0 && chats.length === 0) { 
+            html += `<div class="p-8 text-center text-dark-muted flex flex-col items-center"><i class="fa-regular fa-bell-slash text-3xl mb-2 opacity-50"></i><p class="text-sm">Keine neuen Nachrichten.</p></div>`; 
+        } else {
+            if (news.length > 0) { 
+                html += `<div class="px-4 py-2 text-[10px] font-bold text-blue-400 uppercase tracking-wider bg-dark-bg/50 sticky top-0 backdrop-blur-sm">Ankündigungen</div>`; 
+                news.forEach(n => { html += `<div onclick="App.router('news'); document.getElementById('notification-overlay').classList.add('hidden')" class="p-4 border-b border-dark-border hover:bg-dark-hover cursor-pointer transition-colors group"><div class="flex justify-between items-start mb-1"><p class="text-sm text-dark-text font-bold truncate pr-2 group-hover:text-blue-400 transition-colors">${n.title}</p><span class="text-[10px] text-dark-muted whitespace-nowrap">${new Date(n.date).toLocaleDateString()}</span></div><p class="text-xs text-dark-muted line-clamp-2">${n.content}</p></div>`; }); 
+            }
+            if (chats.length > 0) { 
+                html += `<div class="px-4 py-2 text-[10px] font-bold text-green-400 uppercase tracking-wider bg-dark-bg/50 sticky top-0 backdrop-blur-sm mt-2">Neue Chats</div>`; 
+                chats.forEach(c => { html += `<div onclick="GroupsView.openGroup(${c.groupId}); GroupsView.switchTab('chat'); document.getElementById('notification-overlay').classList.add('hidden')" class="p-4 border-b border-dark-border hover:bg-dark-hover cursor-pointer transition-colors group"><div class="flex justify-between items-center mb-1"><span class="text-xs font-bold text-dark-text bg-dark-bg border border-dark-border px-2 py-0.5 rounded-md">${c.groupName}</span><span class="text-[10px] text-dark-muted">${new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div><div class="text-xs mt-1"><span class="text-dark-text font-medium mr-1">${c.sender}:</span><span class="text-dark-muted group-hover:text-dark-text transition-colors">${c.message}</span></div></div>`; }); 
+            }
         }
-        html += `</div>`; if (news.length > 0 || chats.length > 0) { html += `<div class="p-3 bg-dark-bg/50 border-t border-dark-border text-center"><button onclick="App.markAllAsRead()" class="text-xs font-bold text-blue-400 hover:text-blue-300 hover:underline">Alle als gelesen markieren</button></div>`; } html += `</div>`;
-        if (!overlay) { overlay = document.createElement('div'); overlay.id = 'notification-overlay'; overlay.className = 'fixed inset-0 z-50 hidden'; overlay.onclick = (e) => { if(e.target === overlay) overlay.classList.add('hidden'); }; document.body.appendChild(overlay); } overlay.innerHTML = html; overlay.classList.remove('hidden');
+
+        html += `</div>`;
+        if (news.length > 0 || chats.length > 0) { 
+            html += `<div class="p-3 bg-dark-bg/50 border-t border-dark-border text-center"><button onclick="App.markAllAsRead()" class="text-xs font-bold text-blue-400 hover:text-blue-300 hover:underline">Alle als gelesen markieren</button></div>`; 
+        }
+        html += `</div>`;
+
+        if (!overlay) { 
+            overlay = document.createElement('div'); overlay.id = 'notification-overlay'; overlay.className = 'fixed inset-0 z-50 hidden'; 
+            overlay.onclick = (e) => { if(e.target === overlay) overlay.classList.add('hidden'); }; 
+            document.body.appendChild(overlay); 
+        }
+        overlay.innerHTML = html;
+        overlay.classList.remove('hidden');
     },
-    markAllAsRead() { this.state.lastRead = Date.now(); localStorage.setItem('vm_last_read', this.state.lastRead); document.getElementById('notification-overlay').classList.add('hidden'); this.updateNotificationDot(); App.showToast('Alle als gelesen markiert'); },
-    updateNotificationDot() { const lastRead = this.state.lastRead; let hasNew = false; if (Store.state.news.some(n => new Date(n.date).getTime() > lastRead)) hasNew = true; if (!hasNew) Store.state.groups.forEach(g => { if (g.chat && g.chat.length > 0) { const lastMsg = g.chat[g.chat.length - 1]; if (new Date(lastMsg.time).getTime() > lastRead) hasNew = true; } }); const dot = document.querySelector('button[onclick="App.toggleNotifications()"] span'); if (dot) dot.style.display = hasNew ? 'block' : 'none'; },
+
+    markAllAsRead() { 
+        this.state.lastRead = Date.now(); 
+        localStorage.setItem('vm_last_read', this.state.lastRead); 
+        document.getElementById('notification-overlay').classList.add('hidden'); 
+        this.updateNotificationDot(); 
+        App.showToast('Alle als gelesen markiert'); 
+    },
+
+    updateNotificationDot() { 
+        const lastRead = this.state.lastRead; 
+        let hasNew = false; 
+        if (Store.state.news.some(n => new Date(n.date).getTime() > lastRead)) hasNew = true; 
+        if (!hasNew) {
+            Store.state.groups.forEach(g => { 
+                if (g.chat && g.chat.length > 0) { 
+                    const lastMsg = g.chat[g.chat.length - 1]; 
+                    if (new Date(lastMsg.time).getTime() > lastRead) hasNew = true; 
+                } 
+            });
+        }
+        const dot = document.querySelector('button[onclick="App.toggleNotifications()"] span'); 
+        if (dot) dot.style.display = hasNew ? 'block' : 'none'; 
+    },
     
-    openModal(htmlContent) { const overlay = document.getElementById('modal-overlay'); const content = document.getElementById('modal-content'); if (overlay && content) { content.innerHTML = htmlContent; overlay.classList.remove('hidden'); setTimeout(() => { content.classList.remove('scale-95', 'opacity-0'); content.classList.add('scale-100', 'opacity-100'); }, 10); } },
-    closeModal() { const overlay = document.getElementById('modal-overlay'); const content = document.getElementById('modal-content'); if (overlay && content) { content.classList.remove('scale-100', 'opacity-100'); content.classList.add('scale-95', 'opacity-0'); setTimeout(() => { overlay.classList.add('hidden'); content.innerHTML = ''; }, 300); } },
-    showToast(message) { const toast = document.getElementById("toast"); if (t) { toast.textContent = message; toast.classList.add('show'); setTimeout(() => { toast.classList.remove('show'),3000); } } }
+    openModal(htmlContent) { 
+        const overlay = document.getElementById('modal-overlay'); 
+        const content = document.getElementById('modal-content'); 
+        if (overlay && content) { 
+            content.innerHTML = htmlContent; 
+            overlay.classList.remove('hidden'); 
+            setTimeout(() => { content.classList.remove('scale-95', 'opacity-0'); content.classList.add('scale-100', 'opacity-100'); }, 10); 
+        } 
+    },
+
+    closeModal() { 
+        const overlay = document.getElementById('modal-overlay'); 
+        const content = document.getElementById('modal-content'); 
+        if (overlay && content) { 
+            content.classList.remove('scale-100', 'opacity-100'); 
+            content.classList.add('scale-95', 'opacity-0'); 
+            setTimeout(() => { overlay.classList.add('hidden'); content.innerHTML = ''; }, 300); 
+        } 
+    },
+
+    showToast(message) { 
+        const toast = document.getElementById("toast"); 
+        if (toast) { 
+            toast.textContent = message; 
+            toast.className = "show"; 
+            setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000); 
+        } 
+    }
 };
 
+// Startet die App, sobald DOM bereit ist
 window.addEventListener('DOMContentLoaded', () => { App.init(); });
