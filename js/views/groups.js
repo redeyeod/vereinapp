@@ -1,7 +1,7 @@
 /**
  * =============================================================================
- * GROUPS VIEW (Direct DB Access & Debugging)
- * Verwaltung der Abteilungen - Nutzt direkten Supabase-Zugriff für präzise Fehler
+ * GROUPS VIEW (Persistence Fix)
+ * Verwaltung der Abteilungen - Speichert Gruppen-Zuweisung zuverlässig
  * =============================================================================
  */
 
@@ -34,7 +34,7 @@ const GroupsView = {
         
         members.forEach(m => {
             const memberGroups = Array.isArray(m.groups) ? m.groups : [];
-            // Legacy Support
+            // Legacy Support (falls 'group' noch lokal existiert)
             if (m.group && m.group !== 'Keine' && !memberGroups.includes(m.group)) {
                 memberGroups.push(m.group);
             }
@@ -270,8 +270,9 @@ const GroupsView = {
 
     openAddMemberModal(groupId) {
         if(!App.can('manage_groups')) return;
-        const group = Store.state.groups.find(g => g.id == groupId);
+        const group = Store.state.groups.find(g => g.id == groupId); // == für ID Match (String/Int)
         
+        // Filter: Zeige nur Mitglieder, die NICHT in der Gruppe sind
         const availableMembers = (Store.state.members || []).filter(m => {
             const inGroupNew = Array.isArray(m.groups) && m.groups.includes(group.name);
             const inGroupOld = m.group === group.name;
@@ -331,55 +332,51 @@ const GroupsView = {
         });
     },
 
-    // --- FIX: Direkter Supabase Aufruf für präzises Debugging ---
+    // --- FIX: Partial Update für sicheres Speichern (Ohne 'group') ---
     async addMemberDirect(groupId, memberId) {
         if(!App.can('manage_groups')) return;
         
+        // IDs für Vergleich sicherstellen
         const group = Store.state.groups.find(g => g.id == groupId);
         const member = Store.state.members.find(m => m.id == memberId);
 
         if (member && group) {
             try {
-                App.showToast("Speichere in Datenbank...", "info");
+                App.showToast("Speichere...", "info");
 
-                // Arrays sicherstellen und bereinigen
+                // Arrays sicherstellen
                 let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
                 
-                // Legacy Migration
+                // Legacy Migration: Alten "Singular" Wert übernehmen
                 if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
                     currentGroups.push(member.group);
                 }
 
-                // Neu hinzufügen
                 if (!currentGroups.includes(group.name)) {
                     currentGroups.push(group.name);
                 }
                 
-                // Direkter Supabase Call
-                const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-                const { error } = await _sb
-                    .from('members')
-                    .update({ 
-                        groups: currentGroups
-                        // group: null  <-- ENTFERNT, da es den Fehler verursacht
-                    })
-                    .eq('id', member.id);
-
-                if (error) {
-                    throw new Error(error.message + " (Code: " + error.code + ")");
-                }
+                // Payload erstellen (Wir senden NUR das Array und die ID)
+                // WICHTIG: Das Feld 'group' (Singular) darf nicht mehr gesendet werden!
+                const updatePayload = {
+                    id: member.id,
+                    groups: currentGroups
+                };
                 
-                // Erfolg!
+                // Warten auf DB
+                await Store.update('members', updatePayload);
+                
+                // UI Refresh
                 App.closeModal();
                 App.showToast(`${member.firstName} hinzugefügt`, "success");
                 
-                // Reload
+                // Manuell neu laden, falls Store.update das nicht eh schon getan hat
                 if(Store.fetchTable) await Store.fetchTable('members');
                 this.render(document.getElementById('content'));
 
             } catch (e) {
                 console.error(e);
-                App.showToast("DB Fehler: " + e.message, "error");
+                App.showToast("Fehler beim Speichern: " + e.message, "error");
             }
         }
     },
@@ -393,37 +390,30 @@ const GroupsView = {
             const member = Store.state.members.find(m => m.id == memberId);
             if(member) {
                 try {
-                    App.showToast("Entferne...", "info");
-
                     let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
                     
+                    // Legacy Migration beim Löschen
                     if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
                         currentGroups.push(member.group);
                     }
 
                     currentGroups = currentGroups.filter(g => g !== group.name);
                     
-                    // Direkter Supabase Call
-                    const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-                    const { error } = await _sb
-                        .from('members')
-                        .update({ 
-                            groups: currentGroups
-                            // group: null <-- ENTFERNT
-                        })
-                        .eq('id', member.id);
-
-                    if (error) {
-                        throw new Error(error.message);
-                    }
+                    const updatePayload = {
+                        id: member.id,
+                        groups: currentGroups
+                    };
                     
+                    await Store.update('members', updatePayload);
+                    
+                    // Neu laden & Rendern
                     if(Store.fetchTable) await Store.fetchTable('members');
                     this.render(document.getElementById('content'));
                     App.showToast("Entfernt", "success");
                     
                 } catch (e) {
                     console.error(e);
-                    App.showToast("Fehler: " + e.message, "error");
+                    App.showToast("Fehler beim Entfernen: " + e.message, "error");
                 }
             }
         }
