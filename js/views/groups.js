@@ -212,9 +212,9 @@ const GroupsView = {
     // --- TAB 1: MITGLIEDER ---
     renderTabMembers(group) {
         const members = (Store.state.members || []).filter(m => {
-            const groups = Array.isArray(m.groups) ? m.groups : [];
+            if (Array.isArray(m.groups) && m.groups.includes(group.name)) return true;
             if (m.group === group.name) return true;
-            return groups.includes(group.name);
+            return false;
         });
 
         const canManage = App.can('manage_groups');
@@ -304,6 +304,7 @@ const GroupsView = {
                                     <p class="text-sm font-bold text-white member-name truncate">${m.firstName} ${m.lastName}</p>
                                 </div>
                             </div>
+                            <!-- ID in Anführungszeichen für UUID Sicherheit -->
                             <button onclick="GroupsView.addMemberDirect('${groupId}', '${m.id}')" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg text-xs transition-colors shadow-lg shadow-blue-900/20 flex-shrink-0">
                                 <i class="fa-solid fa-plus"></i>
                             </button>
@@ -359,8 +360,8 @@ const GroupsView = {
                 const { error } = await _sb
                     .from('members')
                     .update({ 
-                        groups: currentGroups,
-                        group: null // Legacy leeren wenn möglich
+                        groups: currentGroups
+                        // group: null  <-- ENTFERNT, da es den Fehler verursacht
                     })
                     .eq('id', member.id);
 
@@ -407,8 +408,8 @@ const GroupsView = {
                     const { error } = await _sb
                         .from('members')
                         .update({ 
-                            groups: currentGroups,
-                            group: null 
+                            groups: currentGroups
+                            // group: null <-- ENTFERNT
                         })
                         .eq('id', member.id);
 
