@@ -282,7 +282,7 @@ const GroupsView = {
         });
     },
 
-    // --- CRITICAL FIX: Direkter DB-Zugriff mit .select() Check ---
+    // --- FIX: Direkte DB-Kommunikation für JSONB Spalte ---
     async addMemberDirect(groupId, memberId) {
         if(!App.can('manage_groups')) return;
         
@@ -291,23 +291,29 @@ const GroupsView = {
 
         if (member && group) {
             try {
-                App.showToast("Speichere in Datenbank...", "info");
+                App.showToast("Speichere...", "info");
 
+                // Arrays sicherstellen
                 let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
+                
+                // Legacy Migration: Alten "Singular" Wert übernehmen
                 if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
                     currentGroups.push(member.group);
                 }
+
                 if (!currentGroups.includes(group.name)) {
                     currentGroups.push(group.name);
                 }
                 
-                // Wir nutzen den client aus der Config um sicherzugehen
+                // DIREKTER SUPABASE AUFRUF
+                // Wir nutzen hier direkt den Client, um sicherzustellen, dass das JSONB Array korrekt übertragen wird.
                 const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
                 
-                // WICHTIG: .select() am Ende, um zu prüfen ob wirklich was passiert ist
                 const { data, error } = await _sb
                     .from('members')
-                    .update({ groups: currentGroups }) // KEIN group: null
+                    .update({ 
+                        groups: currentGroups // JSONB Array wird hier direkt übergeben
+                    })
                     .eq('id', member.id)
                     .select();
 
@@ -315,21 +321,27 @@ const GroupsView = {
                     throw new Error("DB Error: " + error.message);
                 }
 
+                // Prüfen, ob Update tatsächlich durchgeführt wurde (RLS Check)
                 if (!data || data.length === 0) {
-                    throw new Error("Datensatz nicht gefunden oder RLS blockiert Update (0 rows affected).");
+                    throw new Error("Update verweigert (RLS). Bitte 'UPDATE' Policy in Supabase prüfen.");
                 }
+
+                // Wenn wir hier sind, war das Update in der DB erfolgreich!
                 
-                // Wenn wir hier sind, hat es wirklich geklappt
+                // Lokalen State aktualisieren (damit man das Ergebnis sofort sieht)
+                member.groups = currentGroups;
+                
+                // UI Aktualisieren
                 App.closeModal();
                 App.showToast(`${member.firstName} hinzugefügt`, "success");
-                
-                // Daten neu laden
-                if(Store.fetchTable) await Store.fetchTable('members');
                 this.render(document.getElementById('content'));
+                
+                // Sicherheitshalber im Hintergrund neu laden
+                if(Store.fetchTable) Store.fetchTable('members');
 
             } catch (e) {
                 console.error(e);
-                App.showToast(e.message, "error");
+                App.showToast("Fehler: " + e.message, "error");
             }
         }
     },
@@ -343,11 +355,18 @@ const GroupsView = {
             const member = Store.state.members.find(m => m.id == memberId);
             if(member) {
                 try {
+                    App.showToast("Entferne...", "info");
+                    
                     let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
-                    if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) currentGroups.push(member.group);
+                    
+                    // Legacy Migration
+                    if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
+                        currentGroups.push(member.group);
+                    }
 
                     currentGroups = currentGroups.filter(g => g !== group.name);
                     
+                    // Direkter Supabase Aufruf
                     const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
                     const { data, error } = await _sb
                         .from('members')
@@ -358,20 +377,23 @@ const GroupsView = {
                     if (error) throw new Error(error.message);
                     if (!data || data.length === 0) throw new Error("Löschen blockiert (RLS oder ID falsch).");
                     
-                    if(Store.fetchTable) await Store.fetchTable('members');
+                    // Lokales Update
+                    member.groups = currentGroups;
+                    
                     this.render(document.getElementById('content'));
                     App.showToast("Entfernt", "success");
                     
+                    if(Store.fetchTable) Store.fetchTable('members');
+                    
                 } catch (e) {
                     console.error(e);
-                    App.showToast(e.message, "error");
+                    App.showToast("Fehler: " + e.message, "error");
                 }
             }
         }
     },
 
     // --- RESTLICHE TABS (Chat, Calendar, Files) ---
-    // (Codes unverändert, nur gekürzt dargestellt für Übersicht)
     
     renderTabChat(group) {
         const messages = group.chat || [];
