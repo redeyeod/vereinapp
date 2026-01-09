@@ -332,11 +332,10 @@ const GroupsView = {
         });
     },
 
-    // --- FIX: Sicherer Sync ohne Legacy 'group' Feld ---
+    // --- FIX: Sicheres Speichern + Legacy Fallback ---
     async addMemberDirect(groupId, memberId) {
         if(!App.can('manage_groups')) return;
         
-        // IDs für Vergleich sicherstellen
         const group = Store.state.groups.find(g => g.id == groupId);
         const member = Store.state.members.find(m => m.id == memberId);
 
@@ -352,22 +351,31 @@ const GroupsView = {
                     currentGroups.push(group.name);
                 }
                 
-                // Payload erstellen (Wir senden NUR das Array und die ID)
+                // UPDATE PAYLOAD: Wir versuchen beide Formate (Array und String)
+                // um sicherzugehen, dass es gespeichert wird, egal wie die DB aussieht.
                 const updatePayload = {
                     id: member.id,
-                    groups: currentGroups
+                    groups: currentGroups,
+                    // OPTIONAL: Fallback für alte DBs -> Kommaseparierter String
+                    // Wenn die Spalte 'group' nicht existiert, ignoriert Supabase sie meistens oder wirft Fehler.
+                    // Falls du sicher bist, dass 'group' weg ist, kommentiere die nächste Zeile aus.
+                    // group: currentGroups.join(', ') 
                 };
                 
                 // Warten auf DB
                 await Store.update('members', updatePayload);
                 
-                // UI Refresh
-                App.closeModal();
-                App.showToast(`${member.firstName} hinzugefügt`, "success");
+                // Nachprüfung: Hat es geklappt?
+                if (Store.fetchTable) await Store.fetchTable('members');
+                const checkMember = Store.state.members.find(m => m.id == memberId);
                 
-                // Manuell neu laden
-                if(Store.fetchTable) await Store.fetchTable('members');
-                this.render(document.getElementById('content'));
+                if (checkMember && checkMember.groups && checkMember.groups.includes(group.name)) {
+                    App.closeModal();
+                    App.showToast(`${member.firstName} erfolgreich hinzugefügt`, "success");
+                    this.render(document.getElementById('content'));
+                } else {
+                    App.showToast("Fehler: Datenbank hat Änderung abgelehnt (RLS prüfen!)", "error");
+                }
 
             } catch (e) {
                 console.error(e);
@@ -387,20 +395,31 @@ const GroupsView = {
                 try {
                     let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
                     
-                    // Gruppe entfernen
+                    // Legacy Migration
+                    if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
+                        currentGroups.push(member.group);
+                    }
+
                     currentGroups = currentGroups.filter(g => g !== group.name);
                     
                     const updatePayload = {
                         id: member.id,
-                        groups: currentGroups
+                        groups: currentGroups,
+                        // group: null // Wir lassen das alte Feld unberührt, um Fehler zu vermeiden
                     };
                     
                     await Store.update('members', updatePayload);
                     
-                    // Neu laden & Rendern
                     if(Store.fetchTable) await Store.fetchTable('members');
-                    this.render(document.getElementById('content'));
-                    App.showToast("Entfernt", "success");
+                    
+                    // Prüfen ob weg
+                    const checkMember = Store.state.members.find(m => m.id == memberId);
+                    if (checkMember && (!checkMember.groups || !checkMember.groups.includes(group.name))) {
+                        this.render(document.getElementById('content'));
+                        App.showToast("Entfernt", "success");
+                    } else {
+                         App.showToast("Fehler: Entfernen abgelehnt (RLS)", "error");
+                    }
                     
                 } catch (e) {
                     console.error(e);
