@@ -1,7 +1,7 @@
 /**
  * =============================================================================
- * GROUPS VIEW (Persistence Fix)
- * Verwaltung der Abteilungen - Speichert Gruppen-Zuweisung zuverlässig
+ * GROUPS VIEW (Strict Persistence)
+ * Verwaltung der Abteilungen - WARTET auf DB-Bestätigung (Kein Fake-Erfolg)
  * =============================================================================
  */
 
@@ -86,6 +86,7 @@ const GroupsView = {
                 ? 'cursor-pointer hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-900/10 bg-dark-card' 
                 : 'cursor-not-allowed opacity-50 bg-dark-bg border-dashed';
 
+            // WICHTIG: IDs in Anführungszeichen ('${group.id}') für UUID Support
             const deleteButton = canManage 
                 ? `<button onclick="event.stopPropagation(); GroupsView.delete('${group.id}')" class="text-dark-muted hover:text-red-400 p-2 rounded-lg hover:bg-red-500/10 transition-colors" title="Löschen">
                     <i class="fa-regular fa-trash-can"></i>
@@ -332,7 +333,7 @@ const GroupsView = {
         });
     },
 
-    // --- FIX: Sicheres Speichern + Legacy Fallback ---
+    // --- FIX: Strikter Sync (Erst Speichern, dann Feedback) ---
     async addMemberDirect(groupId, memberId) {
         if(!App.can('manage_groups')) return;
         
@@ -346,40 +347,40 @@ const GroupsView = {
                 // Arrays sicherstellen
                 let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
                 
-                // Wir fügen nur zur Array-Liste hinzu
+                // Legacy Migration: Alten "Singular" Wert übernehmen
+                if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
+                    currentGroups.push(member.group);
+                }
+
                 if (!currentGroups.includes(group.name)) {
                     currentGroups.push(group.name);
                 }
                 
-                // UPDATE PAYLOAD: Wir versuchen beide Formate (Array und String)
-                // um sicherzugehen, dass es gespeichert wird, egal wie die DB aussieht.
+                // Payload erstellen (OHNE 'group' Feld)
                 const updatePayload = {
                     id: member.id,
-                    groups: currentGroups,
-                    // OPTIONAL: Fallback für alte DBs -> Kommaseparierter String
-                    // Wenn die Spalte 'group' nicht existiert, ignoriert Supabase sie meistens oder wirft Fehler.
-                    // Falls du sicher bist, dass 'group' weg ist, kommentiere die nächste Zeile aus.
-                    // group: currentGroups.join(', ') 
+                    groups: currentGroups
                 };
                 
-                // Warten auf DB
+                // 1. Warten auf DB Bestätigung
                 await Store.update('members', updatePayload);
                 
-                // Nachprüfung: Hat es geklappt?
-                if (Store.fetchTable) await Store.fetchTable('members');
-                const checkMember = Store.state.members.find(m => m.id == memberId);
+                // 2. Daten neu laden um sicherzugehen
+                if(Store.fetchTable) await Store.fetchTable('members');
                 
+                // 3. Prüfen ob erfolgreich
+                const checkMember = Store.state.members.find(m => m.id == memberId);
                 if (checkMember && checkMember.groups && checkMember.groups.includes(group.name)) {
                     App.closeModal();
                     App.showToast(`${member.firstName} erfolgreich hinzugefügt`, "success");
                     this.render(document.getElementById('content'));
                 } else {
-                    App.showToast("Fehler: Datenbank hat Änderung abgelehnt (RLS prüfen!)", "error");
+                    throw new Error("Datenbank hat Änderung nicht übernommen.");
                 }
 
             } catch (e) {
                 console.error(e);
-                App.showToast("Fehler beim Speichern: " + e.message, "error");
+                App.showToast("Fehler: " + e.message, "error");
             }
         }
     },
@@ -393,9 +394,11 @@ const GroupsView = {
             const member = Store.state.members.find(m => m.id == memberId);
             if(member) {
                 try {
+                    App.showToast("Entferne...", "info");
+
                     let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
                     
-                    // Legacy Migration
+                    // Legacy Migration beim Löschen
                     if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
                         currentGroups.push(member.group);
                     }
@@ -404,26 +407,27 @@ const GroupsView = {
                     
                     const updatePayload = {
                         id: member.id,
-                        groups: currentGroups,
-                        // group: null // Wir lassen das alte Feld unberührt, um Fehler zu vermeiden
+                        groups: currentGroups
                     };
                     
+                    // 1. Update senden
                     await Store.update('members', updatePayload);
                     
+                    // 2. Neu laden
                     if(Store.fetchTable) await Store.fetchTable('members');
                     
-                    // Prüfen ob weg
+                    // 3. Prüfen
                     const checkMember = Store.state.members.find(m => m.id == memberId);
                     if (checkMember && (!checkMember.groups || !checkMember.groups.includes(group.name))) {
                         this.render(document.getElementById('content'));
                         App.showToast("Entfernt", "success");
                     } else {
-                         App.showToast("Fehler: Entfernen abgelehnt (RLS)", "error");
+                        throw new Error("Datenbank hat Löschung verweigert.");
                     }
                     
                 } catch (e) {
                     console.error(e);
-                    App.showToast("Fehler beim Entfernen: " + e.message, "error");
+                    App.showToast("Fehler: " + e.message, "error");
                 }
             }
         }
