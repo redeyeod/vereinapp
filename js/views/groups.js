@@ -13,6 +13,9 @@ const GroupsView = {
     },
 
     render(container) {
+        // Sicherheits-Check: Container muss existieren
+        if (!container) return;
+
         if (this.state.activeGroupId) {
             this.renderDetail(container);
         } else {
@@ -24,15 +27,15 @@ const GroupsView = {
     // LISTEN-ANSICHT (GRID)
     // -------------------------------------------------------------------------
     renderList(container) {
-        // Daten vorbereiten
-        const members = Store.state.members || [];
-        const groups = Store.state.groups || [];
+        // Daten sicher abrufen
+        const members = (Store.state && Store.state.members) ? Store.state.members : [];
+        const groups = (Store.state && Store.state.groups) ? Store.state.groups : [];
         
-        // Zähler berechnen
+        // Zähler berechnen: Wie viele Mitglieder pro Gruppe?
         const counts = {};
         members.forEach(m => {
             const memberGroups = Array.isArray(m.groups) ? m.groups : [];
-            // Legacy Support
+            // Legacy Support (falls noch alte Datenstruktur 'm.group' existiert)
             if (m.group && m.group !== 'Keine' && !memberGroups.includes(m.group)) {
                 memberGroups.push(m.group);
             }
@@ -44,13 +47,18 @@ const GroupsView = {
         // Rechte & Filter
         const canManageAll = App.can('manage_all_groups'); 
         const currentUser = App.state.currentUser;
-        const myGroupNames = App.getUserRoles(currentUser).length > 0 ? (Array.isArray(currentUser.groups) ? currentUser.groups : []) : []; // Fallback
+        
+        // Meine Gruppen ermitteln
+        let myGroupNames = [];
+        if (currentUser && Array.isArray(currentUser.groups)) {
+            myGroupNames = currentUser.groups;
+        }
 
         // Aufteilung: Meine vs. Andere
         const myGroups = groups.filter(g => myGroupNames.includes(g.name));
         const otherGroups = groups.filter(g => !myGroupNames.includes(g.name));
 
-        // Add Button (als Karte oder Toolbar Button)
+        // Add Button (als Karte)
         const addButtonHtml = canManageAll 
             ? `<button onclick="GroupsView.openAddModal()" class="w-full bg-dark-card hover:bg-dark-hover border border-dashed border-dark-border hover:border-brand-500/50 rounded-2xl p-6 flex flex-col items-center justify-center gap-3 transition-all group min-h-[160px]">
                 <div class="w-12 h-12 rounded-full bg-dark-bg border border-dark-border flex items-center justify-center text-dark-muted group-hover:text-brand-500 group-hover:border-brand-500/50 transition-colors">
@@ -63,7 +71,7 @@ const GroupsView = {
         const renderCard = (group, isMyGroup) => {
             const count = counts[group.name] || 0;
             const canManage = App.can('manage_group_content', group.name);
-            const hasAccess = isMyGroup || canManage;
+            const hasAccess = isMyGroup || canManage || App.can('admin_global');
             
             // Design Klassen
             const baseClass = "relative flex flex-col justify-between p-5 rounded-2xl border transition-all min-h-[160px] group overflow-hidden";
@@ -73,7 +81,8 @@ const GroupsView = {
             
             const iconColor = hasAccess ? "text-brand-500 bg-brand-500/10" : "text-dark-muted bg-dark-bg";
 
-            const clickAction = hasAccess ? `onclick="GroupsView.openGroup('${group.id}')"` : '';
+            // Click-Logik: Nur öffnen wenn Zugriff erlaubt
+            const clickAction = hasAccess ? `onclick="GroupsView.openGroup('${group.id}')"` : `onclick="App.showToast('Kein Zugriff', 'error')"`;
 
             return `
             <div ${clickAction} class="${baseClass} ${stateClass}">
@@ -110,8 +119,8 @@ const GroupsView = {
                 <div>
                     <h3 class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-4 px-1">Meine Mitgliedschaften</h3>
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        ${myGroups.length > 0 ? myGroups.map(g => renderCard(g, true)).join('') : '<div class="col-span-full p-6 text-center text-dark-muted border border-dashed border-dark-border rounded-2xl">Du bist noch in keiner Gruppe.</div>'}
-                        ${addGroupButton}
+                        ${myGroups.length > 0 ? myGroups.map(g => renderCard(g, true)).join('') : '<div class="col-span-full p-6 text-center text-dark-muted border border-dashed border-dark-border rounded-2xl bg-dark-bg/20">Du bist noch in keiner Gruppe.</div>'}
+                        ${addButtonHtml}
                     </div>
                 </div>
 
@@ -134,6 +143,7 @@ const GroupsView = {
         const group = Store.state.groups ? Store.state.groups.find(g => g.id == this.state.activeGroupId) : null;
         if (!group) { this.closeGroup(); return; }
 
+        // Fallback Arrays falls leer
         if (!group.chat) group.chat = [];
         if (!group.files) group.files = []; 
 
@@ -147,7 +157,7 @@ const GroupsView = {
         ];
 
         container.innerHTML = `
-            <div class="fade-in flex flex-col h-full max-h-[calc(100vh-140px)] md:max-h-none">
+            <div class="fade-in flex flex-col h-full max-h-[calc(100vh-140px)] md:max-h-none pb-20">
                 <!-- Header Toolbar -->
                 <div class="flex items-center gap-3 mb-6">
                     <button onclick="GroupsView.closeGroup()" class="w-10 h-10 rounded-xl bg-dark-card border border-dark-border text-dark-muted hover:text-white hover:bg-dark-hover flex items-center justify-center transition-all flex-shrink-0 shadow-sm">
@@ -182,10 +192,12 @@ const GroupsView = {
             </div>
         `;
         
-        // Scroll to bottom if chat
+        // Scroll nach unten, wenn Chat aktiv
         if(this.state.activeTab === 'chat') {
-            const chatBox = document.getElementById('chat-messages');
-            if(chatBox) setTimeout(() => chatBox.scrollTop = chatBox.scrollHeight, 50);
+            setTimeout(() => {
+                const chatBox = document.getElementById('chat-messages');
+                if(chatBox) chatBox.scrollTop = chatBox.scrollHeight;
+            }, 100);
         }
     },
 
@@ -203,7 +215,8 @@ const GroupsView = {
     renderTabMembers(group) {
         const members = (Store.state.members || []).filter(m => {
             const groups = Array.isArray(m.groups) ? m.groups : [];
-            if (m.group === group.name) return true; // Legacy
+            // Legacy + Array Check
+            if (m.group === group.name) return true; 
             return groups.includes(group.name);
         });
 
@@ -221,12 +234,12 @@ const GroupsView = {
 
                 <div class="space-y-2">
                     ${members.length === 0 
-                        ? `<div class="text-center py-12 text-dark-muted opacity-60"><i class="fa-solid fa-users-slash text-3xl mb-2"></i><p class="text-sm">Keine Mitglieder.</p></div>` 
+                        ? `<div class="text-center py-12 text-dark-muted opacity-60"><i class="fa-solid fa-users-slash text-3xl mb-2"></i><p class="text-sm">Keine Mitglieder in dieser Gruppe.</p></div>` 
                         : members.map(m => `
                         <div class="flex items-center justify-between p-3 bg-dark-bg/50 border border-dark-border rounded-xl group hover:border-brand-500/30 transition-colors">
                             <div class="flex items-center gap-3 min-w-0">
                                 <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-slate-700 to-slate-800 text-slate-300 flex items-center justify-center text-xs font-bold border border-white/5 flex-shrink-0">
-                                    ${m.firstName.charAt(0)}${m.lastName.charAt(0)}
+                                    ${(m.firstName || '?').charAt(0)}${(m.lastName || '?').charAt(0)}
                                 </div>
                                 <div class="min-w-0">
                                     <p class="text-sm font-bold text-white truncate">${m.firstName} ${m.lastName}</p>
@@ -393,18 +406,25 @@ const GroupsView = {
         `;
     },
 
-    // --- MODALS & LOGIC ---
+    // --- NAVIGATION & LOGIC ---
 
     openGroup(id) { 
+        // WICHTIG: Typumwandlung sicherstellen, da IDs mal string mal int sein können
         const group = Store.state.groups.find(g => g.id == id);
-        if(!group) return;
+        
+        if(!group) {
+            console.error("Gruppe nicht gefunden:", id);
+            App.showToast("Gruppe nicht gefunden", "error");
+            return;
+        }
 
         const user = App.state.currentUser;
         const myGroupNames = user ? (Array.isArray(user.groups) ? user.groups : []) : [];
         const isMember = myGroupNames.includes(group.name);
         const canManage = App.can('manage_group_content', group.name);
+        const isAdmin = App.can('admin_global');
 
-        if (isMember || canManage) {
+        if (isMember || canManage || isAdmin) {
             this.state.activeGroupId = id; 
             this.state.activeTab = 'members'; 
             this.render(document.getElementById('content')); 
@@ -457,7 +477,7 @@ const GroupsView = {
             <div class="p-6">
                 <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4">
                     <h3 class="text-xl font-bold text-white">Gruppe bearbeiten</h3>
-                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white"><i class="fa-solid fa-times"></i></button>
+                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
                 <form onsubmit="GroupsView.handleUpdateGroup(event, '${groupId}')" class="space-y-4">
                     <div>
@@ -559,7 +579,7 @@ const GroupsView = {
         App.showToast("Entfernt");
     },
 
-    // --- EVENT MODALS ---
+    // --- EVENT MODALS (Analog Calendar View) ---
     openEventAddModal(groupId) {
         const html = `
             <div class="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
@@ -604,12 +624,13 @@ const GroupsView = {
         const e = Store.state.events.find(ev => ev.id == eventId);
         if(!e) return;
         
-        // ... (Verkürzte Logik für Übersichtlichkeit, analog zu dashboard logic)
-        // Hier würde die Detail-Ansicht für Events rein kommen, ähnlich wie wir es schon hatten
-        // Für diesen "Clean" Schritt habe ich es erst mal einfach gehalten oder du kopierst 
-        // die Event-Detail Logik von vorher, wenn du sie brauchst.
-        
-        // Basic Event Modal:
+        // Einfaches Modal, wenn man die komplexe Kalender-Logik hier nicht duplizieren will
+        // Du kannst hier auch CalendarView.openDetailModal(e.id) aufrufen, falls verfügbar
+        if (window.CalendarView && window.CalendarView.openDetailModal) {
+            window.CalendarView.openDetailModal(e.id);
+            return;
+        }
+
         const html = `
             <div class="p-6">
                 <div class="flex justify-between mb-4">
