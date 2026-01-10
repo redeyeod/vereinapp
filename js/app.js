@@ -1,7 +1,7 @@
 /**
  * =============================================================================
- * APP CORE LOGIC (RBAC Integration)
- * Integriert das neue dynamische Rollensystem in die Permission-Checks.
+ * APP CORE LOGIC (RBAC Integration & Admin UI)
+ * Integriert das neue dynamische Rollensystem und steuert den Admin-Button.
  * =============================================================================
  */
 
@@ -14,7 +14,7 @@ const App = {
 
     // Standard-Rollen Fallback, falls DB noch lädt oder leer ist
     defaultRoles: [
-        { name: 'Admin', permissions: ['admin_global'] },
+        { name: 'Vorstand', permissions: ['admin_global'] },
         { name: 'Mitglied', permissions: [] }
     ],
 
@@ -183,6 +183,18 @@ const App = {
         const roleEl = document.getElementById('current-user-role');
         if(nameEl) nameEl.textContent = user.firstName;
         if(roleEl) roleEl.textContent = user.role;
+
+        // --- ADMIN BUTTON LOGIK ---
+        // Prüfen ob der Admin Button existiert und ob der User Rechte hat
+        const adminBtn = document.getElementById('nav-btn-roles');
+        if(adminBtn) {
+            // Wir nutzen die can() Funktion, um zu prüfen ob der User 'admin_global' Rechte hat
+            if(this.can('admin_global')) {
+                adminBtn.classList.remove('hidden');
+            } else {
+                adminBtn.classList.add('hidden');
+            }
+        }
     },
 
     // --- ROUTER ---
