@@ -1,440 +1,254 @@
 /**
  * =============================================================================
- * GROUPS VIEW (Direct DB Diagnostic Mode)
- * Verwaltet Abteilungen - Mit strikter Prüfung, ob die DB wirklich schreibt
+ * GROUPS VIEW (RBAC Fixed)
+ * Zeigt Gruppen an und prüft RECHTE PRO GRUPPE individuell.
  * =============================================================================
  */
 
 const GroupsView = {
-    state: {
-        activeGroupId: null,
-        activeTab: 'members', 
-        currentFolderId: null,
-        myId: 1
-    },
-
     render(container) {
-        if (this.state.activeGroupId) {
-            this.renderDetail(container);
-        } else {
-            this.renderList(container);
-        }
-    },
+        // Prüfen, ob man überhaupt Gruppen sehen/verwalten darf (generell)
+        // Das erlaubt z.B. das Sehen des "Neue Gruppe" Buttons, falls man 'manage_all_groups' hat
+        const canCreate = App.can('manage_all_groups'); 
 
-    // -------------------------------------------------------------------------
-    // LISTEN-ANSICHT
-    // -------------------------------------------------------------------------
-    renderList(container) {
-        const counts = {};
-        const members = Store.state.members || [];
-        
-        members.forEach(m => {
-            const memberGroups = Array.isArray(m.groups) ? m.groups : [];
-            if (m.group && m.group !== 'Keine' && !memberGroups.includes(m.group)) {
-                memberGroups.push(m.group);
-            }
-            memberGroups.forEach(gName => {
-                if (!counts[gName]) counts[gName] = 0;
-                counts[gName]++;
-            });
-        });
-
-        const canManage = App.can('manage_groups'); 
-        const allGroups = Store.state.groups || [];
-        const myGroupNames = App.state.currentUser ? (Array.isArray(App.state.currentUser.groups) ? App.state.currentUser.groups : []) : [];
-
-        const myGroups = allGroups.filter(g => myGroupNames.includes(g.name));
-        const otherGroups = allGroups.filter(g => !myGroupNames.includes(g.name));
-
-        const addGroupButton = canManage 
-            ? `<button onclick="GroupsView.openAddModal()" class="group flex flex-col items-center justify-center p-6 rounded-2xl border border-dashed border-dark-border hover:border-blue-500/50 hover:bg-dark-hover/30 transition-all min-h-[140px]">
-                <div class="w-10 h-10 rounded-full bg-dark-bg border border-dark-border flex items-center justify-center text-dark-muted group-hover:text-blue-500 group-hover:border-blue-500/50 mb-3 transition-colors">
-                    <i class="fa-solid fa-plus"></i>
-                </div>
-                <span class="text-sm font-medium text-dark-muted group-hover:text-blue-400">Neue Abteilung</span>
+        const addButtonHtml = canCreate 
+            ? `<button onclick="GroupsView.openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white w-10 h-10 md:w-auto md:px-4 md:py-2 rounded-lg text-sm font-bold flex-shrink-0 flex items-center justify-center transition-all shadow-lg shadow-blue-900/30">
+                 <i class="fa-solid fa-plus md:mr-2"></i> <span class="hidden md:inline">Gruppe</span>
                </button>`
             : '';
 
-        const renderGroupCard = (group, isMember) => {
-            const count = counts[group.name] || 0;
-            const hasAccess = isMember || canManage;
+        container.innerHTML = `
+            <div class="flex flex-col gap-4 fade-in h-full">
+                <!-- Toolbar -->
+                <div class="flex items-center gap-3 bg-dark-card p-2 rounded-xl border border-dark-border sticky top-0 z-10 shadow-sm">
+                    <div class="relative flex-1">
+                        <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted text-sm"></i>
+                        <input type="text" id="groupSearch" onkeyup="GroupsView.filter()" placeholder="Gruppen suchen..." 
+                            class="w-full bg-dark-bg border-none rounded-lg pl-9 pr-4 py-2 text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm placeholder-dark-muted transition-shadow">
+                    </div>
+                    ${addButtonHtml}
+                </div>
+
+                <div id="groupsListContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-4"></div>
+                
+                <div id="noGroupsFound" class="hidden py-12 text-center text-dark-muted flex flex-col items-center justify-center">
+                    <div class="w-16 h-16 bg-dark-bg rounded-full flex items-center justify-center mb-4 text-2xl opacity-50 border border-dark-border">
+                        <i class="fa-solid fa-layer-group"></i>
+                    </div>
+                    <p class="text-sm font-bold">Keine Gruppen gefunden.</p>
+                </div>
+            </div>
+        `;
+        
+        this.updateList();
+    },
+
+    updateList(filter = "") {
+        const container = document.getElementById('groupsListContainer');
+        const emptyState = document.getElementById('noGroupsFound');
+        if(!container) return;
+
+        const groups = (Store.state && Store.state.groups) ? Store.state.groups : [];
+
+        const filtered = groups.filter(g => {
+            return (g.name || '').toLowerCase().includes(filter.toLowerCase());
+        });
+
+        if (filtered.length === 0) {
+            if(emptyState) emptyState.classList.remove('hidden');
+            container.innerHTML = '';
+        } else {
+            if(emptyState) emptyState.classList.add('hidden');
             
-            const cardStyle = hasAccess 
-                ? 'cursor-pointer hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-900/10 bg-dark-card' 
-                : 'cursor-not-allowed opacity-50 bg-dark-bg border-dashed';
+            container.innerHTML = filtered.map(g => {
+                // WICHTIG: Hier prüfen wir für JEDE Gruppe einzeln die Rechte!
+                // Wir übergeben den Namen der Gruppe als Kontext.
+                const canEditThisGroup = App.can('manage_group_content', g.name);
+                
+                // Mitglieder zählen
+                const memberCount = (Store.state.members || []).filter(m => Array.isArray(m.groups) && m.groups.includes(g.name)).length;
 
-            const deleteButton = canManage 
-                ? `<button onclick="event.stopPropagation(); GroupsView.delete('${group.id}')" class="text-dark-muted hover:text-red-400 p-2 rounded-lg hover:bg-red-500/10 transition-colors" title="Löschen">
-                    <i class="fa-regular fa-trash-can"></i>
-                   </button>`
-                : '';
-
-            const lockIcon = !hasAccess ? '<i class="fa-solid fa-lock text-dark-muted mr-2"></i>' : '';
-
-            return `
-            <div onclick="${hasAccess ? `GroupsView.openGroup('${group.id}')` : `App.showToast('Kein Zugriff')`}" 
-                 class="p-5 rounded-2xl border border-dark-border transition-all flex flex-col justify-between min-h-[140px] ${cardStyle}">
-                <div class="flex justify-between items-start mb-2">
-                    <h3 class="font-bold text-lg text-white leading-tight truncate pr-2 flex items-center">
-                        ${lockIcon} ${group.name}
-                    </h3>
-                    ${deleteButton}
-                </div>
-                <div class="mt-auto pt-4 flex items-end justify-between border-t border-dark-border/30">
-                    <div>
-                        <span class="text-2xl font-bold text-white block leading-none">${count}</span>
-                        <span class="text-start text-[10px] text-dark-muted uppercase tracking-wider">Mitglieder</span>
+                return `
+                <div class="bg-dark-card p-5 rounded-xl border border-dark-border flex flex-col gap-3 hover:border-blue-500/30 transition-all group relative overflow-hidden">
+                    <div class="flex justify-between items-start">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-slate-800 text-slate-300 flex items-center justify-center text-lg border border-slate-700">
+                                <i class="fa-solid fa-users"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-white text-base leading-tight">${g.name}</h4>
+                                <p class="text-xs text-dark-muted mt-0.5">${memberCount} Mitglieder</p>
+                            </div>
+                        </div>
+                        
+                        ${canEditThisGroup ? `
+                            <button onclick="GroupsView.openEditModal('${g.id}')" class="w-8 h-8 rounded-lg bg-dark-bg text-dark-muted hover:text-blue-400 border border-transparent hover:border-dark-border flex items-center justify-center transition-colors">
+                                <i class="fa-solid fa-pen text-xs"></i>
+                            </button>
+                        ` : ''}
                     </div>
-                    ${hasAccess ? `<i class="fa-solid fa-arrow-right text-dark-muted opacity-50"></i>` : ''}
-                </div>
-            </div>
-            `;
-        };
-
-        container.innerHTML = `
-            <div class="mb-8">
-                <div class="flex items-center gap-2 mb-4 px-1">
-                    <h3 class="text-lg font-bold text-white">Meine Gruppen</h3>
-                    <span class="bg-blue-500/10 text-blue-400 text-xs font-bold px-2 py-0.5 rounded-md border border-blue-500/20">${myGroups.length}</span>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 fade-in">
-                    ${myGroups.map(g => renderGroupCard(g, true)).join('')}
-                    ${addGroupButton}
-                </div>
-            </div>
-            ${otherGroups.length > 0 ? `
-            <div class="mb-8 pt-6 border-t border-dark-border/50">
-                <h3 class="text-sm font-bold text-dark-muted uppercase tracking-wider mb-4 px-1">Weitere Gruppen</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 fade-in opacity-80">
-                    ${otherGroups.map(g => renderGroupCard(g, false)).join('')}
-                </div>
-            </div>
-            ` : ''}
-        `;
-    },
-
-    // -------------------------------------------------------------------------
-    // DETAIL-ANSICHT
-    // -------------------------------------------------------------------------
-    renderDetail(container) {
-        const group = Store.state.groups ? Store.state.groups.find(g => g.id == this.state.activeGroupId) : null;
-        if (!group) { this.closeGroup(); return; }
-
-        if (!group.chat) group.chat = [];
-        if (!group.files) group.files = []; 
-
-        const canManage = App.can('manage_groups');
-        const editButton = canManage
-            ? `<button onclick="GroupsView.openEditGroupModal('${group.id}')" class="w-10 h-10 rounded-full bg-dark-bg border border-dark-border text-dark-muted hover:text-blue-400 hover:border-blue-500/50 flex items-center justify-center transition-all flex-shrink-0"><i class="fa-solid fa-pen"></i></button>`
-            : '';
-
-        const tabs = [
-            { id: 'members', label: 'Mitglieder', icon: 'fa-users' },
-            { id: 'chat', label: 'Chat', icon: 'fa-comments' },
-            { id: 'calendar', label: 'Termine', icon: 'fa-calendar-days' },
-            { id: 'files', label: 'Dateien', icon: 'fa-folder-tree' }
-        ];
-
-        container.innerHTML = `
-            <div class="fade-in h-full flex flex-col">
-                <div class="flex items-center gap-3 md:gap-4 mb-4 md:mb-6">
-                    <button onclick="GroupsView.closeGroup()" class="w-10 h-10 rounded-full bg-dark-card border border-dark-border text-dark-muted hover:text-white hover:bg-dark-hover flex items-center justify-center transition-colors flex-shrink-0">
-                        <i class="fa-solid fa-arrow-left"></i>
-                    </button>
-                    <div class="flex-1 min-w-0">
-                        <h2 class="text-xl md:text-2xl font-bold text-white truncate">${group.name}</h2>
-                        <p class="text-xs text-dark-muted truncate">Gruppen-Dashboard</p>
+                    
+                    ${g.description ? `<p class="text-xs text-dark-muted line-clamp-2">${g.description}</p>` : ''}
+                    
+                    <!-- Mitglieder Preview (Optional) -->
+                    <div class="flex -space-x-2 overflow-hidden py-1">
+                        ${this.renderMemberAvatars(g.name)}
                     </div>
-                    ${editButton}
-                </div>
-
-                <div class="flex gap-2 mb-4 md:mb-6 overflow-x-auto pb-2 border-b border-dark-border/50 no-scrollbar">
-                    ${tabs.map(tab => `
-                        <button onclick="GroupsView.switchTab('${tab.id}')" 
-                            class="px-3 md:px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center transition-all whitespace-nowrap flex-shrink-0
-                            ${this.state.activeTab === tab.id ? 'bg-blue-600 text-white shadow-lg' : 'bg-transparent text-dark-muted hover:bg-dark-hover hover:text-white'}">
-                            <i class="fa-solid ${tab.icon} mr-2"></i> ${tab.label}
-                        </button>
-                    `).join('')}
-                </div>
-
-                <div class="flex-1 overflow-y-auto bg-dark-card/50 rounded-bubble border border-dark-border p-4 md:p-6 min-h-[50vh]">
-                    ${this.getTabContent(group)}
-                </div>
-            </div>
-        `;
-        
-        if(this.state.activeTab === 'chat') {
-            const chatBox = document.getElementById('chat-messages');
-            if(chatBox) chatBox.scrollTop = chatBox.scrollHeight;
+                </div>`;
+            }).join('');
         }
     },
 
-    getTabContent(group) {
-        switch (this.state.activeTab) {
-            case 'members': return this.renderTabMembers(group);
-            case 'chat': return this.renderTabChat(group);
-            case 'calendar': return this.renderTabCalendar(group);
-            case 'files': return this.renderTabFiles(group);
-            default: return '';
-        }
-    },
-
-    // --- TAB: MITGLIEDER ---
-    renderTabMembers(group) {
-        const members = (Store.state.members || []).filter(m => {
-            const groups = Array.isArray(m.groups) ? m.groups : [];
-            if (m.group === group.name) return true; // Legacy
-            return groups.includes(group.name);
-        });
-
-        const canManage = App.can('manage_groups');
-        const addButton = canManage 
-            ? `<button onclick="GroupsView.openAddMemberModal('${group.id}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center shadow-lg whitespace-nowrap">
-                <i class="fa-solid fa-plus mr-2 md:mr-0 lg:mr-2"></i> <span class="hidden md:hidden lg:inline">Mitglied hinzufügen</span><span class="md:inline lg:hidden">Neu</span>
-               </button>` 
-            : '';
-        
-        return `
-            <div class="flex flex-col h-full">
-                <div class="flex justify-between items-center mb-4">
-                    <span class="text-sm text-dark-muted">${members.length} Mitglieder</span>
-                    ${addButton}
-                </div>
-                ${members.length === 0 
-                    ? `<div class="text-center text-dark-muted py-10 bg-dark-bg/30 rounded-xl border border-dashed border-dark-border"><i class="fa-solid fa-user-slash text-4xl mb-3 opacity-50"></i><p>Keine Mitglieder.</p></div>` 
-                    : `<div class="overflow-x-auto rounded-xl border border-dark-border">
-                        <table class="w-full text-left border-collapse">
-                            <thead>
-                                <tr class="bg-dark-bg text-dark-muted text-xs uppercase tracking-wider border-b border-dark-border">
-                                    <th class="p-4 font-semibold">Name</th>
-                                    <th class="p-4 font-semibold hidden sm:table-cell">Rolle</th>
-                                    <th class="p-4 font-semibold text-right">Aktion</th>
-                                </tr>
-                            </thead>
-                            <tbody class="text-sm text-dark-text divide-y divide-dark-border bg-dark-card/30">
-                                ${members.map(m => `
-                                    <tr class="hover:bg-dark-hover/50 transition-colors group/row">
-                                        <td class="p-4 flex items-center gap-3">
-                                            <div class="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold border border-blue-500/30 flex-shrink-0">
-                                                ${m.firstName.charAt(0)}${m.lastName.charAt(0)}
-                                            </div>
-                                            <div class="min-w-0"><span class="font-medium block truncate">${m.firstName} ${m.lastName}</span></div>
-                                        </td>
-                                        <td class="p-4 text-dark-muted hidden sm:table-cell">${m.role}</td>
-                                        <td class="p-4 text-right">
-                                            ${canManage ? `<button onclick="GroupsView.removeMemberFromGroup('${m.id}')" class="text-dark-muted hover:text-red-400 md:opacity-0 group-hover/row:opacity-100 transition-opacity p-2 bg-dark-bg md:bg-transparent rounded-lg" title="Entfernen"><i class="fa-solid fa-user-minus"></i></button>` : ''}
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>`
-                }
+    renderMemberAvatars(groupName) {
+        const members = (Store.state.members || []).filter(m => Array.isArray(m.groups) && m.groups.includes(groupName));
+        const preview = members.slice(0, 5);
+        let html = preview.map(m => `
+            <div class="inline-block h-6 w-6 rounded-full ring-2 ring-dark-card bg-slate-700 flex items-center justify-center text-[8px] text-white font-bold" title="${m.firstName} ${m.lastName}">
+                ${(m.firstName||'?').charAt(0)}${(m.lastName||'?').charAt(0)}
             </div>
-        `;
+        `).join('');
+        
+        if (members.length > 5) {
+            html += `<div class="inline-block h-6 w-6 rounded-full ring-2 ring-dark-card bg-dark-bg flex items-center justify-center text-[8px] text-dark-muted font-bold">+${members.length - 5}</div>`;
+        }
+        return html;
     },
 
-    // --- MODAL: Mitglied hinzufügen ---
-    openAddMemberModal(groupId) {
+    filter() { 
+        const searchInput = document.getElementById('groupSearch');
+        if(searchInput) this.updateList(searchInput.value); 
+    },
+
+    openAddModal(editModeData = null) {
+        // Nur Super-Admins oder Gruppen-Admins dürfen modal öffnen
+        // (Bei Edit prüfen wir später nochmal spezifisch)
         if(!App.can('manage_groups')) return;
-        const group = Store.state.groups.find(g => g.id == groupId);
-        const availableMembers = (Store.state.members || []).filter(m => {
-            const inGroupNew = Array.isArray(m.groups) && m.groups.includes(group.name);
-            const inGroupOld = m.group === group.name;
-            return !inGroupNew && !inGroupOld;
-        });
+
+        const isEdit = !!editModeData;
+        const data = editModeData || {};
+        
+        // Sicherheitscheck bei Edit: Darf ich DIESE Gruppe bearbeiten?
+        if (isEdit && !App.can('manage_group_content', data.name)) {
+            App.showToast("Keine Berechtigung für diese Gruppe.", "error");
+            return;
+        }
+
+        const title = isEdit ? "Gruppe bearbeiten" : "Neue Gruppe";
+        const btnText = isEdit ? "Speichern" : "Anlegen";
+        const handler = isEdit ? `GroupsView.handleUpdate(event, '${data.id}')` : "GroupsView.handleAdd(event)";
 
         const html = `
-            <div class="p-4 md:p-8 h-[500px] flex flex-col">
-                <div class="flex justify-between items-center mb-4 border-b border-dark-border pb-4">
-                    <h3 class="text-lg md:text-xl font-bold text-white">Mitglied hinzufügen</h3>
-                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2"><i class="fa-solid fa-times text-xl"></i></button>
+            <div class="p-6 md:p-8">
+                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4">
+                    <h3 class="text-xl font-bold text-white">${title}</h3>
+                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
-                <div class="mb-4 relative">
-                    <i class="fa-solid fa-search absolute left-3 top-3 text-dark-muted text-sm"></i>
-                    <input type="text" onkeyup="GroupsView.filterMemberSelect(this)" placeholder="Mitglied suchen..." 
-                        class="w-full bg-dark-bg border border-dark-border rounded-xl pl-10 pr-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors text-sm">
-                </div>
-                <div id="member-select-list" class="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                    ${availableMembers.length === 0 ? '<p class="text-center text-dark-muted text-sm mt-10">Alle verfügbaren Mitglieder sind bereits in dieser Gruppe.</p>' : ''}
-                    ${availableMembers.map(m => `
-                        <div class="member-item flex justify-between items-center p-3 rounded-lg bg-dark-bg border border-dark-border hover:border-blue-500/50 transition-colors group">
-                            <div class="flex items-center gap-3">
-                                <div class="w-8 h-8 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold flex-shrink-0">${m.firstName.charAt(0)}</div>
-                                <div class="overflow-hidden"><p class="text-sm font-bold text-white member-name truncate">${m.firstName} ${m.lastName}</p></div>
-                            </div>
-                            <button onclick="GroupsView.addMemberDirect('${groupId}', '${m.id}')" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg text-xs transition-colors shadow-lg"><i class="fa-solid fa-plus"></i></button>
-                        </div>
-                    `).join('')}
-                </div>
+                <form onsubmit="${handler}" class="space-y-5">
+                    <div>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Gruppenname *</label>
+                        <input type="text" name="name" value="${data.name||''}" required class="form-input" placeholder="z.B. Elferrat">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Beschreibung</label>
+                        <textarea name="description" class="form-input" rows="3" placeholder="Kurze Beschreibung...">${data.description||''}</textarea>
+                    </div>
+                    
+                    ${isEdit ? `
+                    <div class="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex justify-between items-center mt-6">
+                        <span class="text-xs text-red-400 font-bold">Gruppe löschen?</span>
+                        <button type="button" onclick="GroupsView.delete('${data.id}')" class="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded transition-colors">Löschen</button>
+                    </div>` : ''}
+
+                    <button type="submit" class="btn-primary w-full mt-4">${btnText}</button>
+                </form>
             </div>
         `;
         App.openModal(html);
     },
 
-    filterMemberSelect(input) {
-        const filter = input.value.toLowerCase();
-        document.querySelectorAll('#member-select-list .member-item').forEach(item => {
-            const name = item.querySelector('.member-name').textContent.toLowerCase();
-            item.classList.toggle('hidden', !name.includes(filter));
-            item.classList.toggle('flex', name.includes(filter));
-        });
+    openEditModal(id) {
+        const g = Store.state.groups.find(gr => gr.id == id);
+        if(!g) return;
+        this.openAddModal(g);
     },
 
-    // --- FIX: Direkte DB-Kommunikation für JSONB Spalte ---
-    async addMemberDirect(groupId, memberId) {
-        if(!App.can('manage_groups')) return;
+    async handleAdd(e) {
+        e.preventDefault();
+        // Nur Super-Admin darf neue Gruppen erstellen (meistens sinnvoll)
+        // Oder wir erlauben es 'manage_all_groups' inhabern
+        if(!App.can('manage_all_groups')) {
+            App.showToast("Nur Vorstände können neue Gruppen anlegen.", "error");
+            return;
+        }
+
+        const fd = new FormData(e.target);
+        const name = fd.get('name');
         
-        const group = Store.state.groups.find(g => g.id == groupId);
-        const member = Store.state.members.find(m => m.id == memberId);
+        // Check Duplicate
+        if(Store.state.groups.some(g => g.name.toLowerCase() === name.toLowerCase())) {
+            App.showToast("Eine Gruppe mit diesem Namen existiert bereits.", "error");
+            return;
+        }
 
-        if (member && group) {
-            try {
-                App.showToast("Speichere...", "info");
+        await Store.add('groups', {
+            name: name,
+            description: fd.get('description')
+        });
+        App.closeModal();
+        this.updateList();
+    },
 
-                // Arrays sicherstellen
-                let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
-                
-                // Legacy Migration: Alten "Singular" Wert übernehmen
-                if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
-                    currentGroups.push(member.group);
-                }
+    async handleUpdate(e, id) {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const g = Store.state.groups.find(gr => gr.id == id);
+        if(!g) return;
 
-                if (!currentGroups.includes(group.name)) {
-                    currentGroups.push(group.name);
-                }
-                
-                // DIREKTER SUPABASE AUFRUF
-                // Wir nutzen hier direkt den Client, um sicherzustellen, dass das JSONB Array korrekt übertragen wird.
-                const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-                
-                const { data, error } = await _sb
-                    .from('members')
-                    .update({ 
-                        groups: currentGroups // JSONB Array wird hier direkt übergeben
-                    })
-                    .eq('id', member.id)
-                    .select();
+        // Erneuter Sicherheitscheck vor dem Speichern
+        if (!App.can('manage_group_content', g.name)) {
+            App.showToast("Fehlende Berechtigung.", "error");
+            return;
+        }
 
-                if (error) {
-                    throw new Error("DB Error: " + error.message);
-                }
+        const updated = { 
+            ...g, 
+            name: fd.get('name'), 
+            description: fd.get('description') 
+        };
+        
+        // ID sicher entfernen für Update (wie bei Members)
+        const cleanUpdate = { ...updated };
+        delete cleanUpdate.id;
 
-                // Prüfen, ob Update tatsächlich durchgeführt wurde (RLS Check)
-                if (!data || data.length === 0) {
-                    throw new Error("Update verweigert (RLS). Bitte 'UPDATE' Policy in Supabase prüfen.");
-                }
-
-                // Wenn wir hier sind, war das Update in der DB erfolgreich!
-                
-                // Lokalen State aktualisieren (damit man das Ergebnis sofort sieht)
-                member.groups = currentGroups;
-                
-                // UI Aktualisieren
-                App.closeModal();
-                App.showToast(`${member.firstName} hinzugefügt`, "success");
-                this.render(document.getElementById('content'));
-                
-                // Sicherheitshalber im Hintergrund neu laden
-                if(Store.fetchTable) Store.fetchTable('members');
-
-            } catch (e) {
-                console.error(e);
-                App.showToast("Fehler: " + e.message, "error");
-            }
+        const { error } = await supabase.from('groups').update(cleanUpdate).eq('id', id);
+        
+        if(error) {
+            App.showToast(error.message, "error");
+        } else {
+            await Store.fetchTable('groups'); // Refresh Data
+            App.closeModal();
+            this.updateList();
+            App.showToast("Gruppe gespeichert");
         }
     },
 
-    async removeMemberFromGroup(memberId) {
-        if(!App.can('manage_groups')) return;
-        const group = Store.state.groups.find(g => g.id == this.state.activeGroupId);
-        if (!group) return;
+    async delete(id) {
+        // Löschen ist kritisch -> Nur Super-Admin oder spezielle Berechtigung?
+        // Wir erlauben es demjenigen, der die Gruppe auch bearbeiten darf
+        const g = Store.state.groups.find(gr => gr.id == id);
+        if (!g) return;
 
-        if(confirm(`Entfernen aus '${group.name}'?`)) {
-            const member = Store.state.members.find(m => m.id == memberId);
-            if(member) {
-                try {
-                    App.showToast("Entferne...", "info");
-                    
-                    let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
-                    
-                    // Legacy Migration
-                    if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
-                        currentGroups.push(member.group);
-                    }
-
-                    currentGroups = currentGroups.filter(g => g !== group.name);
-                    
-                    // Direkter Supabase Aufruf
-                    const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-                    const { data, error } = await _sb
-                        .from('members')
-                        .update({ groups: currentGroups })
-                        .eq('id', member.id)
-                        .select();
-
-                    if (error) throw new Error(error.message);
-                    if (!data || data.length === 0) throw new Error("Löschen blockiert (RLS oder ID falsch).");
-                    
-                    // Lokales Update
-                    member.groups = currentGroups;
-                    
-                    this.render(document.getElementById('content'));
-                    App.showToast("Entfernt", "success");
-                    
-                    if(Store.fetchTable) Store.fetchTable('members');
-                    
-                } catch (e) {
-                    console.error(e);
-                    App.showToast("Fehler: " + e.message, "error");
-                }
-            }
+        if (!App.can('manage_group_content', g.name)) {
+            App.showToast("Keine Berechtigung zum Löschen.", "error");
+            return;
         }
-    },
 
-    // --- RESTLICHE TABS (Chat, Calendar, Files) ---
-    
-    renderTabChat(group) {
-        const messages = group.chat || [];
-        return `<div class="flex flex-col h-[65vh] md:h-[500px]"><div id="chat-messages" class="flex-1 overflow-y-auto space-y-4 pr-2 mb-4 custom-scrollbar">${messages.map(m => `<div class="bg-dark-bg p-2 rounded">${m.text}</div>`).join('')}</div><form onsubmit="GroupsView.sendMessage(event, '${group.id}')" class="flex gap-2"><input name="message" class="form-input" placeholder="Nachricht..."><button class="btn-primary">Senden</button></form></div>`;
-    },
-    async sendMessage(e, groupId) { e.preventDefault(); /* ... */ },
-
-    renderTabCalendar(group) {
-        const events = (Store.state.events||[]).filter(e => e.group === group.name);
-        return `<div><h3>Termine</h3><div class="space-y-2">${events.map(e => `<div>${e.title}</div>`).join('')}</div><button onclick="GroupsView.addEvent('${group.id}')" class="btn-primary mt-4">Termin</button></div>`;
-    },
-    addEvent(groupId) { /* ... */ },
-    async handleCalendarAdd(e, groupName) { /* ... */ },
-    async deleteGroupEvent(id) { /* ... */ },
-    openEventDetail(id) { /* ... */ },
-    async setAttendance(id, status) { /* ... */ },
-
-    renderTabFiles(group) {
-        return `<div>Dateien (Platzhalter)</div>`;
-    },
-    // ... restliche Helper ...
-    
-    // Navigation & Helpers
-    openGroup(id) { this.state.activeGroupId = id; this.state.activeTab = 'members'; this.state.currentFolderId = null; this.render(document.getElementById('content')); },
-    closeGroup() { this.state.activeGroupId = null; this.render(document.getElementById('content')); },
-    switchTab(id) { this.state.activeTab = id; this.render(document.getElementById('content')); },
-    
-    async delete(id) { 
-        if(!App.can('manage_groups')) return; 
-        if(confirm("Löschen?")) { 
-            await Store.remove('groups', id); 
-            this.render(document.getElementById('content')); 
-        } 
-    },
-    
-    openAddModal() { if(!App.can('manage_groups')) return; App.openModal(`<div class="p-4"><h3 class="text-white mb-4">Neu</h3><form onsubmit="GroupsView.handleAdd(event)"><input name="name" class="form-input" required><button class="btn-primary mt-2">Erstellen</button></form></div>`); },
-    async handleAdd(e) { e.preventDefault(); const name = new FormData(e.target).get('name'); await Store.add('groups', { id: Date.now(), name: name, chat: [], files: [] }); App.closeModal(); this.render(document.getElementById('content')); },
-
-    openEditGroupModal(groupId) { /* ... */ },
-    async handleUpdateGroup(e, groupId) { /* ... */ }
+        if(confirm(`Gruppe "${g.name}" wirklich löschen?`)) {
+            await Store.remove('groups', id);
+            App.closeModal();
+            this.updateList();
+        }
+    }
 };
 
-// Global verfügbar machen
 window.GroupsView = GroupsView;
