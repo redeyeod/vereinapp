@@ -65,9 +65,7 @@
                 <label class="block text-xs font-bold text-dark-muted uppercase mb-2 ml-1">Verein wählen</label>
                 <!-- Inline Handler für sofortiges Feedback -->
                 <select id="club-select" onchange="if(typeof Store !== 'undefined') Store.switchClub(this.value)" class="w-full bg-dark-card border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 cursor-pointer">
-                    <option value="demo">TSV Musterstadt (Demo)</option>
                     <option value="grokage">GroKaGe Malsch 1929 e.V.</option>
-                    <option value="fc_beispiel">1. FC Beispielhausen</option>
                 </select>
             </div>
 
@@ -86,7 +84,6 @@
             </form>
             
             <div id="login-error" class="text-red-400 text-xs text-center mt-3 hidden"></div>
-            <div class="text-center mt-4"><p class="text-xs text-dark-muted">Admin-Login: <b>admin@gmail.com</b> / <b>admin</b></p></div>
         </div>
     </div>
 
