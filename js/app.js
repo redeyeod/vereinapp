@@ -16,10 +16,15 @@ const App = {
     async init() {
         console.log("App: Init...");
 
-        // 1. CSS laden (WICHTIG: Das muss passieren, bevor Views gerendert werden)
+        // 1. CSS laden
         this.injectStyles();
 
-        // 2. Warte auf Store
+        // 2. Benutzer sofort laden (aus LocalStorage Session), damit wir nicht ausgeloggt werden
+        //    Wir warten NICHT auf den Store, damit der Login-Status sofort da ist.
+        this.loadCurrentUser();
+        this.initTheme();
+
+        // 3. Warte auf Store (Datenbank Verbindung)
         let attempts = 0;
         while (typeof Store === 'undefined' && attempts < 20) {
             await new Promise(r => setTimeout(r, 100));
@@ -33,6 +38,8 @@ const App = {
 
         try {
             await Store.init();
+            // Wenn Store fertig ist, versuchen wir den User nochmal mit "echten" Daten anzureichern
+            this.loadCurrentUser(); 
         } catch (e) { console.error(e); }
 
         Store.onUpdate = () => {
@@ -41,17 +48,17 @@ const App = {
             const activeTag = document.activeElement ? document.activeElement.tagName : '';
             // Nur neu rendern, wenn wir nicht gerade tippen
             if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
-                // Hier nutzen wir den aktuellen State
-                this.router(Store.state.currentView || 'dashboard');
+                // Nur updaten, wenn sich die View nicht geändert hat, 
+                // oder wir nutzen den State als Wahrheit
+                this.router(Store.state.currentView || localStorage.getItem('vm_last_view') || 'dashboard');
             }
         };
 
-        this.loadCurrentUser();
-        this.initTheme();
-        
+        // 4. Entscheidung: App oder Login anzeigen
         if (this.state.currentUser) {
             // FIX: Letzte Ansicht wiederherstellen
             const lastView = localStorage.getItem('vm_last_view') || 'dashboard';
+            console.log("Stelle letzte Ansicht wieder her:", lastView);
             this.router(lastView);
         } else {
             this.showAuthView();
@@ -84,9 +91,18 @@ const App = {
             }
 
             localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
-            if (Store.fetchTable) await Store.fetchTable('members');
             
-            let user = Store.state.members.find(m => m.email.toLowerCase() === email);
+            // Versuch Daten zu laden, aber nicht blockieren wenn es fehlschlägt
+            try {
+                if (Store.fetchTable) await Store.fetchTable('members');
+            } catch(e) { console.warn("Konnte Mitglieder beim Login nicht laden", e); }
+            
+            let user = null;
+            if (Store.state && Store.state.members) {
+                user = Store.state.members.find(m => m.email.toLowerCase() === email);
+            }
+            
+            // Fallback User bauen, falls DB noch nicht bereit
             if (!user) user = { id: data.user.id, email: email, firstName: 'User', role: 'Mitglied' };
 
             this.loginSuccess(user);
@@ -120,7 +136,10 @@ const App = {
 
     logout() {
         if(confirm("Abmelden?")) {
-            localStorage.clear();
+            localStorage.removeItem('vm_supabase_session');
+            localStorage.removeItem('vm_current_user_id');
+            // View Reset beim Logout
+            localStorage.setItem('vm_last_view', 'dashboard'); 
             location.reload();
         }
     },
@@ -134,21 +153,29 @@ const App = {
             if (!session || !session.user) return;
 
             const email = session.user.email.toLowerCase();
-            // Versuche User aus Store zu laden (falls schon geladen), sonst Fallback
-            let user = null;
-            if(Store.state && Store.state.members) {
-                user = Store.state.members.find(m => m.email.toLowerCase() === email);
+            
+            // 1. Zuerst Fallback-User aus Session bauen (damit wir SOFORT eingeloggt sind)
+            let user = { id: session.user.id, email: email, firstName: 'User', role: 'Mitglied' };
+            
+            // 2. Wenn Store Daten hat, nehmen wir die "echten" Daten
+            if(Store && Store.state && Store.state.members && Store.state.members.length > 0) {
+                const found = Store.state.members.find(m => m.email.toLowerCase() === email);
+                if(found) user = found;
             }
             
-            if(!user) user = { id: session.user.id, email: email, firstName: 'User', role: 'Mitglied' };
             if (email === 'admin@gmail.com') user.role = 'Admin';
             
             this.state.currentUser = user;
             this.updateHeaderUI();
+            
+            // UI Switch sofort machen, falls wir noch im Auth Screen hängen
+            document.getElementById('auth-view').classList.add('hidden');
+            document.getElementById('app-view').classList.remove('hidden');
+
         } catch(e) { 
-            console.error(e); 
-            // Nur löschen wenn wirklich defekt
-            // localStorage.removeItem('vm_supabase_session');
+            console.error("Session Parse Error:", e); 
+            // Session nur löschen, wenn sie wirklich kaputt ist (JSON Fehler)
+            // Nicht löschen, nur weil Store noch lädt!
         }
     },
 
@@ -167,9 +194,12 @@ const App = {
         // FIX: Fallback auf gespeicherte View, falls Parameter leer
         if(!viewName) viewName = localStorage.getItem('vm_last_view') || 'dashboard';
         
-        // FIX: Speichern der neuen View
+        // FIX: Speichern der neuen View für den nächsten Reload
         localStorage.setItem('vm_last_view', viewName);
-        Store.state.currentView = viewName;
+        
+        if (Store && Store.state) {
+            Store.state.currentView = viewName;
+        }
         
         const container = document.getElementById('content');
         const subtitle = document.getElementById('page-subtitle');
@@ -191,7 +221,7 @@ const App = {
             viewObj.render(container);
             container.classList.add('fade-in');
             
-            // Mobile Menu schließen falls offen (optional)
+            // Mobile Menu schließen falls offen
             const mobileMenu = document.getElementById('mobile-menu');
             if(mobileMenu && !mobileMenu.classList.contains('hidden')) mobileMenu.classList.add('hidden');
             
