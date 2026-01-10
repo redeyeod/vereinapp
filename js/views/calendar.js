@@ -1,6 +1,6 @@
 /**
  * =============================================================================
- * CALENDAR VIEW
+ * CALENDAR VIEW (Clean & Mobile First)
  * Verwaltung der Termine und Veranstaltungen (Global)
  * =============================================================================
  */
@@ -25,86 +25,82 @@ const CalendarView = {
 
         // Add Button: Kompakt und modern
         const addButton = canManage 
-            ? `<button onclick="CalendarView.openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-lg shadow-blue-900/20 flex items-center">
-                    <i class="fa-solid fa-plus mr-2"></i> <span class="hidden sm:inline">Termin eintragen</span><span class="sm:hidden">Neu</span>
+            ? `<button onclick="CalendarView.openAddModal()" class="pl-3 pr-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-brand-500/20 transition-all flex items-center gap-2">
+                 <i class="fa-solid fa-plus"></i> <span class="hidden sm:inline">Termin</span><span class="sm:hidden">Neu</span>
                </button>`
             : '';
 
         container.innerHTML = `
-            <div class="flex justify-between items-center mb-4 md:mb-6">
-                <h3 class="text-lg md:text-xl font-bold text-white">Kommende Veranstaltungen</h3>
-                ${addButton}
-            </div>
-
-            <div class="space-y-3 fade-in">
-                ${sortedEvents.length > 0 ? sortedEvents.map(e => {
-                    // Datumslogik für mehrtägige Events
-                    const startDate = new Date(e.date);
-                    const endDate = e.endDate ? new Date(e.endDate) : null;
-                    const isMultiDay = endDate && (endDate.getDate() !== startDate.getDate() || endDate.getMonth() !== startDate.getMonth() || endDate.getFullYear() !== startDate.getFullYear());
-                    
-                    const dateDisplayMonth = startDate.toLocaleString('de-DE', { month: 'short' });
-                    const dateDisplayDay = startDate.getDate();
-
-                    // Actions nur für Admins
-                    const listActions = canManage 
-                        ? `<div class="mt-3 sm:mt-0 sm:ml-4 flex gap-2 justify-end sm:justify-start border-t sm:border-t-0 border-dark-border/50 pt-3 sm:pt-0">
-                             <button onclick="event.stopPropagation(); CalendarView.openEditModal(${e.id})" class="text-dark-muted hover:text-blue-400 p-2 rounded-lg hover:bg-blue-500/10 transition-colors" title="Daten bearbeiten">
-                                <i class="fa-solid fa-pen"></i>
-                             </button>
-                             <button onclick="event.stopPropagation(); CalendarView.delete(${e.id})" class="text-dark-muted hover:text-red-400 p-2 rounded-lg hover:bg-red-500/10 transition-colors" title="Löschen">
-                                <i class="fa-regular fa-trash-can"></i>
-                             </button>
-                           </div>` 
-                        : '';
-
-                    return `
-                    <div onclick="CalendarView.openDetailModal(${e.id})" class="bg-dark-card p-4 md:p-5 rounded-2xl border border-dark-border flex flex-col sm:flex-row sm:items-start hover:border-blue-500/50 transition-all shadow-sm group cursor-pointer relative">
-                        
-                        <!-- Hover Stripe -->
-                        <div class="absolute left-0 top-4 bottom-4 w-1 bg-blue-500 rounded-r-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
-
-                        <!-- Datums-Box -->
-                        <div class="flex items-center sm:block mb-3 sm:mb-0 w-full sm:w-24 flex-shrink-0">
-                            <div class="bg-dark-bg/50 border border-dark-border rounded-xl px-4 py-2 sm:py-3 mr-3 sm:mr-0 text-center flex-shrink-0 min-w-[70px]">
-                                <div class="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-blue-400">
-                                    ${dateDisplayMonth}
-                                </div>
-                                <div class="text-xl sm:text-2xl font-bold text-white leading-none mt-1">
-                                    ${dateDisplayDay}
-                                </div>
-                                ${isMultiDay ? `<div class="text-[9px] mt-1 border-t border-dark-border pt-1 text-dark-muted">bis ${endDate.getDate()}.${endDate.toLocaleString('de-DE', { month: 'numeric' })}.</div>` : ''}
-                            </div>
-                            <div class="sm:hidden font-bold text-white text-base truncate flex-1">${e.title}</div>
-                        </div>
-                        
-                        <!-- Details -->
-                        <div class="flex-1 sm:pl-4 min-w-0">
-                            <h4 class="text-white font-bold text-lg truncate hidden sm:block mb-1" title="${e.title}">
-                                ${e.title}
-                            </h4>
-                            
-                            <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-dark-muted items-center">
-                                <span class="flex items-center bg-dark-bg/30 px-2 py-1 rounded-md">
-                                    <i class="fa-regular fa-clock mr-1.5 text-blue-400"></i>
-                                    ${e.allDay ? 'Ganztägig' : (e.time ? e.time + ' Uhr' : 'Zeit n.a.')}
-                                </span>
-                                ${e.location ? `<span class="flex items-center"><i class="fa-solid fa-location-dot mr-1.5 text-red-400"></i> <span class="truncate max-w-[150px]">${e.location}</span></span>` : ''}
-                            </div>
-                            <!-- Kurzbeschreibung anzeigen (Vorschau) -->
-                            ${e.comment ? `<div class="text-sm text-dark-muted mt-2 pl-2 border-l-2 border-dark-border line-clamp-2">${e.comment}</div>` : ''}
-                        </div>
-
-                        <!-- Aktionen -->
-                        ${listActions}
+            <div class="fade-in space-y-6 pb-20">
+                <!-- Header -->
+                <div class="flex justify-between items-end px-1">
+                    <div>
+                        <h2 class="text-2xl md:text-3xl font-bold text-white">Kalender</h2>
+                        <p class="text-dark-muted text-sm mt-1">Alle öffentlichen Veranstaltungen.</p>
                     </div>
-                `}).join('') : 
-                
-                `<div class="text-center py-12 text-dark-muted border border-dashed border-dark-border rounded-2xl bg-dark-bg/20">
-                    <i class="fa-regular fa-calendar-times text-4xl mb-3 opacity-50"></i>
-                    <p class="text-sm">Keine anstehenden Termine.</p>
-                </div>`
-                }
+                    ${addButton}
+                </div>
+
+                <!-- Event List -->
+                <div class="space-y-3">
+                    ${sortedEvents.length > 0 ? sortedEvents.map(e => this.renderEventCard(e, canManage)).join('') : 
+                    `<div class="flex flex-col items-center justify-center py-20 text-center border border-dashed border-dark-border rounded-3xl bg-dark-bg/30">
+                        <div class="w-16 h-16 bg-dark-card rounded-full flex items-center justify-center mb-4 border border-dark-border shadow-sm">
+                            <i class="fa-regular fa-calendar-xmark text-2xl text-dark-muted"></i>
+                        </div>
+                        <h3 class="text-white font-bold">Keine Termine</h3>
+                        <p class="text-dark-muted text-sm mt-1">Aktuell stehen keine Veranstaltungen an.</p>
+                    </div>`}
+                </div>
+            </div>
+        `;
+    },
+
+    renderEventCard(e, canManage) {
+        const startDate = new Date(e.date);
+        const endDate = e.endDate ? new Date(e.endDate) : null;
+        
+        // Prüfen ob mehrtägig (für Anzeige im Badge)
+        const isMultiDay = endDate && (endDate.getDate() !== startDate.getDate() || endDate.getMonth() !== startDate.getMonth());
+        
+        const dateDisplayMonth = startDate.toLocaleString('de-DE', { month: 'short' });
+        const dateDisplayDay = startDate.getDate();
+
+        // Datums-Range Text für Badge
+        let rangeBadge = '';
+        if (isMultiDay) {
+            rangeBadge = `<div class="text-[9px] mt-1 border-t border-white/10 pt-1 text-brand-200">bis ${endDate.getDate()}.${endDate.toLocaleString('de-DE', { month: 'numeric' })}.</div>`;
+        }
+
+        return `
+            <div onclick="CalendarView.openDetailModal(${e.id})" class="bg-dark-card hover:bg-dark-hover border border-dark-border p-4 rounded-2xl flex items-center gap-4 cursor-pointer group relative overflow-hidden transition-all shadow-sm">
+                <!-- Hover Effect Line -->
+                <div class="absolute left-0 top-4 bottom-4 w-1 bg-brand-500 rounded-r-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+
+                <!-- Date Badge -->
+                <div class="bg-dark-bg border border-dark-border rounded-xl p-2 text-center min-w-[64px] group-hover:border-brand-500/30 transition-colors flex-shrink-0">
+                    <div class="text-[10px] font-bold uppercase text-brand-500">${dateDisplayMonth}</div>
+                    <div class="text-xl font-bold text-white leading-none mt-0.5">${dateDisplayDay}</div>
+                    ${rangeBadge}
+                </div>
+
+                <!-- Content -->
+                <div class="flex-1 min-w-0">
+                    <div class="flex justify-between items-start">
+                        <h4 class="text-white font-bold text-base truncate pr-2 group-hover:text-brand-400 transition-colors">${e.title}</h4>
+                        ${e.comment ? '<i class="fa-solid fa-circle-info text-brand-500 text-[8px] mt-1.5 animate-pulse"></i>' : ''}
+                    </div>
+                    
+                    <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-dark-muted mt-1.5 items-center">
+                        <span class="flex items-center"><i class="fa-regular fa-clock mr-1.5 text-brand-500/70"></i> ${e.allDay ? 'Ganztägig' : (e.time || 'Zeit n.a.')}</span>
+                        ${e.location ? `<span class="flex items-center truncate max-w-[140px]"><i class="fa-solid fa-location-dot mr-1.5 text-brand-500/70"></i> ${e.location}</span>` : ''}
+                    </div>
+                </div>
+
+                <!-- Chevron Icon -->
+                <div class="text-dark-muted opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all pl-2">
+                    <i class="fa-solid fa-chevron-right text-xs"></i>
+                </div>
             </div>
         `;
     },
@@ -123,103 +119,101 @@ const CalendarView = {
         const dateStr = startDate.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         const endDateStr = endDate && endDate.getTime() !== startDate.getTime() ? endDate.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : null;
 
-        // Links im Text klickbar machen (einfache Regex)
+        // Links im Text klickbar machen
         const formatDescription = (text) => {
-            if(!text) return '<span class="text-dark-muted italic text-sm">Keine detaillierte Beschreibung vorhanden.</span>';
-            let formatted = text.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-blue-400 hover:underline break-all">$1</a>');
+            if(!text) return '<span class="text-dark-muted italic text-sm">Keine Beschreibung vorhanden.</span>';
+            let formatted = text.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-brand-400 hover:underline break-all">$1</a>');
             return formatted.replace(/\n/g, '<br>');
         };
 
-        // Edit Button für Beschreibung (nur für Admins)
-        const editDescBtn = canManage 
-            ? `<button onclick="CalendarView.openDescriptionModal(${e.id})" class="text-xs bg-dark-bg border border-dark-border hover:bg-dark-hover text-blue-400 px-3 py-1.5 rounded-lg transition-colors flex items-center">
-                 <i class="fa-solid fa-pen mr-1.5"></i> Bearbeiten
-               </button>` 
-            : '';
-
-        // Footer Actions (nur für Admins)
-        const footerActions = canManage 
-            ? `<div class="mt-6 pt-6 border-t border-dark-border flex flex-col sm:flex-row gap-3">
-                    <button onclick="CalendarView.openEditModal(${e.id})" class="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl font-bold transition-colors">
-                        <i class="fa-solid fa-pen mr-2"></i> Termin bearbeiten
-                    </button>
-                    
-                    <button onclick="CalendarView.delete(${e.id}); App.closeModal()" class="bg-dark-bg hover:bg-red-900/20 text-red-400 border border-dark-border hover:border-red-500/30 px-6 py-3 rounded-xl font-bold transition-colors" title="Löschen">
-                        <i class="fa-regular fa-trash-can"></i>
-                    </button>
-               </div>` 
-            : '';
-
         const html = `
-            <div class="p-5 md:p-8 h-full flex flex-col">
+            <div class="p-6 md:p-8 h-full flex flex-col">
+                <!-- Header -->
                 <div class="flex justify-between items-start mb-6 border-b border-dark-border pb-4">
-                    <h3 class="text-xl md:text-2xl font-bold text-white pr-4 break-words leading-tight">${e.title}</h3>
-                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
+                    <div class="pr-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="bg-brand-500/10 text-brand-400 text-[10px] font-bold px-2 py-0.5 rounded border border-brand-500/20 uppercase tracking-wider">Event</span>
+                        </div>
+                        <h3 class="text-2xl md:text-3xl font-bold text-white leading-tight break-words">${e.title}</h3>
+                    </div>
+                    <button onclick="App.closeModal()" class="w-8 h-8 rounded-full bg-dark-bg text-dark-muted hover:text-white flex items-center justify-center transition-colors flex-shrink-0"><i class="fa-solid fa-times text-lg"></i></button>
                 </div>
                 
-                <div class="flex-1 overflow-y-auto custom-scrollbar pr-2">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-                        <!-- Details -->
-                        <div class="space-y-4">
-                            <div class="bg-dark-bg p-4 rounded-xl border border-dark-border">
-                                <div class="flex items-start gap-4 mb-3">
-                                    <div class="w-8 h-8 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center text-sm shrink-0">
-                                        <i class="fa-regular fa-clock"></i>
-                                    </div>
-                                    <div>
-                                        <p class="text-white font-medium text-sm">${dateStr}</p>
-                                        ${endDateStr ? `<p class="text-dark-muted text-xs">bis ${endDateStr}</p>` : ''}
-                                        <p class="text-blue-400 font-bold text-sm mt-0.5">${e.allDay ? 'Ganztägig' : (e.time + ' Uhr')}</p>
-                                    </div>
-                                </div>
-
-                                ${e.location ? `
-                                <div class="flex items-start gap-4 pt-3 border-t border-dark-border/50">
-                                    <div class="w-8 h-8 rounded-full bg-red-500/10 text-red-400 flex items-center justify-center text-sm shrink-0">
-                                        <i class="fa-solid fa-location-dot"></i>
-                                    </div>
-                                    <div>
-                                        <p class="text-white font-medium text-sm">${e.location}</p>
-                                        <a href="https://maps.google.com/?q=${encodeURIComponent(e.location)}" target="_blank" class="text-xs text-dark-muted hover:text-blue-400 underline decoration-dotted">Auf Karte zeigen</a>
-                                    </div>
-                                </div>` : ''}
+                <div class="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-6">
+                    
+                    <!-- Info Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Zeit & Datum -->
+                        <div class="bg-dark-bg/50 p-4 rounded-2xl border border-dark-border flex items-start gap-4">
+                            <div class="w-10 h-10 rounded-xl bg-brand-500/10 text-brand-500 flex items-center justify-center text-lg flex-shrink-0">
+                                <i class="fa-regular fa-clock"></i>
                             </div>
-
-                            ${e.comment ? `
-                            <div class="p-4 rounded-xl bg-dark-bg/50 border border-dark-border/50">
-                                <p class="text-[10px] text-dark-muted font-bold uppercase mb-1 tracking-wider">Notiz</p>
-                                <p class="text-sm text-white italic leading-relaxed">${e.comment}</p>
-                            </div>` : ''}
+                            <div>
+                                <p class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-0.5">Wann?</p>
+                                <p class="text-white font-medium text-sm leading-snug">${dateStr}</p>
+                                ${endDateStr ? `<p class="text-dark-muted text-xs mt-0.5">bis ${endDateStr}</p>` : ''}
+                                <p class="text-brand-400 font-bold text-sm mt-1">${e.allDay ? 'Ganztägig' : (e.time + ' Uhr')}</p>
+                            </div>
                         </div>
 
-                        <!-- Beschreibung -->
-                        <div>
-                            <div class="flex justify-between items-center mb-2">
-                                <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider">Beschreibung</h4>
-                                ${editDescBtn}
+                        <!-- Ort -->
+                        ${e.location ? `
+                        <div class="bg-dark-bg/50 p-4 rounded-2xl border border-dark-border flex items-start gap-4">
+                            <div class="w-10 h-10 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center text-lg flex-shrink-0">
+                                <i class="fa-solid fa-location-dot"></i>
                             </div>
-                            <div class="bg-dark-bg p-5 rounded-xl border border-dark-border text-white leading-relaxed text-sm shadow-inner min-h-[150px]">
-                                ${formatDescription(e.description)}
+                            <div>
+                                <p class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-0.5">Wo?</p>
+                                <p class="text-white font-medium text-sm leading-snug">${e.location}</p>
+                                <a href="https://maps.google.com/?q=${encodeURIComponent(e.location)}" target="_blank" class="text-xs text-dark-muted hover:text-white underline decoration-dotted mt-1 inline-block">Karte öffnen</a>
                             </div>
+                        </div>` : ''}
+                    </div>
+
+                    <!-- Notiz (Kurz) -->
+                    ${e.comment ? `
+                    <div class="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10 flex gap-3">
+                        <i class="fa-solid fa-circle-info text-amber-500 mt-0.5 flex-shrink-0"></i>
+                        <p class="text-sm text-amber-200/80 italic leading-relaxed">${e.comment}</p>
+                    </div>` : ''}
+
+                    <!-- Beschreibung (Lang) -->
+                    <div>
+                        <div class="flex justify-between items-center mb-3">
+                            <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider">Details</h4>
+                            ${canManage ? `<button onclick="CalendarView.openDescriptionModal(${e.id})" class="text-xs text-brand-400 hover:text-white transition-colors flex items-center gap-1"><i class="fa-solid fa-pen"></i> Bearbeiten</button>` : ''}
+                        </div>
+                        <div class="bg-dark-bg p-5 rounded-2xl border border-dark-border text-dark-text leading-relaxed text-sm shadow-inner min-h-[100px]">
+                            ${formatDescription(e.description)}
                         </div>
                     </div>
                 </div>
 
-                ${footerActions}
+                <!-- Footer Actions (Admin only) -->
+                ${canManage ? `
+                <div class="mt-6 pt-6 border-t border-dark-border flex gap-3">
+                    <button onclick="CalendarView.openEditModal(${e.id})" class="flex-1 btn-primary text-sm">
+                        <i class="fa-solid fa-pen mr-2"></i> Bearbeiten
+                    </button>
+                    <button onclick="CalendarView.delete(${e.id}); App.closeModal()" class="flex-1 py-3 bg-dark-bg hover:bg-red-500/10 border border-dark-border hover:border-red-500/30 rounded-xl text-red-400 font-bold transition-all text-sm">
+                        <i class="fa-regular fa-trash-can mr-2"></i> Löschen
+                    </button>
+                </div>` : ''}
             </div>
         `;
         
         App.openModal(html);
         
+        // Modal Größe anpassen
         const modalContainer = document.getElementById('modal-content');
         if(modalContainer) {
             modalContainer.classList.remove('max-w-md');
-            modalContainer.classList.add('max-w-4xl', 'w-full', 'max-h-[90vh]');
+            modalContainer.classList.add('max-w-3xl', 'w-full', 'max-h-[90vh]');
         }
     },
 
     /**
-     * Neues Modal NUR für die lange Beschreibung
+     * Modal NUR für die lange Beschreibung (Editor)
      */
     openDescriptionModal(id) {
         if(!App.can('manage_events')) return;
@@ -231,24 +225,21 @@ const CalendarView = {
             <div class="p-6 h-full flex flex-col">
                 <div class="flex justify-between items-center mb-4 border-b border-dark-border pb-4">
                     <h3 class="text-lg font-bold text-white">Beschreibung bearbeiten</h3>
-                    <!-- Zurück zum Detail, nicht schließen -->
-                    <button onclick="CalendarView.openDetailModal(${id})" class="text-dark-muted hover:text-white p-2 flex items-center gap-2 text-xs font-bold bg-dark-bg rounded-lg border border-dark-border">
+                    <button onclick="CalendarView.openDetailModal(${id})" class="text-dark-muted hover:text-white p-2 flex items-center gap-2 text-xs font-bold bg-dark-bg rounded-lg border border-dark-border transition-colors">
                         <i class="fa-solid fa-arrow-left"></i> Zurück
                     </button>
                 </div>
                 
                 <form onsubmit="CalendarView.handleDescriptionUpdate(event, ${id})" class="flex-1 flex flex-col">
-                    <div class="flex-1 mb-4">
-                        <textarea name="description" class="w-full h-full bg-dark-bg border border-dark-border rounded-xl p-4 text-white focus:outline-none focus:border-blue-500 transition-colors font-mono text-sm resize-none" placeholder="Hier können Details, Links und weitere Infos stehen...">${e.description || ''}</textarea>
+                    <div class="flex-1 mb-4 relative">
+                        <textarea name="description" class="w-full h-full bg-dark-bg border border-dark-border rounded-xl p-4 text-white focus:outline-none focus:border-brand-500 transition-colors font-mono text-sm resize-none custom-scrollbar" placeholder="Hier können Details, Links und weitere Infos stehen...">${e.description || ''}</textarea>
                     </div>
-                    
                     <button type="submit" class="btn-primary w-full py-3">Speichern & Zurück</button>
                 </form>
             </div>
         `;
         App.openModal(html);
 
-        // Auch hier Großes Modal nutzen
         const modalContainer = document.getElementById('modal-content');
         if(modalContainer) {
             modalContainer.classList.remove('max-w-md');
@@ -261,62 +252,63 @@ const CalendarView = {
 
         if(confirm("Termin wirklich löschen?")) {
             Store.remove('events', id);
-            // Render wird automatisch durch Store.onUpdate getriggert, aber wir rufen es sicherheitshalber auf
             setTimeout(() => this.render(document.getElementById('content')), 100);
             App.showToast('Termin gelöscht');
         }
     },
+
+    // --- ADD / EDIT FORM MODALS ---
 
     openAddModal() {
         if(!App.can('manage_events')) return;
 
         const html = `
             <div class="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4">
+                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 sticky top-0 bg-dark-card z-10">
                     <h3 class="text-xl font-bold text-white">Neuer Termin</h3>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
                 
                 <form onsubmit="CalendarView.handleAdd(event)" class="space-y-5">
                     <div>
-                        <label class="text-muted">Titel der Veranstaltung</label>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Titel</label>
                         <input type="text" name="title" required class="form-input" placeholder="z.B. Sommerfest">
                     </div>
                     
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="text-muted">Start Datum</label>
-                            <input type="date" name="date" id="startDateInput" required class="form-input dark-date" onchange="document.getElementById('endDateInput').min = this.value">
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Start</label>
+                            <input type="date" name="date" id="startDateInput" required class="form-input dark-date" onchange="document.getElementById('endDateInput').min = this.value; if(!document.getElementById('endDateInput').value) document.getElementById('endDateInput').value = this.value;">
                         </div>
                         <div>
-                            <label class="text-muted">Ende Datum (Optional)</label>
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ende (Optional)</label>
                             <input type="date" name="endDate" id="endDateInput" class="form-input dark-date">
                         </div>
                     </div>
 
-                    <div>
-                        <label class="text-muted">Uhrzeit</label>
-                        <div class="relative">
+                    <div class="grid grid-cols-2 gap-4 items-end">
+                        <div>
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Uhrzeit</label>
                             <input type="time" name="time" id="eventTimeInput" required class="form-input dark-date">
-                            <div class="flex items-center mt-2">
-                                <input type="checkbox" name="allDay" id="eventAllDay" class="w-4 h-4 rounded bg-dark-bg border-dark-border accent-blue-600" 
-                                    onchange="const t = document.getElementById('eventTimeInput'); t.disabled = this.checked; if(this.checked) t.value = ''; else t.focus(); t.required = !this.checked;">
-                                <label for="eventAllDay" class="ml-2 text-xs text-dark-muted cursor-pointer select-none">Ganztägig</label>
-                            </div>
                         </div>
+                        <label class="flex items-center gap-3 p-3 bg-dark-bg/50 border border-dark-border rounded-xl cursor-pointer hover:border-brand-500/50 transition-colors h-[46px]">
+                            <input type="checkbox" name="allDay" id="eventAllDay" class="w-5 h-5 rounded border-dark-border bg-dark-bg text-brand-600 focus:ring-brand-500" 
+                                onchange="const t = document.getElementById('eventTimeInput'); t.disabled = this.checked; if(this.checked) t.value = ''; else t.focus(); t.required = !this.checked;">
+                            <span class="text-sm font-medium text-white">Ganztägig</span>
+                        </label>
                     </div>
                     
                     <div>
-                        <label class="text-muted">Ort / Treffpunkt</label>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ort</label>
                         <input type="text" name="location" class="form-input" placeholder="z.B. Vereinsheim">
                     </div>
 
                     <div>
-                        <label class="text-muted">Kurzbeschreibung (für Vorschau)</label>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Kurzbeschreibung (Vorschau)</label>
                         <input type="text" name="comment" class="form-input" placeholder="Z.B. 'Wichtig: Sportkleidung mitbringen'">
                     </div>
                     
-                    <button type="submit" class="btn-primary w-full mt-2">Termin erstellen</button>
+                    <button type="submit" class="btn-primary w-full mt-4">Termin erstellen</button>
                 </form>
             </div>
         `;
@@ -335,51 +327,51 @@ const CalendarView = {
 
         const html = `
             <div class="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4">
+                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 sticky top-0 bg-dark-card z-10">
                     <h3 class="text-xl font-bold text-white">Termin bearbeiten</h3>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
                 
                 <form onsubmit="CalendarView.handleUpdate(event, ${id})" class="space-y-5">
                     <div>
-                        <label class="text-muted">Titel</label>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Titel</label>
                         <input type="text" name="title" value="${e.title}" required class="form-input">
                     </div>
                     
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="text-muted">Start</label>
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Start</label>
                             <input type="date" name="date" value="${e.date}" id="editStartDateInput" required class="form-input dark-date" onchange="document.getElementById('editEndDateInput').min = this.value">
                         </div>
                         <div>
-                            <label class="text-muted">Ende</label>
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ende</label>
                             <input type="date" name="endDate" value="${e.endDate || ''}" id="editEndDateInput" class="form-input dark-date">
                         </div>
                     </div>
 
-                    <div>
-                        <label class="text-muted">Uhrzeit</label>
-                        <div class="relative">
+                    <div class="grid grid-cols-2 gap-4 items-end">
+                        <div>
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Uhrzeit</label>
                             <input type="time" name="time" value="${timeValue}" id="editEventTimeInput" ${timeDisabled} required class="form-input dark-date">
-                            <div class="flex items-center mt-2">
-                                <input type="checkbox" name="allDay" id="editEventAllDay" ${allDayChecked} class="w-4 h-4 rounded bg-dark-bg border-dark-border accent-blue-600" 
-                                    onchange="const t = document.getElementById('editEventTimeInput'); t.disabled = this.checked; if(this.checked) t.value = ''; else t.focus(); t.required = !this.checked;">
-                                <label for="editEventAllDay" class="ml-2 text-xs text-dark-muted cursor-pointer select-none">Ganztägig</label>
-                            </div>
                         </div>
+                        <label class="flex items-center gap-3 p-3 bg-dark-bg/50 border border-dark-border rounded-xl cursor-pointer hover:border-brand-500/50 transition-colors h-[46px]">
+                            <input type="checkbox" name="allDay" id="editEventAllDay" ${allDayChecked} class="w-5 h-5 rounded border-dark-border bg-dark-bg text-brand-600 focus:ring-brand-500" 
+                                onchange="const t = document.getElementById('editEventTimeInput'); t.disabled = this.checked; if(this.checked) t.value = ''; else t.focus(); t.required = !this.checked;">
+                            <span class="text-sm font-medium text-white">Ganztägig</span>
+                        </label>
                     </div>
                     
                     <div>
-                        <label class="text-muted">Ort</label>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ort</label>
                         <input type="text" name="location" value="${e.location || ''}" class="form-input">
                     </div>
 
                     <div>
-                        <label class="text-muted">Kurzbeschreibung (Vorschau)</label>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Kurzbeschreibung</label>
                         <input type="text" name="comment" value="${e.comment || ''}" class="form-input">
                     </div>
                     
-                    <button type="submit" class="btn-primary w-full mt-2">Änderungen speichern</button>
+                    <button type="submit" class="btn-primary w-full mt-4">Änderungen speichern</button>
                 </form>
             </div>
         `;
@@ -436,7 +428,7 @@ const CalendarView = {
 
             await Store.update('events', updatedEvent);
             
-            // Lokales Update für sofortiges Feedback (Optinal, da Realtime oft schnell genug ist)
+            // Lokales Update für sofortiges Feedback (Optional, da Realtime oft schnell genug ist)
             const index = Store.state.events.indexOf(originalEvent);
             if(index !== -1) Store.state.events[index] = updatedEvent;
 
