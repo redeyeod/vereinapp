@@ -374,7 +374,7 @@ const MembersView = {
         return error;
     },
 
-    // NEU: Garantierte Update-Funktion mit Token, .select() und ID-Trennung
+    // NEU: Garantierte Update-Funktion mit Token, .select() und explizitem Entfernen der ID
     async safeUpdate(id, updates) {
         if(typeof supabase === 'undefined') return { message: "Supabase fehlt" };
         const sessionStr = localStorage.getItem('vm_supabase_session');
@@ -386,8 +386,15 @@ const MembersView = {
                 global: { headers: { Authorization: `Bearer ${token}` } }
             });
             
-            // WICHTIG: .select() hinzufügen, um zu prüfen ob wirklich was geändert wurde
-            const { data, error } = await client.from('members').update(updates).eq('id', id).select();
+            // WICHTIG: Erstelle eine Kopie und lösche 'id' explizit raus!
+            // Das verhindert den "column id can only be updated to DEFAULT" Fehler
+            const cleanUpdates = { ...updates };
+            if ('id' in cleanUpdates) delete cleanUpdates.id;
+
+            console.log("Sende Update (bereinigt):", cleanUpdates); // Debugging
+
+            // .select() um die Antwort zu bekommen
+            const { data, error } = await client.from('members').update(cleanUpdates).eq('id', id).select();
             
             if (error) return error;
             // Prüfung auf Silent Fail (RLS)
@@ -414,7 +421,6 @@ const MembersView = {
         if (role === 'custom') role = fd.get('customRole') || 'Mitglied';
         
         // WICHTIG: Wir bauen ein sauberes Objekt NUR mit den Feldern, die wir ändern wollen.
-        // Keine Spread-Syntax (...member), um Müll-Daten zu vermeiden.
         const updates = { 
             firstName: fd.get('firstName'), 
             lastName: fd.get('lastName'), 
