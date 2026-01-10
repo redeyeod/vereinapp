@@ -374,8 +374,33 @@ const MembersView = {
         return error;
     },
 
+    // NEU: Garantierte Update-Funktion mit Token
+    async safeUpdate(item) {
+        if(typeof supabase === 'undefined') return { message: "Supabase fehlt" };
+        const sessionStr = localStorage.getItem('vm_supabase_session');
+        if (!sessionStr) return { message: "Nicht eingeloggt" };
+        
+        try {
+            const token = JSON.parse(sessionStr).access_token;
+            const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, {
+                global: { headers: { Authorization: `Bearer ${token}` } }
+            });
+            
+            const { error } = await client.from('members').update(item).eq('id', item.id);
+            return error;
+        } catch(e) {
+            return e;
+        }
+    },
+
     async handleUpdate(e, id) {
         e.preventDefault();
+        
+        const btn = e.target.querySelector('button[type="submit"]');
+        const oldText = btn.innerText;
+        btn.innerText = "Speichere...";
+        btn.disabled = true;
+
         const fd = new FormData(e.target);
         let role = fd.get('roleSelect');
         if (role === 'custom') role = fd.get('customRole') || 'Mitglied';
@@ -397,9 +422,22 @@ const MembersView = {
                 role: role, 
                 status: fd.get('status') 
             };
-            await Store.update('members', updated);
+            
+            // BENUTZE safeUpdate STATT Store.update
+            const error = await this.safeUpdate(updated);
+            
+            if (error) {
+                console.error("Update Fehler:", error);
+                App.showToast(error.message || "Fehler beim Update", "error");
+                // Wir stoppen hier, schließen NICHT das Fenster und laden NICHTS neu
+                btn.innerText = oldText;
+                btn.disabled = false;
+                return;
+            }
+
+            // Nur bei Erfolg:
             App.closeModal();
-            this.refreshData();
+            this.refreshData(); // Das triggert dann "Liste aktualisiert"
         }
     }
 };
