@@ -1,6 +1,6 @@
 /**
  * =============================================================================
- * PROFILE VIEW
+ * PROFILE VIEW (Clean & Mobile First)
  * Benutzerprofil und Einstellungen
  * =============================================================================
  */
@@ -37,14 +37,14 @@ const ProfileView = {
         }
 
         container.innerHTML = `
-            <div class="max-w-3xl mx-auto fade-in">
+            <div class="max-w-3xl mx-auto fade-in pb-20">
                 
                 <!-- Profil Header Karte -->
-                <div class="bg-dark-card rounded-bubble border border-dark-border p-6 md:p-8 mb-6 flex flex-col md:flex-row items-center gap-6 shadow-sm">
+                <div class="bg-dark-card rounded-2xl border border-dark-border p-6 md:p-8 mb-6 flex flex-col md:flex-row items-center gap-6 shadow-sm">
                     
                     <!-- Avatar mit Edit Funktion -->
                     <div class="relative group cursor-pointer flex-shrink-0" onclick="App.showToast('Funktion: Bild ändern')">
-                        <div class="w-24 h-24 md:w-32 md:h-32 rounded-full bg-slate-800 flex items-center justify-center text-4xl md:text-5xl text-slate-500 border-4 border-dark-bg shadow-inner overflow-hidden relative transition-transform group-hover:scale-105">
+                        <div class="w-24 h-24 md:w-32 md:h-32 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center text-4xl md:text-5xl text-slate-400 border-4 border-dark-bg shadow-inner overflow-hidden relative transition-transform group-hover:scale-105">
                             <i class="fa-solid fa-user"></i>
                         </div>
                         <!-- Overlay Icon -->
@@ -56,15 +56,15 @@ const ProfileView = {
                     <!-- Infos -->
                     <div class="text-center md:text-left flex-1 min-w-0">
                         <h2 class="text-2xl md:text-4xl font-bold text-white mb-1 truncate">${user.name}</h2>
-                        <p class="text-blue-400 font-medium text-sm md:text-lg mb-4">${user.role}</p>
+                        <p class="text-brand-400 font-medium text-sm md:text-lg mb-4 bg-brand-500/10 inline-block px-3 py-1 rounded-full border border-brand-500/20">${user.role}</p>
                         
                         <div class="flex flex-col md:flex-row gap-3 md:gap-6 text-sm text-dark-muted justify-center md:justify-start">
-                             <div class="flex items-center gap-2 justify-center md:justify-start">
-                                <i class="fa-solid fa-envelope w-4 text-center"></i> 
-                                <span class="truncate">${user.email}</span>
+                             <div class="flex items-center gap-2 justify-center md:justify-start bg-dark-bg/50 px-3 py-1.5 rounded-lg border border-dark-border">
+                                <i class="fa-solid fa-envelope w-4 text-center text-brand-500"></i> 
+                                <span class="truncate max-w-[200px]">${user.email}</span>
                              </div>
-                             <div class="flex items-center gap-2 justify-center md:justify-start">
-                                <i class="fa-solid fa-star w-4 text-center"></i> 
+                             <div class="flex items-center gap-2 justify-center md:justify-start bg-dark-bg/50 px-3 py-1.5 rounded-lg border border-dark-border">
+                                <i class="fa-solid fa-star w-4 text-center text-yellow-500"></i> 
                                 <span>Seit ${user.memberSince}</span>
                              </div>
                         </div>
@@ -77,15 +77,15 @@ const ProfileView = {
                     <!-- Sicherheit / Zugangsdaten -->
                     <div class="bg-dark-card rounded-2xl border border-dark-border p-5 md:p-6 shadow-sm">
                         <h3 class="text-base font-bold text-white mb-4 flex items-center">
-                            <i class="fa-solid fa-shield-halved mr-2 text-green-400"></i> Sicherheit
+                            <i class="fa-solid fa-shield-halved mr-2 text-emerald-400"></i> Sicherheit
                         </h3>
                         
-                        <div class="flex justify-between items-center p-3 rounded-xl bg-dark-bg/50 border border-dark-border">
+                        <div class="flex justify-between items-center p-3 rounded-xl bg-dark-bg/50 border border-dark-border group hover:border-brand-500/30 transition-colors">
                             <div class="min-w-0 pr-2">
-                                <p class="text-sm text-white font-medium">Zugangsdaten</p>
-                                <p class="text-xs text-dark-muted truncate">E-Mail & Passwort ändern</p>
+                                <p class="text-sm text-white font-medium group-hover:text-brand-400 transition-colors">Zugangsdaten</p>
+                                <p class="text-[10px] text-dark-muted truncate uppercase tracking-wider">E-Mail & Passwort ändern</p>
                             </div>
-                            <button onclick="ProfileView.openCredentialsModal()" class="text-xs bg-dark-bg hover:bg-dark-hover border border-dark-border text-white px-3 py-1.5 rounded-lg transition-colors font-bold whitespace-nowrap">
+                            <button onclick="ProfileView.openCredentialsModal()" class="text-xs bg-dark-card hover:bg-dark-hover border border-dark-border text-white px-3 py-2 rounded-lg transition-colors font-bold whitespace-nowrap shadow-sm">
                                 Ändern
                             </button>
                         </div>
@@ -94,7 +94,7 @@ const ProfileView = {
                     <!-- Benachrichtigungen -->
                     <div class="bg-dark-card rounded-2xl border border-dark-border p-5 md:p-6 shadow-sm">
                         <h3 class="text-base font-bold text-white mb-4 flex items-center">
-                            <i class="fa-solid fa-bell mr-2 text-yellow-400"></i> Benachrichtigungen
+                            <i class="fa-solid fa-bell mr-2 text-amber-400"></i> Benachrichtigungen
                         </h3>
                         
                         <div class="space-y-2">
@@ -106,18 +106,18 @@ const ProfileView = {
                     <!-- App Info & Reset -->
                     <div class="bg-dark-card rounded-2xl border border-dark-border p-5 md:p-6 shadow-sm md:col-span-2 flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div>
-                            <p class="text-sm font-bold text-white">VereinsManager App</p>
-                            <p class="text-xs text-dark-muted">Version 1.2.5 • Cloud Edition</p>
+                            <p class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-layer-group text-brand-500"></i> VereinsManager App</p>
+                            <p class="text-xs text-dark-muted mt-1">Version 2.0.0 • Clean Edition</p>
                         </div>
-                        <button onclick="if(confirm('Wirklich alle lokalen Daten löschen?')) { localStorage.clear(); location.reload(); }" class="text-xs text-red-400 hover:text-red-300 hover:underline">
-                            App zurücksetzen & Cache leeren
+                        <button onclick="if(confirm('Wirklich alle lokalen Daten löschen?')) { localStorage.clear(); location.reload(); }" class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3 py-2 rounded-lg transition-colors flex items-center gap-2 border border-transparent hover:border-red-500/20">
+                            <i class="fa-solid fa-trash-can"></i> App zurücksetzen & Cache leeren
                         </button>
                     </div>
 
                     <!-- Logout Button -->
                     <div class="md:col-span-2 mt-2">
-                        <button onclick="App.logout()" class="w-full py-4 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold text-lg transition-all shadow-lg shadow-red-900/20 flex items-center justify-center gap-2 hover:-translate-y-1 cursor-pointer">
-                            <i class="fa-solid fa-right-from-bracket"></i> Abmelden
+                        <button onclick="App.logout()" class="w-full py-4 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-bold text-lg transition-all shadow-lg shadow-red-900/20 flex items-center justify-center gap-2 hover:-translate-y-1 cursor-pointer group">
+                            <i class="fa-solid fa-right-from-bracket group-hover:rotate-180 transition-transform duration-500"></i> Abmelden
                         </button>
                     </div>
                 </div>
@@ -142,21 +142,21 @@ const ProfileView = {
                 
                 <form onsubmit="ProfileView.handleCredentialsUpdate(event)" class="space-y-5">
                     <div>
-                        <label class="block text-sm font-medium text-dark-muted mb-2">E-Mail Adresse</label>
+                        <label class="block text-xs font-bold text-dark-muted uppercase mb-2">E-Mail Adresse</label>
                         <input type="email" name="email" value="${user.email || ''}" required class="form-input">
                     </div>
                     
                     <div>
-                        <label class="block text-sm font-medium text-dark-muted mb-2">Neues Passwort</label>
+                        <label class="block text-xs font-bold text-dark-muted uppercase mb-2">Neues Passwort</label>
                         <input type="password" name="password" placeholder="Leer lassen zum Beibehalten" class="form-input">
                     </div>
 
-                    <div class="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex gap-3 items-start">
-                        <i class="fa-solid fa-triangle-exclamation text-yellow-500 mt-0.5 text-sm"></i>
-                        <p class="text-xs text-yellow-500/90 leading-relaxed">Achtung: Nach dem Ändern müssen Sie sich beim nächsten Mal mit den neuen Daten anmelden.</p>
+                    <div class="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex gap-3 items-start">
+                        <i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5 text-sm"></i>
+                        <p class="text-xs text-amber-500/90 leading-relaxed">Achtung: Nach dem Ändern müssen Sie sich beim nächsten Mal mit den neuen Daten anmelden.</p>
                     </div>
                     
-                    <button type="submit" class="btn-primary w-full mt-2">
+                    <button type="submit" class="btn-primary w-full mt-2 shadow-lg shadow-brand-500/20">
                         Speichern
                     </button>
                 </form>
@@ -196,14 +196,14 @@ const ProfileView = {
      * Hilfsfunktion für Toggle-Switches (nur visuell)
      */
     renderToggle(label, isActive) {
-        const bgClass = isActive ? 'bg-blue-600' : 'bg-slate-700';
+        const bgClass = isActive ? 'bg-brand-600' : 'bg-slate-700';
         const knobClass = isActive ? 'right-1' : 'left-1';
         
-        const toggleScript = `this.classList.toggle('bg-blue-600'); this.classList.toggle('bg-slate-700'); this.children[0].classList.toggle('right-1'); this.children[0].classList.toggle('left-1');`;
+        const toggleScript = `this.classList.toggle('bg-brand-600'); this.classList.toggle('bg-slate-700'); this.children[0].classList.toggle('right-1'); this.children[0].classList.toggle('left-1');`;
 
         return `
-            <div class="flex items-center justify-between p-3 rounded-xl bg-dark-bg/50 border border-dark-border cursor-pointer hover:bg-dark-bg/70 transition-colors" onclick="this.querySelector('.toggle-switch').click()">
-                <span class="text-sm text-dark-muted select-none">${label}</span>
+            <div class="flex items-center justify-between p-3 rounded-xl bg-dark-bg/50 border border-dark-border cursor-pointer hover:bg-dark-bg/70 transition-colors group" onclick="this.querySelector('.toggle-switch').click()">
+                <span class="text-sm text-dark-muted group-hover:text-white transition-colors select-none">${label}</span>
                 <div class="toggle-switch w-10 h-5 ${bgClass} rounded-full relative transition-colors duration-200" onclick="event.stopPropagation(); ${toggleScript}">
                     <div class="absolute top-1 w-3 h-3 bg-white rounded-full transition-all duration-200 ${knobClass}"></div>
                 </div>
