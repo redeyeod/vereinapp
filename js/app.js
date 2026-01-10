@@ -1,8 +1,7 @@
 /**
  * =============================================================================
- * APP CORE LOGIC (Visual Fix & Admin Force & View Restore)
- * Repariert das Design der Eingabefelder, erzwingt Admin-Rechte
- * und stellt die letzte Ansicht nach Reload wieder her.
+ * APP CORE LOGIC (RBAC Integration)
+ * Integriert das neue dynamische Rollensystem in die Permission-Checks.
  * =============================================================================
  */
 
@@ -13,17 +12,21 @@ const App = {
         currentUser: null 
     },
 
+    // Standard-Rollen Fallback, falls DB noch lädt oder leer ist
+    defaultRoles: [
+        { name: 'Admin', permissions: ['admin_global'] },
+        { name: 'Mitglied', permissions: [] }
+    ],
+
     async init() {
-        console.log("App: Init...");
-
-        // 1. CSS laden
+        console.log("App: Init RBAC System...");
         this.injectStyles();
-
-        // 2. Benutzer sofort laden (aus LocalStorage Session), damit wir nicht ausgeloggt werden
+        
+        // Sofort versuchen, den User aus dem Cache zu laden für schnellen Start (gegen Flackern)
         this.loadCurrentUser();
         this.initTheme();
 
-        // 3. Warte auf Store (Datenbank Verbindung)
+        // Warten auf Store
         let attempts = 0;
         while (typeof Store === 'undefined' && attempts < 20) {
             await new Promise(r => setTimeout(r, 100));
@@ -37,7 +40,11 @@ const App = {
 
         try {
             await Store.init();
-            // Wenn Store fertig ist, versuchen wir den User nochmal mit "echten" Daten anzureichern
+            
+            // WICHTIG: Wir laden jetzt auch die Rollen-Tabelle!
+            if (Store.fetchTable) await Store.fetchTable('roles');
+            
+            // User erneut laden (jetzt mit frischen Daten aus dem Store und verknüpften Rollen)
             this.loadCurrentUser(); 
         } catch (e) { console.error(e); }
 
@@ -47,17 +54,12 @@ const App = {
             const activeTag = document.activeElement ? document.activeElement.tagName : '';
             // Nur neu rendern, wenn wir nicht gerade tippen
             if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
-                // Nur updaten, wenn sich die View nicht geändert hat, 
-                // oder wir nutzen den State als Wahrheit
                 this.router(Store.state.currentView || localStorage.getItem('vm_last_view') || 'dashboard');
             }
         };
 
-        // 4. Entscheidung: App oder Login anzeigen
         if (this.state.currentUser) {
-            // FIX: Letzte Ansicht wiederherstellen (bleibt bei F5 erhalten)
             const lastView = localStorage.getItem('vm_last_view') || 'dashboard';
-            console.log("Stelle letzte Ansicht wieder her:", lastView);
             this.router(lastView);
         } else {
             this.showAuthView();
@@ -65,7 +67,6 @@ const App = {
     },
 
     // --- AUTHENTICATION ---
-
     async handleLogin(e) {
         if(e) e.preventDefault();
         const btn = e.target.querySelector('button');
@@ -82,31 +83,33 @@ const App = {
             const { data, error } = await _sb.auth.signInWithPassword({ email, password });
 
             if (error) {
+                // Notfall-Admin (Backdoor für den ersten Setup)
                 if(email === 'admin@gmail.com' && password === 'admin') {
-                    this.loginSuccess({ id: '999', firstName: 'System', lastName: 'Admin', email: email, role: 'Admin' });
+                    // Wir geben dem Notfall-Admin die Rolle "Vorstand" (muss in DB existieren oder Fallback greift)
+                    this.loginSuccess({ id: '999', firstName: 'System', lastName: 'Admin', email: email, role: 'Vorstand' });
                     return;
                 }
                 throw new Error("Login fehlgeschlagen.");
             }
 
-            // WICHTIG: Nur speichern, wenn Session wirklich da ist
             if (data.session) {
                 localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
             } else {
-                throw new Error("Keine Session empfangen. Bitte nochmal versuchen.");
+                throw new Error("Keine Session empfangen.");
             }
             
-            // Versuch Daten zu laden, aber nicht blockieren wenn es fehlschlägt
             try {
-                if (Store.fetchTable) await Store.fetchTable('members');
-            } catch(e) { console.warn("Konnte Mitglieder beim Login nicht laden", e); }
+                if (Store.fetchTable) {
+                    // Wichtig: Beim Login sofort Rollen mitladen
+                    await Store.fetchTable('members');
+                    await Store.fetchTable('roles'); 
+                }
+            } catch(e) { console.warn("Daten-Load Fehler beim Login", e); }
             
             let user = null;
             if (Store.state && Store.state.members) {
                 user = Store.state.members.find(m => m.email.toLowerCase() === email);
             }
-            
-            // Fallback User bauen, falls DB noch nicht bereit
             if (!user) user = { id: data.user.id, email: email, firstName: 'User', role: 'Mitglied' };
 
             this.loginSuccess(user);
@@ -121,21 +124,19 @@ const App = {
 
     loginSuccess(user) {
         if (!user) return;
-        if (user.email.toLowerCase() === 'admin@gmail.com') user.role = 'Admin';
+        // Admin Force für Hardcoded Admin Email (falls er sich normal einloggt aber DB Rolle fehlt)
+        if (user.email.toLowerCase() === 'admin@gmail.com') user.role = 'Vorstand';
         
         localStorage.setItem('vm_current_user_id', user.id);
         this.state.currentUser = user;
         
         document.getElementById('auth-view').classList.add('hidden');
         document.getElementById('app-view').classList.remove('hidden');
-        
         this.updateHeaderUI();
         
-        // FIX: Nach frischem Login immer zum Dashboard (außer bei Reload, da greift init())
-        // Da wir im logout() die 'vm_last_view' löschen, ist sie hier leer -> Dashboard
-        const lastView = localStorage.getItem('vm_last_view') || 'dashboard';
-        this.router(lastView);
-        
+        // Nach Login zum Dashboard (oder letzte View löschen, um Dashboard zu erzwingen)
+        localStorage.removeItem('vm_last_view');
+        this.router('dashboard');
         this.showToast(`Willkommen, ${user.firstName}!`, "success");
     },
 
@@ -143,11 +144,7 @@ const App = {
         if(confirm("Abmelden?")) {
             localStorage.removeItem('vm_supabase_session');
             localStorage.removeItem('vm_current_user_id');
-            
-            // WICHTIG: Hier löschen wir das Gedächtnis für die letzte Seite!
-            // Beim nächsten Login landet man also auf dem Dashboard.
             localStorage.removeItem('vm_last_view'); 
-            
             location.reload();
         }
     },
@@ -159,30 +156,24 @@ const App = {
         try {
             const session = JSON.parse(sessionStr);
             if (!session || !session.user) return;
-
             const email = session.user.email.toLowerCase();
             
-            // 1. Zuerst Fallback-User aus Session bauen
+            // Fallback User bauen
             let user = { id: session.user.id, email: email, firstName: 'User', role: 'Mitglied' };
             
-            // 2. Wenn Store Daten hat, nehmen wir die "echten" Daten
+            // Versuchen, echten User aus Store zu holen
             if(Store && Store.state && Store.state.members && Store.state.members.length > 0) {
                 const found = Store.state.members.find(m => m.email.toLowerCase() === email);
                 if(found) user = found;
             }
             
-            if (email === 'admin@gmail.com') user.role = 'Admin';
-            
+            if (email === 'admin@gmail.com') user.role = 'Vorstand';
             this.state.currentUser = user;
             this.updateHeaderUI();
             
-            // UI Switch sofort machen
             document.getElementById('auth-view').classList.add('hidden');
             document.getElementById('app-view').classList.remove('hidden');
-
-        } catch(e) { 
-            console.error("Session Parse Error:", e); 
-        }
+        } catch(e) { console.error("Session Parse Error:", e); }
     },
 
     updateHeaderUI() {
@@ -195,18 +186,12 @@ const App = {
     },
 
     // --- ROUTER ---
-    
     router(viewName) {
-        // Fallback
         if(!viewName) viewName = 'dashboard';
         
-        // WICHTIG: Wir merken uns JEDEN Seitenwechsel sofort.
-        // Das sorgt dafür, dass F5 (Reload) auf der Seite bleibt.
+        // View speichern damit F5 reload funktioniert
         localStorage.setItem('vm_last_view', viewName);
-        
-        if (Store && Store.state) {
-            Store.state.currentView = viewName;
-        }
+        if (Store && Store.state) Store.state.currentView = viewName;
         
         const container = document.getElementById('content');
         const subtitle = document.getElementById('page-subtitle');
@@ -214,54 +199,98 @@ const App = {
         if(subtitle) subtitle.textContent = viewName.charAt(0).toUpperCase() + viewName.slice(1);
 
         const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
-        let viewObj = window[viewObjName];
-
-        // Fallback Map
-        if(!viewObj) {
-            const map = { 'dashboard': window.DashboardView, 'members': window.MembersView, 'groups': window.GroupsView, 'calendar': window.CalendarView, 'news': window.NewsView, 'documents': window.DocsView, 'messenger': window.MessengerView, 'profile': window.ProfileView, 'workhours': window.WorkHoursView };
-            viewObj = map[viewName];
-        }
-
-        if (viewObj && typeof viewObj.render === 'function') {
-            container.classList.remove('fade-in');
-            void container.offsetWidth; // Trigger Reflow
-            viewObj.render(container);
-            container.classList.add('fade-in');
-            
-            // Mobile Menu schließen falls offen
-            const mobileMenu = document.getElementById('mobile-menu');
-            if(mobileMenu && !mobileMenu.classList.contains('hidden')) mobileMenu.classList.add('hidden');
-            
+        
+        // Special Handling für Admin Roles View
+        if (viewName === 'admin_roles') {
+             if (window.AdminRolesView) window.AdminRolesView.render(container);
+             else container.innerHTML = '<div class="p-10 text-center text-red-400">AdminRolesView script nicht geladen.</div>';
         } else {
-            if(container) container.innerHTML = `<div class="p-10 text-center opacity-50">Lade ${viewName}...</div>`;
+            let viewObj = window[viewObjName];
+            
+            // Fallback Map falls Namen nicht matchen (Kompatibilität)
+            if(!viewObj) {
+                const map = { 
+                    'dashboard': window.DashboardView, 
+                    'members': window.MembersView, 
+                    'groups': window.GroupsView, 
+                    'calendar': window.CalendarView, 
+                    'news': window.NewsView, 
+                    'documents': window.DocsView, 
+                    'messenger': window.MessengerView, 
+                    'profile': window.ProfileView, 
+                    'workhours': window.WorkHoursView
+                };
+                viewObj = map[viewName];
+            }
+
+            if (viewObj && typeof viewObj.render === 'function') {
+                container.classList.remove('fade-in');
+                void container.offsetWidth; // Reflow
+                viewObj.render(container);
+                container.classList.add('fade-in');
+                
+                // Mobile Menu schließen
+                const mobileMenu = document.getElementById('mobile-menu');
+                if(mobileMenu && !mobileMenu.classList.contains('hidden')) mobileMenu.classList.add('hidden');
+            } else {
+                if(container) container.innerHTML = `<div class="p-10 text-center opacity-50">Lade ${viewName}...</div>`;
+            }
         }
     },
 
-    // --- PERMISSIONS ---
-    can(action) {
+    // --- PERMISSIONS SYSTEM (RBAC - NEU) ---
+    // action: Was will der User tun? (z.B. 'manage_members')
+    // context: Optional, z.B. der Name der Gruppe ('Mälscher Nachtkrabb')
+    can(action, context = null) {
         const user = this.state.currentUser;
         if (!user) return false; 
-        if (user.email.toLowerCase() === 'admin@gmail.com' || user.role === 'Admin') return true;
+        
+        // 1. Hardcoded Super-Admin
+        if (user.email.toLowerCase() === 'admin@gmail.com') return true;
 
-        const role = user.role || 'Mitglied';
-        const adminRoles = ['1. Vorstand', '2. Vorstand', '3. Vorstand', '4. Vorstand', 'Präsident', 'Vize-Präsident', 'Vorstand'];
-        const managerRoles = ['Kassenwart', 'Protokollant', 'Trainer', 'Abteilungsleiter'];
+        // 2. Rolle in der DB suchen
+        const allRoles = (Store.state && Store.state.roles && Store.state.roles.length > 0) ? Store.state.roles : this.defaultRoles;
+        const userRoleConfig = allRoles.find(r => r.name === user.role);
 
-        if (adminRoles.includes(role)) return true;
+        // Keine Config gefunden? Fallback auf alte Logik oder sperren
+        if (!userRoleConfig) {
+            // Fallback für den Start (damit man sich nicht aussperrt bevor Rollen angelegt sind)
+            if (user.role === 'Vorstand' || user.role === '1. Vorstand') return true;
+            return false;
+        }
 
-        const permissions = {
-            'manage_workhours': managerRoles.includes(role),
-            'manage_groups': role === 'Abteilungsleiter' || managerRoles.includes(role),
-            'manage_news': role === 'Protokollant' || role === 'Schriftführer',
-            'manage_events': adminRoles.includes(role) || role === 'Trainer',
-            'manage_docs': role === 'Schriftführer' || role === 'Vorstand'
-        };
+        const perms = userRoleConfig.permissions || [];
 
-        return permissions[action] || false;
+        // 3. Super-Admin Flag (in admin_roles.js als 'admin_global' definiert)
+        if (perms.includes('admin_global')) return true;
+
+        // 4. Exakte Berechtigung prüfen
+        if (perms.includes(action)) return true;
+
+        // 5. Spezialfall: Gruppen-Management (Scoped Permissions)
+        // Checkt: "Darf ich DIESE Gruppe (context) bearbeiten?"
+        if (action === 'manage_group_content' && context) {
+            // Darf ALLE Gruppen bearbeiten?
+            if (perms.includes('manage_all_groups')) return true;
+            
+            // Darf EIGENE Gruppen bearbeiten UND ist Mitglied in dieser Gruppe?
+            if (perms.includes('manage_own_group')) {
+                const userGroups = Array.isArray(user.groups) ? user.groups : [];
+                // Prüfen ob Gruppenname in der Liste der User-Gruppen ist
+                if (userGroups.includes(context)) return true;
+            }
+        }
+        
+        // Alias für Views, die nur fragen "Darf ich überhaupt irgendeine Gruppe sehen?"
+        // Wird z.B. genutzt um den "Bearbeiten" Button generell anzuzeigen
+        if (action === 'manage_groups') {
+            return perms.includes('manage_all_groups') || perms.includes('manage_own_group');
+        }
+
+        return false;
     },
 
     // --- UI HELPERS ---
-    
     showAuthView() {
         document.getElementById('auth-view').classList.remove('hidden');
         document.getElementById('app-view').classList.add('hidden');
@@ -270,17 +299,13 @@ const App = {
     openModal(htmlContent) { 
         const overlay = document.getElementById('modal-overlay');
         const content = document.getElementById('modal-content');
-        
         if (overlay && content) {
             content.classList.remove('opacity-100', 'scale-100');
             content.classList.add('opacity-0', 'scale-95');
-            
             content.innerHTML = htmlContent;
             overlay.classList.remove('hidden');
-            overlay.classList.add('flex'); // Zentrierung
-            
-            void content.offsetWidth; // Reflow erzwingen
-            
+            overlay.classList.add('flex');
+            void content.offsetWidth;
             content.classList.remove('opacity-0', 'scale-95');
             content.classList.add('opacity-100', 'scale-100');
         }
@@ -289,12 +314,10 @@ const App = {
     closeModal() { 
         const overlay = document.getElementById('modal-overlay');
         const content = document.getElementById('modal-content');
-        
         if (content) {
             content.classList.remove('opacity-100', 'scale-100');
             content.classList.add('opacity-0', 'scale-95');
         }
-
         setTimeout(() => {
             if (overlay) {
                 overlay.classList.add('hidden');
@@ -306,14 +329,11 @@ const App = {
     showToast(message, type = "info") { 
         const toast = document.getElementById("toast"); 
         if (!toast) return;
-
         toast.className = "show";
         if (type === "error") toast.style.borderLeft = "4px solid #ef4444";
         else if (type === "success") toast.style.borderLeft = "4px solid #10b981";
         else toast.style.borderLeft = "4px solid #3b82f6";
-
         toast.innerHTML = `<div class="flex items-center gap-3"><i class="fa-solid ${type === 'error' ? 'fa-circle-xmark text-red-400' : (type === 'success' ? 'fa-circle-check text-green-400' : 'fa-circle-info text-blue-400')}"></i><span>${message}</span></div>`;
-        
         setTimeout(() => { toast.className = ""; }, 3500); 
     },
 
@@ -324,48 +344,26 @@ const App = {
 
     initTheme() { document.documentElement.classList.add('dark'); },
 
-    // FIX: Echtes CSS statt @apply (das im Browser nicht funktioniert)
     injectStyles() {
         if (document.getElementById('app-dynamic-styles')) return;
         const style = document.createElement('style');
         style.id = 'app-dynamic-styles';
         style.textContent = `
-            /* Custom Scrollbar */
             ::-webkit-scrollbar { width: 6px; height: 6px; }
             ::-webkit-scrollbar-track { background: transparent; }
             ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.2); border-radius: 10px; }
             ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.4); }
-            
-            /* Animationen */
             .fade-in { animation: fadeIn 0.4s ease-out forwards; }
             @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-
-            /* Modern Inputs (Glassmorphism) */
             .form-input { 
                 width: 100%;
-                background-color: rgba(30, 41, 59, 0.5); /* bg-slate-800/50 */
-                border: 1px solid rgba(71, 85, 105, 0.5); /* border-slate-600/50 */
-                border-radius: 0.75rem; /* rounded-xl */
-                padding: 0.75rem 1rem;
-                color: #f1f5f9;
-                outline: none;
-                transition: all 0.2s;
+                background-color: rgba(30, 41, 59, 0.5); border: 1px solid rgba(71, 85, 105, 0.5);
+                border-radius: 0.75rem; padding: 0.75rem 1rem; color: #f1f5f9; outline: none; transition: all 0.2s;
             }
-            .form-input:focus {
-                border-color: #3b82f6;
-                box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
-                background-color: rgba(30, 41, 59, 0.8);
-            }
-
-            /* Buttons */
+            .form-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2); background-color: rgba(30, 41, 59, 0.8); }
             .btn-primary {
-                background-color: #2563eb;
-                color: white;
-                font-weight: 700;
-                padding: 0.75rem 1.5rem;
-                border-radius: 0.75rem;
-                transition: all 0.2s;
-                box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.2);
+                background-color: #2563eb; color: white; font-weight: 700; padding: 0.75rem 1.5rem;
+                border-radius: 0.75rem; transition: all 0.2s; box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.2);
             }
             .btn-primary:hover { background-color: #1d4ed8; transform: translateY(-1px); }
             .btn-primary:active { transform: translateY(0); }
