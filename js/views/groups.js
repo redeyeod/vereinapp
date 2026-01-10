@@ -68,7 +68,9 @@ const GroupsView = {
                 const canEditThisGroup = App.can('manage_group_content', g.name);
                 
                 // 2. MITGLIEDSCHAFT PRÜFEN
-                const isMember = App.user && Array.isArray(App.user.groups) && App.user.groups.includes(g.name);
+                // Wir stellen sicher, dass user.groups existiert, bevor wir prüfen
+                const userGroups = (App.user && Array.isArray(App.user.groups)) ? App.user.groups : [];
+                const isMember = userGroups.includes(g.name);
 
                 // 3. ZUGRIFFSBRECHTIGUNG (Entweder Admin ODER Mitglied)
                 const hasAccess = canEditThisGroup || isMember;
@@ -78,6 +80,7 @@ const GroupsView = {
                     ? "hover:border-blue-500/30 cursor-pointer opacity-100" 
                     : "opacity-60 grayscale-[0.8] cursor-not-allowed border-transparent";
                 
+                // Wenn Zugriff erlaubt, setzen wir den onclick Handler
                 const clickAction = hasAccess 
                     ? `onclick="GroupsView.openGroup('${g.id}')"` 
                     : ""; 
@@ -128,12 +131,18 @@ const GroupsView = {
 
         // Sicherheitscheck beim Öffnen: Admin/Betreuer ODER Mitglied
         const canEditThisGroup = App.can('manage_group_content', g.name);
-        const isMember = App.user && Array.isArray(App.user.groups) && App.user.groups.includes(g.name);
+        const userGroups = (App.user && Array.isArray(App.user.groups)) ? App.user.groups : [];
+        const isMember = userGroups.includes(g.name);
         
         if (canEditThisGroup || isMember) {
-            console.log("Öffne Gruppe:", g.name);
-            App.showToast(`Öffne Gruppe: ${g.name}`, "info");
-            // App.router.navigate(...) oder Logik hier einfügen
+            // FIX: Hier wird nun tatsächlich navigiert!
+            if (typeof App.navigate === 'function') {
+                App.navigate('group-details', { id: g.id });
+            } else {
+                // Fallback, falls die Navigation anders gehandhabt wird
+                console.log("Navigiere zu Gruppe:", g.name);
+                App.showToast(`Öffne Gruppe: ${g.name}`, "success");
+            }
         } else {
             App.showToast("Du hast keinen Zugriff auf diese Gruppe.", "error");
         }
