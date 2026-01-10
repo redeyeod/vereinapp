@@ -1,8 +1,9 @@
 /**
  * =============================================================================
- * GROUPS VIEW (Hybrid: Old Design + New Security Logic)
+ * GROUPS VIEW (Hybrid: Old Design + New Security Logic + Group Calendar)
  * Design: "Direct DB Diagnostic Mode" (Original)
  * Logik: Strikte RBAC Prüfung (Admin/Mitglied)
+ * Features: Mitglieder, Chat, Kalender (mit Abstimmung), Dateien
  * =============================================================================
  */
 
@@ -67,10 +68,7 @@ const GroupsView = {
             const count = counts[group.name] || 0;
             
             // INDIVIDUELLE RECHTE PRÜFEN:
-            // Darf ich DIESE Gruppe verwalten? (z.B. als Gruppen-Admin)
             const canManageThisGroup = App.can('manage_group_content', group.name);
-            
-            // Zugriff erlauben, wenn Mitglied ODER Manager
             const hasAccess = isMember || canManageThisGroup;
             
             const cardStyle = hasAccess 
@@ -143,7 +141,6 @@ const GroupsView = {
         if (!group.chat) group.chat = [];
         if (!group.files) group.files = []; 
 
-        // Prüfen ob Bearbeiten erlaubt ist
         const canManageThisGroup = App.can('manage_group_content', group.name);
         
         const editButton = canManageThisGroup
@@ -210,7 +207,6 @@ const GroupsView = {
             return groups.includes(group.name);
         });
 
-        // Hinzufügen nur wenn man Rechte hat
         const canManageThisGroup = App.can('manage_group_content', group.name);
         
         const addButton = canManageThisGroup 
@@ -258,6 +254,378 @@ const GroupsView = {
             </div>
         `;
     },
+
+    // --- TAB: KALENDER & TERMINE (NEU IMPLEMENTIERT) ---
+    renderTabCalendar(group) {
+        // 1. Events der Gruppe filtern & sortieren
+        const allEvents = Store.state.events || [];
+        const groupEvents = allEvents
+            .filter(e => e.group === group.name)
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+        // 2. Rechte
+        const canManage = App.can('manage_group_content', group.name);
+
+        // 3. Button
+        const addButton = canManage 
+            ? `<button onclick="GroupsView.openEventAddModal('${group.id}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs md:text-sm font-bold transition-colors shadow-lg flex items-center">
+                 <i class="fa-solid fa-plus mr-2"></i> Termin anlegen
+               </button>`
+            : '';
+
+        return `
+            <div class="flex flex-col h-full">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-lg font-bold text-white">Veranstaltungen</h3>
+                    ${addButton}
+                </div>
+                
+                <div class="space-y-3 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                    ${groupEvents.length > 0 ? groupEvents.map(e => this.renderEventCard(e)).join('') : 
+                    `<div class="text-center py-12 text-dark-muted border border-dashed border-dark-border rounded-xl bg-dark-bg/20">
+                        <i class="fa-regular fa-calendar-times text-4xl mb-3 opacity-50"></i>
+                        <p class="text-sm">Keine Termine in dieser Gruppe.</p>
+                    </div>`}
+                </div>
+            </div>
+        `;
+    },
+
+    renderEventCard(e) {
+        const startDate = new Date(e.date);
+        const endDate = e.endDate ? new Date(e.endDate) : null;
+        const dateDisplayMonth = startDate.toLocaleString('de-DE', { month: 'short' });
+        const dateDisplayDay = startDate.getDate();
+        
+        // Teilnahme-Status zählen
+        const attendance = e.attendance || {};
+        const yesCount = Object.values(attendance).filter(v => v === 'yes').length;
+        const maybeCount = Object.values(attendance).filter(v => v === 'maybe').length;
+
+        // Eigener Status
+        const currentUser = App.user || (App.state && App.state.currentUser);
+        const myStatus = currentUser && attendance[currentUser.id] ? attendance[currentUser.id] : null;
+        
+        let statusBadge = '';
+        if(myStatus === 'yes') statusBadge = '<span class="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/30 ml-2">Zugesagt</span>';
+        else if(myStatus === 'maybe') statusBadge = '<span class="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/30 ml-2">Vielleicht</span>';
+        else if(myStatus === 'no') statusBadge = '<span class="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30 ml-2">Abgesagt</span>';
+
+        return `
+            <div onclick="GroupsView.openEventDetailModal('${e.id}')" class="bg-dark-card p-4 rounded-xl border border-dark-border flex items-start gap-4 hover:border-blue-500/50 transition-all cursor-pointer group relative">
+                <div class="absolute left-0 top-3 bottom-3 w-1 bg-blue-500 rounded-r-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                
+                <div class="bg-dark-bg/50 border border-dark-border rounded-lg px-3 py-2 text-center min-w-[60px]">
+                    <div class="text-[10px] font-bold uppercase text-blue-400">${dateDisplayMonth}</div>
+                    <div class="text-xl font-bold text-white leading-none mt-0.5">${dateDisplayDay}</div>
+                </div>
+
+                <div class="flex-1 min-w-0">
+                    <div class="flex justify-between items-start">
+                        <h4 class="text-white font-bold text-base truncate pr-2">${e.title}</h4>
+                    </div>
+                    
+                    <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-dark-muted mt-1">
+                        <span class="flex items-center"><i class="fa-regular fa-clock mr-1"></i> ${e.allDay ? 'Ganztägig' : e.time}</span>
+                        ${e.location ? `<span class="flex items-center truncate"><i class="fa-solid fa-location-dot mr-1"></i> ${e.location}</span>` : ''}
+                    </div>
+
+                    <div class="mt-2 flex items-center gap-2 text-xs">
+                        <span class="text-dark-muted"><i class="fa-solid fa-user-check text-emerald-500 mr-1"></i> ${yesCount}</span>
+                        ${maybeCount > 0 ? `<span class="text-dark-muted"><i class="fa-solid fa-question text-amber-500 mr-1"></i> ${maybeCount}</span>` : ''}
+                        ${statusBadge}
+                    </div>
+                </div>
+                
+                <div class="text-dark-muted group-hover:text-white transition-colors self-center">
+                    <i class="fa-solid fa-chevron-right text-sm"></i>
+                </div>
+            </div>
+        `;
+    },
+
+    openEventAddModal(groupId) {
+        const group = Store.state.groups.find(g => g.id == groupId);
+        if(!group || !App.can('manage_group_content', group.name)) return;
+
+        const html = `
+            <div class="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4">
+                    <h3 class="text-xl font-bold text-white">Neuer Gruppentermin</h3>
+                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
+                </div>
+                
+                <form onsubmit="GroupsView.handleEventAdd(event, '${groupId}')" class="space-y-5">
+                    <div>
+                        <label class="text-muted text-xs uppercase font-bold">Titel</label>
+                        <input type="text" name="title" required class="form-input" placeholder="z.B. Gruppentreffen">
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-muted text-xs uppercase font-bold">Datum</label>
+                            <input type="date" name="date" required class="form-input dark-date">
+                        </div>
+                        <div>
+                            <label class="text-muted text-xs uppercase font-bold">Uhrzeit</label>
+                            <input type="time" name="time" class="form-input dark-date">
+                        </div>
+                    </div>
+
+                    <div>
+                         <label class="text-muted text-xs uppercase font-bold">Ort</label>
+                         <input type="text" name="location" class="form-input" placeholder="Ort...">
+                    </div>
+                    
+                    <div>
+                        <label class="text-muted text-xs uppercase font-bold">Beschreibung / Infos</label>
+                        <textarea name="description" class="form-input h-24" placeholder="Infos..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn-primary w-full mt-2">Termin erstellen</button>
+                </form>
+            </div>
+        `;
+        App.openModal(html);
+    },
+
+    handleEventAdd(e, groupId) {
+        e.preventDefault();
+        const group = Store.state.groups.find(g => g.id == groupId);
+        const fd = new FormData(e.target);
+        
+        const newEvent = {
+            title: fd.get('title'),
+            date: fd.get('date'),
+            time: fd.get('time') || '00:00',
+            location: fd.get('location'),
+            description: fd.get('description'),
+            group: group.name, // Wichtig: Gruppenzuordnung
+            attendance: {}, // Leeres Objekt für Abstimmungen
+            allDay: !fd.get('time')
+        };
+        
+        Store.add('events', newEvent);
+        App.closeModal();
+        App.showToast('Termin erstellt');
+        // Refresh Current View
+        this.render(document.getElementById('content'));
+    },
+
+    openEventDetailModal(eventId) {
+        const e = Store.state.events.find(ev => ev.id == eventId);
+        if(!e) return;
+
+        const group = Store.state.groups.find(g => g.name === e.group);
+        const canManage = group && App.can('manage_group_content', group.name);
+        
+        // Datumsformatierung
+        const d = new Date(e.date);
+        const dateStr = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+        // Anwesenheitslogik
+        const attendance = e.attendance || {};
+        const currentUser = App.user || (App.state && App.state.currentUser);
+        const myStatus = currentUser ? attendance[currentUser.id] : null;
+
+        // Listen generieren (Wer kommt?)
+        const members = Store.state.members || [];
+        const getNamesByStatus = (status) => {
+            const ids = Object.keys(attendance).filter(id => attendance[id] === status);
+            return ids.map(id => {
+                const m = members.find(mem => mem.id == id);
+                return m ? `${m.firstName} ${m.lastName}` : 'Unbekannt';
+            });
+        };
+
+        const yesNames = getNamesByStatus('yes');
+        const maybeNames = getNamesByStatus('maybe');
+        const noNames = getNamesByStatus('no');
+
+        // Button Styles Helper
+        const btnClass = (active) => active 
+            ? 'bg-blue-600 text-white border-blue-600 shadow-md' 
+            : 'bg-dark-bg text-dark-muted border-dark-border hover:border-blue-500/50 hover:text-white';
+
+        const deleteBtn = canManage ? 
+            `<button onclick="GroupsView.deleteGroupEvent('${e.id}')" class="text-red-400 hover:text-red-300 text-xs flex items-center gap-1 bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20"><i class="fa-regular fa-trash-can"></i> Löschen</button>` : '';
+
+        const html = `
+            <div class="p-6 h-full flex flex-col max-h-[90vh]">
+                <div class="flex justify-between items-start mb-6 border-b border-dark-border pb-4">
+                    <div class="pr-4">
+                        <div class="text-blue-400 text-xs font-bold uppercase tracking-wider mb-1">${dateStr}</div>
+                        <h3 class="text-xl md:text-2xl font-bold text-white break-words">${e.title}</h3>
+                        <div class="flex items-center gap-4 text-sm text-dark-muted mt-2">
+                            <span><i class="fa-regular fa-clock mr-1"></i> ${e.allDay ? 'Ganztägig' : e.time}</span>
+                            ${e.location ? `<span><i class="fa-solid fa-location-dot mr-1"></i> ${e.location}</span>` : ''}
+                        </div>
+                    </div>
+                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 flex-shrink-0"><i class="fa-solid fa-times text-xl"></i></button>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
+                    ${e.description ? `
+                    <div class="bg-dark-bg/50 p-4 rounded-xl border border-dark-border text-sm leading-relaxed text-white whitespace-pre-wrap">
+                        ${e.description}
+                    </div>` : ''}
+
+                    <!-- Abstimmung -->
+                    <div>
+                        <h4 class="text-xs font-bold text-dark-muted uppercase mb-3">Deine Antwort</h4>
+                        <div class="grid grid-cols-3 gap-3">
+                            <button onclick="GroupsView.setAttendance('${e.id}', 'yes')" class="p-3 rounded-xl border font-bold text-sm transition-all flex flex-col items-center gap-1 ${btnClass(myStatus === 'yes')}">
+                                <i class="fa-solid fa-check text-lg"></i> Dabei
+                            </button>
+                            <button onclick="GroupsView.setAttendance('${e.id}', 'maybe')" class="p-3 rounded-xl border font-bold text-sm transition-all flex flex-col items-center gap-1 ${btnClass(myStatus === 'maybe')}">
+                                <i class="fa-solid fa-question text-lg"></i> Vielleicht
+                            </button>
+                            <button onclick="GroupsView.setAttendance('${e.id}', 'no')" class="p-3 rounded-xl border font-bold text-sm transition-all flex flex-col items-center gap-1 ${btnClass(myStatus === 'no')}">
+                                <i class="fa-solid fa-xmark text-lg"></i> Absage
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Teilnehmerliste -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <h4 class="text-xs font-bold text-emerald-400 uppercase">Zusagen (${yesNames.length})</h4>
+                            </div>
+                            <div class="bg-dark-bg p-3 rounded-xl border border-dark-border min-h-[60px] max-h-[150px] overflow-y-auto custom-scrollbar text-sm space-y-1">
+                                ${yesNames.length ? yesNames.map(n => `<div class="text-white flex items-center gap-2"><div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>${n}</div>`).join('') : '<span class="text-dark-muted italic text-xs">Noch keine Zusagen</span>'}
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <h4 class="text-xs font-bold text-red-400 uppercase">Absagen (${noNames.length})</h4>
+                                ${maybeNames.length > 0 ? `<span class="text-xs text-amber-500 font-bold">${maybeNames.length} Vielleicht</span>` : ''}
+                            </div>
+                            <div class="bg-dark-bg p-3 rounded-xl border border-dark-border min-h-[60px] max-h-[150px] overflow-y-auto custom-scrollbar text-sm space-y-1">
+                                ${noNames.length ? noNames.map(n => `<div class="text-dark-muted flex items-center gap-2"><div class="w-1.5 h-1.5 rounded-full bg-red-500"></div>${n}</div>`).join('') : '<span class="text-dark-muted italic text-xs">Keine Absagen</span>'}
+                                ${maybeNames.length ? `<div class="border-t border-dark-border my-2 pt-2"></div>` + maybeNames.map(n => `<div class="text-amber-400 flex items-center gap-2"><div class="w-1.5 h-1.5 rounded-full bg-amber-500"></div>${n} (Vielleicht)</div>`).join('') : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                ${deleteBtn ? `<div class="mt-6 pt-4 border-t border-dark-border flex justify-end">${deleteBtn}</div>` : ''}
+            </div>
+        `;
+
+        App.openModal(html);
+        
+        const modalContainer = document.getElementById('modal-content');
+        if(modalContainer) {
+            modalContainer.classList.remove('max-w-md');
+            modalContainer.classList.add('max-w-2xl', 'w-full');
+        }
+    },
+
+    async setAttendance(eventId, status) {
+        const currentUser = App.user || (App.state && App.state.currentUser);
+        if(!currentUser) {
+            App.showToast("Fehler: User nicht identifiziert", "error");
+            return;
+        }
+
+        const e = Store.state.events.find(ev => ev.id == eventId);
+        if(e) {
+            // Anwesenheitsobjekt klonen oder erstellen
+            const updatedAttendance = { ...(e.attendance || {}) };
+            
+            // Toggle Logik: Wenn man nochmal auf das gleiche klickt, wird es entfernt
+            if (updatedAttendance[currentUser.id] === status) {
+                delete updatedAttendance[currentUser.id];
+            } else {
+                updatedAttendance[currentUser.id] = status;
+            }
+
+            const updatedEvent = { ...e, attendance: updatedAttendance };
+
+            try {
+                await Store.update('events', updatedEvent);
+                // Sofortiges Feedback im UI (Modal neu laden)
+                this.openEventDetailModal(eventId);
+                // Kalenderliste im Hintergrund aktualisieren
+                this.render(document.getElementById('content'));
+            } catch(err) {
+                console.error(err);
+                App.showToast("Fehler beim Speichern", "error");
+            }
+        }
+    },
+
+    async deleteGroupEvent(id) {
+        if(confirm("Termin wirklich löschen?")) {
+            await Store.remove('events', id);
+            App.closeModal();
+            this.render(document.getElementById('content'));
+            App.showToast('Termin gelöscht');
+        }
+    },
+
+    // --- TAB: CHAT & DATEIEN ---
+    
+    renderTabChat(group) {
+        const messages = group.chat || [];
+        return `<div class="flex flex-col h-[65vh] md:h-[500px]"><div id="chat-messages" class="flex-1 overflow-y-auto space-y-4 pr-2 mb-4 custom-scrollbar">${messages.map(m => `<div class="bg-dark-bg p-2 rounded">${m.text}</div>`).join('')}</div><form onsubmit="GroupsView.sendMessage(event, '${group.id}')" class="flex gap-2"><input name="message" class="form-input" placeholder="Nachricht..."><button class="btn-primary">Senden</button></form></div>`;
+    },
+    async sendMessage(e, groupId) { e.preventDefault(); /* ... */ },
+
+    renderTabFiles(group) {
+        return `<div>Dateien (Platzhalter)</div>`;
+    },
+
+    // --- NAVIGATION & HELPERS ---
+
+    openGroup(id) { 
+        const group = Store.state.groups.find(g => g.id == id);
+        if(!group) return;
+
+        // Security Check
+        const user = App.user || (App.state && App.state.currentUser);
+        const myGroupNames = user ? (Array.isArray(user.groups) ? user.groups : []) : [];
+        const isMember = myGroupNames.includes(group.name);
+        const canManage = App.can('manage_group_content', group.name);
+
+        if (isMember || canManage) {
+            this.state.activeGroupId = id; 
+            this.state.activeTab = 'members'; 
+            this.state.currentFolderId = null; 
+            this.render(document.getElementById('content')); 
+        } else {
+            App.showToast("Du hast keinen Zugriff auf diese Gruppe.", "error");
+        }
+    },
+
+    closeGroup() { this.state.activeGroupId = null; this.render(document.getElementById('content')); },
+    switchTab(id) { this.state.activeTab = id; this.render(document.getElementById('content')); },
+    
+    async delete(id) { 
+        if(!App.can('manage_groups')) return; 
+        if(confirm("Löschen?")) { 
+            await Store.remove('groups', id); 
+            this.render(document.getElementById('content')); 
+        } 
+    },
+    
+    openAddModal() { 
+        if(!App.can('manage_all_groups')) return; 
+        App.openModal(`<div class="p-4"><h3 class="text-white mb-4">Neu</h3><form onsubmit="GroupsView.handleAdd(event)"><input name="name" class="form-input" required><button class="btn-primary mt-2">Erstellen</button></form></div>`); 
+    },
+    
+    async handleAdd(e) { 
+        e.preventDefault(); 
+        const name = new FormData(e.target).get('name'); 
+        await Store.add('groups', { id: Date.now(), name: name, chat: [], files: [] }); 
+        App.closeModal(); 
+        this.render(document.getElementById('content')); 
+    },
+
+    openEditGroupModal(groupId) { /* ... */ },
+    async handleUpdateGroup(e, groupId) { /* ... */ },
 
     // --- MODAL: Mitglied hinzufügen ---
     openAddMemberModal(groupId) {
@@ -309,10 +677,8 @@ const GroupsView = {
         });
     },
 
-    // --- FIX: Direkte DB-Kommunikation für JSONB Spalte ---
     async addMemberDirect(groupId, memberId) {
         const group = Store.state.groups.find(g => g.id == groupId);
-        // Security Check vor DB Operation
         if (!group || !App.can('manage_group_content', group.name)) {
              App.showToast("Keine Berechtigung", "error");
              return;
@@ -323,48 +689,25 @@ const GroupsView = {
         if (member && group) {
             try {
                 App.showToast("Speichere...", "info");
-
-                // Arrays sicherstellen
                 let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
-                
-                // Legacy Migration: Alten "Singular" Wert übernehmen
                 if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
                     currentGroups.push(member.group);
                 }
-
                 if (!currentGroups.includes(group.name)) {
                     currentGroups.push(group.name);
                 }
                 
-                // DIREKTER SUPABASE AUFRUF
-                // Wir nutzen hier direkt den Client, um sicherzustellen, dass das JSONB Array korrekt übertragen wird.
                 const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-                
-                const { data, error } = await _sb
-                    .from('members')
-                    .update({ 
-                        groups: currentGroups // JSONB Array wird hier direkt übergeben
-                    })
-                    .eq('id', member.id)
-                    .select();
+                const { data, error } = await _sb.from('members').update({ groups: currentGroups }).eq('id', member.id).select();
 
-                if (error) {
-                    throw new Error("DB Error: " + error.message);
-                }
+                if (error) throw new Error("DB Error: " + error.message);
+                if (!data || data.length === 0) throw new Error("Update verweigert (RLS).");
 
-                if (!data || data.length === 0) {
-                    throw new Error("Update verweigert (RLS). Bitte 'UPDATE' Policy in Supabase prüfen.");
-                }
-
-                // Lokalen State aktualisieren
                 member.groups = currentGroups;
-                
                 App.closeModal();
                 App.showToast(`${member.firstName} hinzugefügt`, "success");
                 this.render(document.getElementById('content'));
-                
                 if(Store.fetchTable) Store.fetchTable('members');
-
             } catch (e) {
                 console.error(e);
                 App.showToast("Fehler: " + e.message, "error");
@@ -374,122 +717,36 @@ const GroupsView = {
 
     async removeMemberFromGroup(memberId) {
         const group = Store.state.groups.find(g => g.id == this.state.activeGroupId);
-        if (!group) return;
-        
-        // Security Check
-        if (!App.can('manage_group_content', group.name)) return;
+        if (!group || !App.can('manage_group_content', group.name)) return;
 
         if(confirm(`Entfernen aus '${group.name}'?`)) {
             const member = Store.state.members.find(m => m.id == memberId);
             if(member) {
                 try {
                     App.showToast("Entferne...", "info");
-                    
                     let currentGroups = Array.isArray(member.groups) ? [...member.groups] : [];
-                    
-                    // Legacy Migration
                     if (member.group && member.group !== 'Keine' && !currentGroups.includes(member.group)) {
                         currentGroups.push(member.group);
                     }
-
                     currentGroups = currentGroups.filter(g => g !== group.name);
                     
                     const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-                    const { data, error } = await _sb
-                        .from('members')
-                        .update({ groups: currentGroups })
-                        .eq('id', member.id)
-                        .select();
+                    const { data, error } = await _sb.from('members').update({ groups: currentGroups }).eq('id', member.id).select();
 
                     if (error) throw new Error(error.message);
-                    if (!data || data.length === 0) throw new Error("Löschen blockiert (RLS oder ID falsch).");
+                    if (!data || data.length === 0) throw new Error("Löschen blockiert (RLS).");
                     
                     member.groups = currentGroups;
-                    
                     this.render(document.getElementById('content'));
                     App.showToast("Entfernt", "success");
-                    
                     if(Store.fetchTable) Store.fetchTable('members');
-                    
                 } catch (e) {
                     console.error(e);
                     App.showToast("Fehler: " + e.message, "error");
                 }
             }
         }
-    },
-
-    // --- RESTLICHE TABS (Chat, Calendar, Files) ---
-    
-    renderTabChat(group) {
-        const messages = group.chat || [];
-        return `<div class="flex flex-col h-[65vh] md:h-[500px]"><div id="chat-messages" class="flex-1 overflow-y-auto space-y-4 pr-2 mb-4 custom-scrollbar">${messages.map(m => `<div class="bg-dark-bg p-2 rounded">${m.text}</div>`).join('')}</div><form onsubmit="GroupsView.sendMessage(event, '${group.id}')" class="flex gap-2"><input name="message" class="form-input" placeholder="Nachricht..."><button class="btn-primary">Senden</button></form></div>`;
-    },
-    async sendMessage(e, groupId) { e.preventDefault(); /* ... */ },
-
-    renderTabCalendar(group) {
-        const events = (Store.state.events||[]).filter(e => e.group === group.name);
-        return `<div><h3>Termine</h3><div class="space-y-2">${events.map(e => `<div>${e.title}</div>`).join('')}</div><button onclick="GroupsView.addEvent('${group.id}')" class="btn-primary mt-4">Termin</button></div>`;
-    },
-    addEvent(groupId) { /* ... */ },
-    async handleCalendarAdd(e, groupName) { /* ... */ },
-    async deleteGroupEvent(id) { /* ... */ },
-    openEventDetail(id) { /* ... */ },
-    async setAttendance(id, status) { /* ... */ },
-
-    renderTabFiles(group) {
-        return `<div>Dateien (Platzhalter)</div>`;
-    },
-    // ... restliche Helper ...
-    
-    // Navigation & Helpers
-    openGroup(id) { 
-        const group = Store.state.groups.find(g => g.id == id);
-        if(!group) return;
-
-        // --- HIER DIE SICHERHEITSPRÜFUNG BEIM ÖFFNEN ---
-        const user = App.user || (App.state && App.state.currentUser);
-        const myGroupNames = user ? (Array.isArray(user.groups) ? user.groups : []) : [];
-        const isMember = myGroupNames.includes(group.name);
-        const canManage = App.can('manage_group_content', group.name);
-
-        if (isMember || canManage) {
-            this.state.activeGroupId = id; 
-            this.state.activeTab = 'members'; 
-            this.state.currentFolderId = null; 
-            this.render(document.getElementById('content')); 
-        } else {
-            App.showToast("Du hast keinen Zugriff auf diese Gruppe.", "error");
-        }
-    },
-
-    closeGroup() { this.state.activeGroupId = null; this.render(document.getElementById('content')); },
-    switchTab(id) { this.state.activeTab = id; this.render(document.getElementById('content')); },
-    
-    async delete(id) { 
-        if(!App.can('manage_groups')) return; // Hier nutzen wir das allgemeine Recht, da Löschen kritisch ist
-        if(confirm("Löschen?")) { 
-            await Store.remove('groups', id); 
-            this.render(document.getElementById('content')); 
-        } 
-    },
-    
-    openAddModal() { 
-        if(!App.can('manage_all_groups')) return; 
-        App.openModal(`<div class="p-4"><h3 class="text-white mb-4">Neu</h3><form onsubmit="GroupsView.handleAdd(event)"><input name="name" class="form-input" required><button class="btn-primary mt-2">Erstellen</button></form></div>`); 
-    },
-    
-    async handleAdd(e) { 
-        e.preventDefault(); 
-        const name = new FormData(e.target).get('name'); 
-        await Store.add('groups', { id: Date.now(), name: name, chat: [], files: [] }); 
-        App.closeModal(); 
-        this.render(document.getElementById('content')); 
-    },
-
-    openEditGroupModal(groupId) { /* ... */ },
-    async handleUpdateGroup(e, groupId) { /* ... */ }
+    }
 };
 
-// Global verfügbar machen
 window.GroupsView = GroupsView;
