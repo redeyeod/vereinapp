@@ -1,6 +1,6 @@
 /**
  * =============================================================================
- * DOCUMENTS VIEW
+ * DOCUMENTS VIEW (Clean & Mobile First)
  * Verwaltung der Vereinsdokumente mit Ordnerstruktur und Drag & Drop
  * =============================================================================
  */
@@ -59,43 +59,43 @@ const DocsView = {
         // --- BERECHTIGUNGS-CHECK ---
         const canManage = App.can('manage_docs');
 
-        // Actions Toolbar (Responsive: Text auf Mobile ausgeblendet)
+        // Actions Toolbar
         const actionsToolbar = canManage ? `
-            <div class="flex gap-2 shrink-0 ml-2 md:ml-4">
-                <button onclick="DocsView.createFolder()" class="bg-dark-bg hover:bg-dark-hover text-white w-10 h-10 md:w-auto md:px-4 md:py-2 rounded-lg text-sm border border-dark-border transition-colors flex items-center justify-center" title="Neuer Ordner">
+            <div class="flex gap-2 shrink-0 ml-4">
+                <button onclick="DocsView.createFolder()" class="bg-dark-card hover:bg-dark-hover text-dark-muted hover:text-white w-10 h-10 md:w-auto md:px-4 md:py-2 rounded-xl text-sm border border-dark-border transition-all flex items-center justify-center shadow-sm">
                     <i class="fa-solid fa-folder-plus md:mr-2"></i> <span class="hidden md:inline">Ordner</span>
                 </button>
-                <button onclick="DocsView.openAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white w-10 h-10 md:w-auto md:px-4 md:py-2 rounded-lg text-sm font-bold transition-colors shadow-lg shadow-blue-900/30 flex items-center justify-center" title="Datei hochladen">
+                <button onclick="DocsView.openAddModal()" class="bg-brand-600 hover:bg-brand-500 text-white w-10 h-10 md:w-auto md:px-4 md:py-2 rounded-xl text-sm font-bold transition-all shadow-lg shadow-brand-500/20 flex items-center justify-center">
                     <i class="fa-solid fa-cloud-arrow-up md:mr-2"></i> <span class="hidden md:inline">Upload</span>
                 </button>
             </div>
         ` : '';
 
-        // Drag & Drop Attribute
+        // Drag & Drop Attribute Helper
         const getDragAttr = (id) => canManage ? `draggable="true" ondragstart="DocsView.dragStart(event, ${id})"` : '';
         const getDropAttr = (id) => canManage ? `ondragover="DocsView.allowDrop(event)" ondrop="DocsView.drop(event, ${id})"` : '';
         const parentDropAttr = (canManage && currentFolderId !== null) ? `ondragover="DocsView.allowDrop(event)" ondrop="DocsView.drop(event, ${parentFolderId})"` : '';
         const containerDropAttr = canManage ? `ondragover="DocsView.allowDrop(event)" ondrop="DocsView.drop(event, ${currentFolderId})"` : '';
 
         container.innerHTML = `
-            <div class="flex flex-col h-full fade-in">
+            <div class="flex flex-col h-full fade-in pb-20">
                 <!-- Toolbar -->
-                <div class="flex justify-between items-center mb-4 md:mb-6 pb-4 border-b border-dark-border">
+                <div class="flex justify-between items-center mb-6 pb-4 border-b border-dark-border sticky top-0 bg-dark-bg/95 backdrop-blur-sm z-20 pt-1">
                     <div class="flex items-center overflow-hidden min-w-0">
                         <!-- Zurück Pfeil -->
                         ${currentFolderId !== null ? `
                             <button onclick="DocsView.openFolder(${parentFolderId})" 
                                     ${parentDropAttr}
-                                    class="mr-2 text-dark-muted hover:text-white p-2 rounded-full hover:bg-dark-hover transition-colors flex-shrink-0" 
+                                    class="mr-3 text-dark-muted hover:text-white p-2 rounded-xl hover:bg-dark-card border border-transparent hover:border-dark-border transition-all flex-shrink-0" 
                                     title="Ebene höher">
                                 <i class="fa-solid fa-arrow-left"></i>
                             </button>
-                            <div class="h-6 w-px bg-dark-border mr-3 flex-shrink-0"></div>
+                            <div class="h-6 w-px bg-dark-border mr-3 flex-shrink-0 hidden sm:block"></div>
                         ` : ''}
 
                         <!-- Breadcrumbs -->
-                        <div class="flex items-center text-sm text-dark-muted overflow-x-auto whitespace-nowrap custom-scrollbar pb-1">
-                            <i class="fa-solid fa-hard-drive mr-2 text-blue-400"></i>
+                        <div class="flex items-center text-sm text-dark-muted overflow-x-auto whitespace-nowrap custom-scrollbar pb-1 mask-linear-fade">
+                            ${currentFolderId === null ? '<i class="fa-solid fa-hard-drive mr-2 text-brand-500"></i>' : ''}
                             ${breadcrumbs.map((b, idx) => `
                                 <span onclick="DocsView.openFolder(${b.id === null ? 'null' : b.id})" 
                                     ${(canManage && b.id !== currentFolderId) ? `ondragover="DocsView.allowDrop(event)" ondrop="DocsView.drop(event, ${b.id})"` : ''}
@@ -112,28 +112,29 @@ const DocsView = {
                 </div>
 
                 <!-- Grid View -->
-                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4 flex-1 content-start">
                     ${contents.length > 0 ? contents.map(d => {
                         const isFolder = d.type === 'folder';
                         
                         let iconClass = 'fa-file';
                         let colorClass = 'text-gray-400';
+                        let bgClass = 'bg-dark-card';
                         
-                        if (isFolder) { iconClass = 'fa-folder'; colorClass = 'text-yellow-400'; } 
+                        if (isFolder) { iconClass = 'fa-folder'; colorClass = 'text-amber-400'; bgClass = 'bg-dark-card'; } 
                         else if (d.type === 'PDF') { iconClass = 'fa-file-pdf'; colorClass = 'text-red-500'; } 
                         else if (d.type === 'DOC' || d.type === 'DOCX') { iconClass = 'fa-file-word'; colorClass = 'text-blue-500'; } 
                         else if (d.type === 'IMG') { iconClass = 'fa-file-image'; colorClass = 'text-purple-500'; } 
-                        else if (d.type === 'XLS') { iconClass = 'fa-file-excel'; colorClass = 'text-green-500'; }
+                        else if (d.type === 'XLS') { iconClass = 'fa-file-excel'; colorClass = 'text-emerald-500'; }
 
                         const clickAction = isFolder ? `onclick="DocsView.openFolder(${d.id})"` : '';
                         
                         // Action Menu nur für Admins
                         const actionMenu = canManage ? `
-                            <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
-                                <button onclick="event.stopPropagation(); DocsView.renameItem(${d.id}, '${d.name}')" class="bg-dark-card/90 text-dark-muted hover:text-blue-400 p-1.5 rounded-md shadow-sm border border-dark-border" title="Umbenennen">
+                            <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1 bg-dark-bg/80 backdrop-blur-sm rounded-lg p-1 border border-dark-border shadow-lg">
+                                <button onclick="event.stopPropagation(); DocsView.renameItem(${d.id}, '${d.name}')" class="text-dark-muted hover:text-blue-400 p-1.5 rounded hover:bg-white/5" title="Umbenennen">
                                     <i class="fa-solid fa-pen text-xs"></i>
                                 </button>
-                                <button onclick="event.stopPropagation(); DocsView.delete(${d.id})" class="bg-dark-card/90 text-dark-muted hover:text-red-400 p-1.5 rounded-md shadow-sm border border-dark-border" title="Löschen">
+                                <button onclick="event.stopPropagation(); DocsView.delete(${d.id})" class="text-dark-muted hover:text-red-400 p-1.5 rounded hover:bg-white/5" title="Löschen">
                                     <i class="fa-regular fa-trash-can text-xs"></i>
                                 </button>
                             </div>
@@ -141,23 +142,26 @@ const DocsView = {
 
                         return `
                         <div ${clickAction} ${getDragAttr(d.id)} ${isFolder ? getDropAttr(d.id) : ''} 
-                             class="group relative flex flex-col items-center p-4 rounded-xl bg-dark-card border border-dark-border hover:border-blue-500/50 hover:bg-dark-hover/50 transition-all cursor-pointer shadow-sm select-none h-full justify-center min-h-[120px]">
+                             class="group relative flex flex-col items-center p-5 rounded-2xl ${bgClass} border border-dark-border hover:border-brand-500/50 hover:shadow-lg transition-all cursor-pointer select-none aspect-square justify-center">
                              
                              ${actionMenu}
                             
-                             <i class="fa-solid ${iconClass} text-4xl md:text-5xl mb-3 drop-shadow-md ${colorClass} transition-transform group-hover:scale-110"></i>
-                             <span class="text-xs md:text-sm text-center text-dark-text font-medium truncate w-full px-1">${d.name}</span>
-                             <span class="text-[10px] text-dark-muted mt-1">${d.type}</span>
+                             <i class="fa-solid ${iconClass} text-4xl md:text-5xl mb-4 drop-shadow-md ${colorClass} transition-transform group-hover:scale-110"></i>
+                             <span class="text-xs md:text-sm text-center text-white font-medium truncate w-full px-1">${d.name}</span>
+                             ${!isFolder ? `<span class="text-[10px] text-dark-muted mt-1 uppercase tracking-wider">${d.type}</span>` : ''}
                         </div>
                         `;
                     }).join('') : 
                     
                     // Leerer Zustand
-                    `<div class="col-span-full text-center py-16 text-dark-muted border border-dashed border-dark-border rounded-bubble flex flex-col items-center justify-center bg-dark-bg/20" 
+                    `<div class="col-span-full py-20 text-center text-dark-muted border border-dashed border-dark-border rounded-3xl bg-dark-bg/30 flex flex-col items-center justify-center min-h-[300px]" 
                           ${containerDropAttr}>
-                        <i class="fa-solid fa-folder-open text-4xl mb-3 opacity-30"></i>
-                        <p class="text-sm">Dieser Ordner ist leer.</p>
-                        ${canManage ? '<p class="text-xs mt-2 opacity-50">Dateien hierher ziehen (Simulation)</p>' : ''}
+                        <div class="w-16 h-16 bg-dark-card rounded-full flex items-center justify-center mb-4 border border-dark-border">
+                            <i class="fa-solid fa-folder-open text-3xl opacity-30"></i>
+                        </div>
+                        <h3 class="text-white font-bold mb-1">Dieser Ordner ist leer</h3>
+                        <p class="text-sm">Keine Dateien gefunden.</p>
+                        ${canManage ? '<p class="text-xs mt-4 opacity-50 bg-dark-bg px-3 py-1 rounded-full border border-dark-border">Tipp: Drag & Drop wird unterstützt</p>' : ''}
                     </div>`
                     }
                 </div>
@@ -193,11 +197,11 @@ const DocsView = {
         if (draggedItem) {
             // Update via Store
             const updatedItem = { ...draggedItem, parentId: targetFolderId };
-            // Wir simulieren hier das Update, da Store.save() deprecated ist
-            // In einer echten App würde man Store.update('docs', updatedItem) aufrufen
+            
+            // Simuliertes Update (in echt DB Call)
             Store.update('docs', updatedItem);
             
-            // Lokales Update für schnelles Feedback
+            // Lokales Update
             const index = Store.state.docs.indexOf(draggedItem);
             if(index !== -1) Store.state.docs[index] = updatedItem;
 
@@ -216,17 +220,18 @@ const DocsView = {
     createFolder() {
         if(!App.can('manage_docs')) return;
         
-        // Modal statt Prompt
         const html = `
             <div class="p-6">
-                <h3 class="text-xl font-bold text-white mb-4">Neuer Ordner</h3>
+                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4">
+                    <h3 class="text-xl font-bold text-white">Neuer Ordner</h3>
+                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2"><i class="fa-solid fa-times text-xl"></i></button>
+                </div>
                 <form onsubmit="DocsView.handleCreateFolder(event)">
-                    <label class="block text-sm text-dark-muted mb-2">Ordnername</label>
-                    <input type="text" name="folderName" class="form-input mb-4" placeholder="z.B. Protokolle" required autofocus>
-                    <div class="flex gap-3">
-                        <button type="button" onclick="App.closeModal()" class="flex-1 py-2 rounded-lg border border-dark-border text-dark-muted hover:text-white">Abbrechen</button>
-                        <button type="submit" class="flex-1 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700">Erstellen</button>
+                    <div>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ordnername</label>
+                        <input type="text" name="folderName" class="form-input" placeholder="z.B. Protokolle" required autofocus>
                     </div>
+                    <button type="submit" class="btn-primary w-full mt-6">Erstellen</button>
                 </form>
             </div>
         `;
@@ -238,7 +243,7 @@ const DocsView = {
         const name = new FormData(e.target).get('folderName');
         if (name && name.trim() !== "") {
             const newFolder = {
-                id: Date.now(), // Temporäre ID
+                id: Date.now(),
                 parentId: this.state.currentFolderId,
                 name: name.trim(),
                 type: 'folder',
@@ -254,17 +259,18 @@ const DocsView = {
     renameItem(id, oldName) {
         if(!App.can('manage_docs')) return;
         
-        // Modal statt Prompt
         const html = `
             <div class="p-6">
-                <h3 class="text-xl font-bold text-white mb-4">Umbenennen</h3>
+                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4">
+                    <h3 class="text-xl font-bold text-white">Umbenennen</h3>
+                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2"><i class="fa-solid fa-times text-xl"></i></button>
+                </div>
                 <form onsubmit="DocsView.handleRename(event, ${id})">
-                    <label class="block text-sm text-dark-muted mb-2">Neuer Name</label>
-                    <input type="text" name="newName" class="form-input mb-4" value="${oldName}" required autofocus>
-                    <div class="flex gap-3">
-                        <button type="button" onclick="App.closeModal()" class="flex-1 py-2 rounded-lg border border-dark-border text-dark-muted hover:text-white">Abbrechen</button>
-                        <button type="submit" class="flex-1 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700">Speichern</button>
+                    <div>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Neuer Name</label>
+                        <input type="text" name="newName" class="form-input" value="${oldName}" required autofocus>
                     </div>
+                    <button type="submit" class="btn-primary w-full mt-6">Speichern</button>
                 </form>
             </div>
         `;
@@ -308,7 +314,6 @@ const DocsView = {
                 }
             }
             Store.remove('docs', id);
-            // Kleines Timeout für UI Refresh
             setTimeout(() => this.render(document.getElementById('content')), 100);
             App.showToast('Gelöscht');
         }
@@ -325,12 +330,12 @@ const DocsView = {
                 
                 <form onsubmit="DocsView.handleAdd(event)" class="space-y-4">
                       <div>
-                        <label class="block text-sm font-medium text-dark-muted mb-2">Dateiname</label>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Dateiname</label>
                         <input type="text" name="name" placeholder="z.B. Protokoll_JHV_2024.pdf" required class="form-input">
                     </div>
                     
                     <div>
-                        <label class="block text-sm font-medium text-dark-muted mb-2">Dateityp</label>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Dateityp</label>
                         <select name="type" class="form-input cursor-pointer">
                             <option value="PDF">PDF Dokument</option>
                             <option value="DOC">Word Dokument</option>
@@ -339,12 +344,12 @@ const DocsView = {
                         </select>
                     </div>
                     
-                    <div class="border-2 border-dashed border-dark-border rounded-xl p-8 text-center text-dark-muted bg-dark-bg hover:border-blue-500 hover:text-blue-400 transition-colors cursor-pointer">
+                    <div class="border-2 border-dashed border-dark-border rounded-xl p-8 text-center text-dark-muted bg-dark-bg hover:border-brand-500 hover:text-brand-400 transition-colors cursor-pointer mt-4">
                         <i class="fa-solid fa-cloud-arrow-up text-3xl mb-2"></i>
                         <p class="text-sm">Datei hier ablegen oder klicken</p>
                     </div>
                     
-                    <button type="submit" class="btn-primary w-full mt-2">Hochladen</button>
+                    <button type="submit" class="btn-primary w-full mt-6">Hochladen</button>
                 </form>
             </div>
         `;
@@ -356,7 +361,6 @@ const DocsView = {
         const formData = new FormData(e.target);
         
         const newDoc = {
-            // Keine ID generieren, das macht der Store/Supabase (oder wir lassen Store eine temp ID machen)
             parentId: this.state.currentFolderId,
             name: formData.get('name'),
             type: formData.get('type'),
@@ -370,5 +374,4 @@ const DocsView = {
     }
 };
 
-// WICHTIG: Global verfügbar machen für die neue App.js
 window.DocsView = DocsView;
