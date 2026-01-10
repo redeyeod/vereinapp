@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * APP CORE LOGIC (RBAC Integration & Admin UI)
- * Integriert das neue dynamische Rollensystem und steuert den Admin-Button.
+ * UPDATED: Support für Multi-Role System (1 User = N Rollen)
  * =============================================================================
  */
 
@@ -12,21 +12,19 @@ const App = {
         currentUser: null 
     },
 
-    // Standard-Rollen Fallback, falls DB noch lädt oder leer ist
+    // Standard-Rollen Fallback
     defaultRoles: [
         { name: 'Vorstand', permissions: ['admin_global'] },
         { name: 'Mitglied', permissions: [] }
     ],
 
     async init() {
-        console.log("App: Init RBAC System...");
+        console.log("App: Init RBAC System (Multi-Role Support)...");
         this.injectStyles();
         
-        // Sofort versuchen, den User aus dem Cache zu laden für schnellen Start (gegen Flackern)
         this.loadCurrentUser();
         this.initTheme();
 
-        // Warten auf Store
         let attempts = 0;
         while (typeof Store === 'undefined' && attempts < 20) {
             await new Promise(r => setTimeout(r, 100));
@@ -41,13 +39,11 @@ const App = {
         try {
             await Store.init();
             
-            // WICHTIG: Wir laden jetzt auch die Rollen-Tabelle und Gruppen!
             if (Store.fetchTable) {
                 await Store.fetchTable('roles');
                 await Store.fetchTable('groups');
             }
             
-            // User erneut laden (jetzt mit frischen Daten aus dem Store und verknüpften Rollen)
             this.loadCurrentUser(); 
         } catch (e) { console.error(e); }
 
@@ -55,7 +51,6 @@ const App = {
             if (!this.state.currentUser) return;
             this.updateNotificationDot();
             const activeTag = document.activeElement ? document.activeElement.tagName : '';
-            // Nur neu rendern, wenn wir nicht gerade tippen
             if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
                 this.router(Store.state.currentView || localStorage.getItem('vm_last_view') || 'dashboard');
             }
@@ -86,10 +81,10 @@ const App = {
             const { data, error } = await _sb.auth.signInWithPassword({ email, password });
 
             if (error) {
-                // Notfall-Admin (Backdoor für den ersten Setup)
+                // Notfall-Admin
                 if(email === 'admin@gmail.com' && password === 'admin') {
-                    // Wir geben dem Notfall-Admin die Rolle "Vorstand" (muss in DB existieren oder Fallback greift)
-                    this.loginSuccess({ id: '999', firstName: 'System', lastName: 'Admin', email: email, role: 'Vorstand' });
+                    // Fix: role als Array übergeben
+                    this.loginSuccess({ id: '999', firstName: 'System', lastName: 'Admin', email: email, roles: ['Vorstand'] });
                     return;
                 }
                 throw new Error("Login fehlgeschlagen.");
@@ -103,7 +98,6 @@ const App = {
             
             try {
                 if (Store.fetchTable) {
-                    // Wichtig: Beim Login sofort Rollen und Gruppen mitladen
                     await Store.fetchTable('members');
                     await Store.fetchTable('roles'); 
                     await Store.fetchTable('groups');
@@ -114,7 +108,8 @@ const App = {
             if (Store.state && Store.state.members) {
                 user = Store.state.members.find(m => m.email.toLowerCase() === email);
             }
-            if (!user) user = { id: data.user.id, email: email, firstName: 'User', role: 'Mitglied' };
+            // Fallback User
+            if (!user) user = { id: data.user.id, email: email, firstName: 'User', roles: ['Mitglied'] };
 
             this.loginSuccess(user);
 
@@ -128,8 +123,16 @@ const App = {
 
     loginSuccess(user) {
         if (!user) return;
-        // Admin Force für Hardcoded Admin Email (falls er sich normal einloggt aber DB Rolle fehlt)
-        if (user.email.toLowerCase() === 'admin@gmail.com') user.role = 'Vorstand';
+        
+        // Admin Force (Rolle hinzufügen falls fehlt)
+        if (user.email.toLowerCase() === 'admin@gmail.com') {
+            const currentRoles = this.getUserRoles(user);
+            if(!currentRoles.includes('Vorstand')) {
+                 // Wir manipulieren das lokale Objekt, speichern es aber nicht zwingend in DB
+                 if(user.roles) user.roles.push('Vorstand');
+                 else user.role = 'Vorstand'; // Fallback
+            }
+        }
         
         localStorage.setItem('vm_current_user_id', user.id);
         this.state.currentUser = user;
@@ -138,7 +141,6 @@ const App = {
         document.getElementById('app-view').classList.remove('hidden');
         this.updateHeaderUI();
         
-        // Nach Login zum Dashboard (oder letzte View löschen, um Dashboard zu erzwingen)
         localStorage.removeItem('vm_last_view');
         this.router('dashboard');
         this.showToast(`Willkommen, ${user.firstName}!`, "success");
@@ -162,16 +164,22 @@ const App = {
             if (!session || !session.user) return;
             const email = session.user.email.toLowerCase();
             
-            // Fallback User bauen
-            let user = { id: session.user.id, email: email, firstName: 'User', role: 'Mitglied' };
+            let user = { id: session.user.id, email: email, firstName: 'User', roles: ['Mitglied'] };
             
-            // Versuchen, echten User aus Store zu holen
             if(Store && Store.state && Store.state.members && Store.state.members.length > 0) {
                 const found = Store.state.members.find(m => m.email.toLowerCase() === email);
                 if(found) user = found;
             }
             
-            if (email === 'admin@gmail.com') user.role = 'Vorstand';
+            if (email === 'admin@gmail.com') {
+                 // Sicherstellen dass Admin Rechte da sind
+                 const r = this.getUserRoles(user);
+                 if(!r.includes('Vorstand')) {
+                     if(Array.isArray(user.roles)) user.roles.push('Vorstand');
+                     else user.roles = ['Vorstand'];
+                 }
+            }
+
             this.state.currentUser = user;
             this.updateHeaderUI();
             
@@ -180,19 +188,32 @@ const App = {
         } catch(e) { console.error("Session Parse Error:", e); }
     },
 
+    // Helper um sicherzustellen, dass wir immer ein Array von Rollen haben
+    // Egal ob in DB 'role' (string) oder 'roles' (array) steht
+    getUserRoles(user) {
+        if (!user) return [];
+        if (Array.isArray(user.roles)) return user.roles;
+        if (user.role) return [user.role]; // Legacy Support
+        return ['Mitglied']; // Default
+    },
+
     updateHeaderUI() {
         const user = this.state.currentUser;
         if(!user) return;
         const nameEl = document.getElementById('current-user-name');
         const roleEl = document.getElementById('current-user-role');
+        
         if(nameEl) nameEl.textContent = user.firstName;
-        if(roleEl) roleEl.textContent = user.role;
+        
+        // Zeige Hauptrolle oder Anzahl an
+        if(roleEl) {
+            const roles = this.getUserRoles(user);
+            if(roles.length > 1) roleEl.textContent = `${roles[0]} +${roles.length - 1}`;
+            else roleEl.textContent = roles[0] || 'Mitglied';
+        }
 
-        // --- ADMIN BUTTON LOGIK ---
-        // Prüfen ob der Admin Button existiert und ob der User Rechte hat
         const adminBtn = document.getElementById('nav-btn-roles');
         if(adminBtn) {
-            // Wir nutzen die can() Funktion, um zu prüfen ob der User 'admin_global' Rechte hat
             if(this.can('admin_global')) {
                 adminBtn.classList.remove('hidden');
             } else {
@@ -204,8 +225,6 @@ const App = {
     // --- ROUTER ---
     router(viewName) {
         if(!viewName) viewName = 'dashboard';
-        
-        // View speichern damit F5 reload funktioniert
         localStorage.setItem('vm_last_view', viewName);
         if (Store && Store.state) Store.state.currentView = viewName;
         
@@ -216,14 +235,11 @@ const App = {
 
         const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
         
-        // Special Handling für Admin Roles View
         if (viewName === 'admin_roles') {
              if (window.AdminRolesView) window.AdminRolesView.render(container);
              else container.innerHTML = '<div class="p-10 text-center text-red-400">AdminRolesView script nicht geladen.</div>';
         } else {
             let viewObj = window[viewObjName];
-            
-            // Fallback Map falls Namen nicht matchen (Kompatibilität)
             if(!viewObj) {
                 const map = { 
                     'dashboard': window.DashboardView, 
@@ -241,11 +257,10 @@ const App = {
 
             if (viewObj && typeof viewObj.render === 'function') {
                 container.classList.remove('fade-in');
-                void container.offsetWidth; // Reflow
+                void container.offsetWidth; 
                 viewObj.render(container);
                 container.classList.add('fade-in');
                 
-                // Mobile Menu schließen
                 const mobileMenu = document.getElementById('mobile-menu');
                 if(mobileMenu && !mobileMenu.classList.contains('hidden')) mobileMenu.classList.add('hidden');
             } else {
@@ -254,9 +269,7 @@ const App = {
         }
     },
 
-    // --- PERMISSIONS SYSTEM (RBAC - NEU & ERWEITERT) ---
-    // action: Was will der User tun? (z.B. 'manage_members')
-    // context: Optional, z.B. der Name der Gruppe ('Mälscher Nachtkrabb')
+    // --- PERMISSIONS SYSTEM (UPDATED FOR MULTI-ROLE) ---
     can(action, context = null) {
         const user = this.state.currentUser;
         if (!user) return false; 
@@ -264,51 +277,49 @@ const App = {
         // 1. Hardcoded Super-Admin
         if (user.email.toLowerCase() === 'admin@gmail.com') return true;
 
-        // 2. Rolle in der DB suchen
-        const allRoles = (Store.state && Store.state.roles && Store.state.roles.length > 0) ? Store.state.roles : this.defaultRoles;
-        const userRoleConfig = allRoles.find(r => r.name === user.role);
+        // 2. Rollen Konfigurationen holen
+        const allRolesConfig = (Store.state && Store.state.roles && Store.state.roles.length > 0) ? Store.state.roles : this.defaultRoles;
+        
+        // 3. Alle Rollen des Users holen (Array)
+        const userRoleNames = this.getUserRoles(user);
 
-        // Keine Config gefunden? Fallback auf alte Logik oder sperren
-        if (!userRoleConfig) {
-            // Fallback für den Start (damit man sich nicht aussperrt bevor Rollen angelegt sind)
-            if (user.role === 'Vorstand' || user.role === '1. Vorstand') return true;
-            return false;
-        }
+        // 4. Wir sammeln ALLE Berechtigungen aus ALLEN Rollen des Users
+        let aggregatedPermissions = new Set();
 
-        const perms = userRoleConfig.permissions || [];
+        userRoleNames.forEach(roleName => {
+            const config = allRolesConfig.find(r => r.name === roleName);
+            if (config && Array.isArray(config.permissions)) {
+                config.permissions.forEach(p => aggregatedPermissions.add(p));
+            }
+        });
 
-        // 3. Super-Admin Flag (in admin_roles.js als 'admin_global' definiert)
+        // Konvertieren zu Array für einfachere Checks
+        const perms = Array.from(aggregatedPermissions);
+
+        // --- CHECK LOGIK (unverändert, aber gegen gesammelte perms) ---
+
+        // A. Global Admin
         if (perms.includes('admin_global')) return true;
 
-        // 4. Exakte Berechtigung prüfen
+        // B. Exakte Berechtigung
         if (perms.includes(action)) return true;
 
-        // 5. Spezialfall: Gruppen-Management (Scoped Permissions)
-        // Checkt: "Darf ich DIESE Gruppe (context) bearbeiten?"
+        // C. Scoped Permissions (Gruppen)
         if (action === 'manage_group_content' && context) {
-            // A) Darf ALLE Gruppen bearbeiten?
             if (perms.includes('manage_all_groups')) return true;
-            
-            // B) Spezielles Recht für genau DIESE Gruppe? (z.B. 'manage_group:Nachtkrabb')
-            // Wir prüfen, ob die permissions Liste den String "manage_group:NameDerGruppe" enthält
+            // Checkt auf "manage_group:GruppenName"
             if (perms.includes(`manage_group:${context}`)) return true;
-
-            // C) Altes "Eigene Gruppen" Recht (Falls du es noch nutzt)
-            // Darf EIGENE Gruppen bearbeiten UND ist Mitglied in dieser Gruppe?
+            
+            // Legacy Support
             if (perms.includes('manage_own_group')) {
                 const userGroups = Array.isArray(user.groups) ? user.groups : [];
-                // Prüfen ob Gruppenname in der Liste der User-Gruppen ist
                 if (userGroups.includes(context)) return true;
             }
         }
         
-        // Alias für Views, die nur fragen "Darf ich überhaupt irgendeine Gruppe sehen?"
-        // Wird z.B. genutzt um den "Bearbeiten" Button generell anzuzeigen
+        // D. Gruppen-Management Generell
         if (action === 'manage_groups') {
-            // FIX: Wenn ein Kontext (Gruppe) übergeben wird, leiten wir an die detaillierte Prüfung weiter!
             if (context) return this.can('manage_group_content', context);
-
-            // Darf alles ODER darf eigene ODER hat mindestens eine spezifische Gruppenberechtigung
             const hasSpecificGroup = perms.some(p => p.startsWith('manage_group:'));
             return perms.includes('manage_all_groups') || perms.includes('manage_own_group') || hasSpecificGroup;
         }
