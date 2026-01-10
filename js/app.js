@@ -41,8 +41,11 @@ const App = {
         try {
             await Store.init();
             
-            // WICHTIG: Wir laden jetzt auch die Rollen-Tabelle!
-            if (Store.fetchTable) await Store.fetchTable('roles');
+            // WICHTIG: Wir laden jetzt auch die Rollen-Tabelle und Gruppen!
+            if (Store.fetchTable) {
+                await Store.fetchTable('roles');
+                await Store.fetchTable('groups');
+            }
             
             // User erneut laden (jetzt mit frischen Daten aus dem Store und verknüpften Rollen)
             this.loadCurrentUser(); 
@@ -100,9 +103,10 @@ const App = {
             
             try {
                 if (Store.fetchTable) {
-                    // Wichtig: Beim Login sofort Rollen mitladen
+                    // Wichtig: Beim Login sofort Rollen und Gruppen mitladen
                     await Store.fetchTable('members');
                     await Store.fetchTable('roles'); 
+                    await Store.fetchTable('groups');
                 }
             } catch(e) { console.warn("Daten-Load Fehler beim Login", e); }
             
@@ -250,7 +254,7 @@ const App = {
         }
     },
 
-    // --- PERMISSIONS SYSTEM (RBAC - NEU) ---
+    // --- PERMISSIONS SYSTEM (RBAC - NEU & ERWEITERT) ---
     // action: Was will der User tun? (z.B. 'manage_members')
     // context: Optional, z.B. der Name der Gruppe ('Mälscher Nachtkrabb')
     can(action, context = null) {
@@ -282,9 +286,14 @@ const App = {
         // 5. Spezialfall: Gruppen-Management (Scoped Permissions)
         // Checkt: "Darf ich DIESE Gruppe (context) bearbeiten?"
         if (action === 'manage_group_content' && context) {
-            // Darf ALLE Gruppen bearbeiten?
+            // A) Darf ALLE Gruppen bearbeiten?
             if (perms.includes('manage_all_groups')) return true;
             
+            // B) Spezielles Recht für genau DIESE Gruppe? (z.B. 'manage_group:Nachtkrabb')
+            // Wir prüfen, ob die permissions Liste den String "manage_group:NameDerGruppe" enthält
+            if (perms.includes(`manage_group:${context}`)) return true;
+
+            // C) Altes "Eigene Gruppen" Recht (Falls du es noch nutzt)
             // Darf EIGENE Gruppen bearbeiten UND ist Mitglied in dieser Gruppe?
             if (perms.includes('manage_own_group')) {
                 const userGroups = Array.isArray(user.groups) ? user.groups : [];
@@ -296,7 +305,9 @@ const App = {
         // Alias für Views, die nur fragen "Darf ich überhaupt irgendeine Gruppe sehen?"
         // Wird z.B. genutzt um den "Bearbeiten" Button generell anzuzeigen
         if (action === 'manage_groups') {
-            return perms.includes('manage_all_groups') || perms.includes('manage_own_group');
+            // Darf alles ODER darf eigene ODER hat mindestens eine spezifische Gruppenberechtigung
+            const hasSpecificGroup = perms.some(p => p.startsWith('manage_group:'));
+            return perms.includes('manage_all_groups') || perms.includes('manage_own_group') || hasSpecificGroup;
         }
 
         return false;
