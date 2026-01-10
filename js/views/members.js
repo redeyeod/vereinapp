@@ -1,7 +1,8 @@
 /**
  * =============================================================================
- * MEMBERS VIEW (Multi-Role Update)
- * Erlaubt nun die Zuweisung mehrerer Rollen per Checkbox.
+ * MEMBERS VIEW (Multi-Role Update v2)
+ * Fix: Schreibt nur noch in die neue 'roles' Spalte (Array), 
+ * ignoriert die alte 'role' Spalte komplett beim Speichern.
  * =============================================================================
  */
 
@@ -57,12 +58,12 @@ const MembersView = {
         App.showToast("Liste aktualisiert");
     },
 
-    // Helfer um Rollen als String anzuzeigen
+    // Helfer um Rollen als String anzuzeigen (liest sicherheitshalber noch beides)
     getRolesString(member) {
         if (Array.isArray(member.roles) && member.roles.length > 0) {
             return member.roles.join(', ');
         }
-        return member.role || 'Mitglied'; // Fallback für alte Daten
+        return member.role || 'Mitglied'; // Nur beim Lesen als Fallback okay
     },
 
     updateList(filter = "") {
@@ -221,13 +222,13 @@ const MembersView = {
         const btnText = isEdit ? "Speichern" : "Mitglied anlegen";
         const handler = isEdit ? `MembersView.handleUpdate(event, '${data.id}')` : "MembersView.handleAdd(event)";
         
-        // --- ROLLEN CHECKBOX LOGIK (NEU) ---
+        // --- ROLLEN CHECKBOX LOGIK ---
         const dbRoles = (Store.state.roles && Store.state.roles.length > 0) ? Store.state.roles : [{name: 'Mitglied'}];
         
         // Aktuelle Rollen des Users ermitteln
         let currentRoles = [];
         if (Array.isArray(data.roles)) currentRoles = data.roles;
-        else if (data.role) currentRoles = [data.role]; // Fallback
+        else if (data.role) currentRoles = [data.role]; // Fallback Lesen
         
         const roleCheckboxes = dbRoles.map(r => {
             const isChecked = currentRoles.includes(r.name) ? 'checked' : '';
@@ -344,8 +345,7 @@ const MembersView = {
                 phone: fd.get('phone'),
                 birthdate: fd.get('birthdate'),
                 email: email,
-                roles: roles, // NEU: Array speichern
-                role: roles[0], // BACKWARD COMPATIBILITY: Erste Rolle als String
+                roles: roles, // NUR noch roles speichern!
                 status: 'active',
                 groups: []
             };
@@ -449,8 +449,7 @@ const MembersView = {
             email: fd.get('email'), 
             phone: fd.get('phone'),
             birthdate: fd.get('birthdate') ? fd.get('birthdate') : null,
-            roles: roles, // NEU: Array
-            role: roles[0], // FALLBACK: String
+            roles: roles, // NUR noch roles speichern!
             status: fd.get('status') 
         };
             
