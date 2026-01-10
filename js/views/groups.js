@@ -1,9 +1,11 @@
 /**
  * =============================================================================
- * GROUPS VIEW (Hybrid: Old Design + New Security Logic + Group Calendar)
- * Design: "Direct DB Diagnostic Mode" (Original)
- * Logik: Strikte RBAC Prüfung (Admin/Mitglied)
- * Features: Mitglieder, Chat, Kalender (mit Abstimmung), Dateien
+ * GROUPS VIEW (Hybrid: Old Design + New Security Logic + Group Calendar Fixed)
+ * Features: 
+ * - Gruppen-Verwaltung (RBAC)
+ * - Mitglieder-Verwaltung
+ * - Gruppen-Chat
+ * - Gruppen-Kalender (FIX: Enddatum, Ganztägig, Abstimmung)
  * =============================================================================
  */
 
@@ -42,16 +44,11 @@ const GroupsView = {
             });
         });
 
-        // RECHTE PRÜFEN: Wer darf generell Gruppen verwalten (z.B. "Neue Gruppe")?
         const canManageAll = App.can('manage_all_groups'); 
-        
         const allGroups = Store.state.groups || [];
-        
-        // User ermitteln (Support für App.user oder App.state.currentUser)
         const currentUser = App.user || (App.state && App.state.currentUser);
         const myGroupNames = currentUser ? (Array.isArray(currentUser.groups) ? currentUser.groups : []) : [];
 
-        // Aufteilung in "Meine" und "Andere"
         const myGroups = allGroups.filter(g => myGroupNames.includes(g.name));
         const otherGroups = allGroups.filter(g => !myGroupNames.includes(g.name));
 
@@ -66,8 +63,6 @@ const GroupsView = {
 
         const renderGroupCard = (group, isMember) => {
             const count = counts[group.name] || 0;
-            
-            // INDIVIDUELLE RECHTE PRÜFEN:
             const canManageThisGroup = App.can('manage_group_content', group.name);
             const hasAccess = isMember || canManageThisGroup;
             
@@ -75,7 +70,6 @@ const GroupsView = {
                 ? 'cursor-pointer hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-900/10 bg-dark-card' 
                 : 'cursor-not-allowed opacity-50 bg-dark-bg border-dashed grayscale-[0.8]';
 
-            // Löschen nur für Manager dieser Gruppe
             const deleteButton = canManageThisGroup 
                 ? `<button onclick="event.stopPropagation(); GroupsView.delete('${group.id}')" class="text-dark-muted hover:text-red-400 p-2 rounded-lg hover:bg-red-500/10 transition-colors z-10" title="Löschen">
                     <i class="fa-regular fa-trash-can"></i>
@@ -83,8 +77,6 @@ const GroupsView = {
                 : '';
 
             const lockIcon = !hasAccess ? '<i class="fa-solid fa-lock text-dark-muted mr-2"></i>' : '';
-
-            // Onclick Logik
             const clickAction = hasAccess 
                 ? `GroupsView.openGroup('${group.id}')` 
                 : `App.showToast('Kein Zugriff auf diese Gruppe', 'error')`;
@@ -255,18 +247,15 @@ const GroupsView = {
         `;
     },
 
-    // --- TAB: KALENDER & TERMINE (NEU IMPLEMENTIERT) ---
+    // --- TAB: KALENDER (FIXED) ---
     renderTabCalendar(group) {
-        // 1. Events der Gruppe filtern & sortieren
         const allEvents = Store.state.events || [];
         const groupEvents = allEvents
             .filter(e => e.group === group.name)
             .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-        // 2. Rechte
         const canManage = App.can('manage_group_content', group.name);
 
-        // 3. Button
         const addButton = canManage 
             ? `<button onclick="GroupsView.openEventAddModal('${group.id}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs md:text-sm font-bold transition-colors shadow-lg flex items-center">
                  <i class="fa-solid fa-plus mr-2"></i> Termin anlegen
@@ -297,12 +286,15 @@ const GroupsView = {
         const dateDisplayMonth = startDate.toLocaleString('de-DE', { month: 'short' });
         const dateDisplayDay = startDate.getDate();
         
-        // Teilnahme-Status zählen
+        // Anzeige End-Datum wenn unterschiedlich
+        let dateRangeText = '';
+        if (endDate && (endDate.getDate() !== startDate.getDate() || endDate.getMonth() !== startDate.getMonth())) {
+            dateRangeText = `<div class="text-[9px] mt-1 border-t border-dark-border pt-1 text-dark-muted">bis ${endDate.getDate()}.${endDate.toLocaleString('de-DE', { month: 'numeric' })}.</div>`;
+        }
+        
         const attendance = e.attendance || {};
         const yesCount = Object.values(attendance).filter(v => v === 'yes').length;
         const maybeCount = Object.values(attendance).filter(v => v === 'maybe').length;
-
-        // Eigener Status
         const currentUser = App.user || (App.state && App.state.currentUser);
         const myStatus = currentUser && attendance[currentUser.id] ? attendance[currentUser.id] : null;
         
@@ -318,6 +310,7 @@ const GroupsView = {
                 <div class="bg-dark-bg/50 border border-dark-border rounded-lg px-3 py-2 text-center min-w-[60px]">
                     <div class="text-[10px] font-bold uppercase text-blue-400">${dateDisplayMonth}</div>
                     <div class="text-xl font-bold text-white leading-none mt-0.5">${dateDisplayDay}</div>
+                    ${dateRangeText}
                 </div>
 
                 <div class="flex-1 min-w-0">
@@ -326,7 +319,7 @@ const GroupsView = {
                     </div>
                     
                     <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-dark-muted mt-1">
-                        <span class="flex items-center"><i class="fa-regular fa-clock mr-1"></i> ${e.allDay ? 'Ganztägig' : e.time}</span>
+                        <span class="flex items-center"><i class="fa-regular fa-clock mr-1"></i> ${e.allDay ? 'Ganztägig' : e.time + ' Uhr'}</span>
                         ${e.location ? `<span class="flex items-center truncate"><i class="fa-solid fa-location-dot mr-1"></i> ${e.location}</span>` : ''}
                     </div>
 
@@ -344,6 +337,7 @@ const GroupsView = {
         `;
     },
 
+    // --- FIX: Add Event mit Enddatum & Ganztägig ---
     openEventAddModal(groupId) {
         const group = Store.state.groups.find(g => g.id == groupId);
         if(!group || !App.can('manage_group_content', group.name)) return;
@@ -363,12 +357,24 @@ const GroupsView = {
                     
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="text-muted text-xs uppercase font-bold">Datum</label>
-                            <input type="date" name="date" required class="form-input dark-date">
+                            <label class="text-muted text-xs uppercase font-bold">Start Datum</label>
+                            <input type="date" name="date" required class="form-input dark-date" onchange="document.getElementById('endDateInput').min = this.value; if(!document.getElementById('endDateInput').value) document.getElementById('endDateInput').value = this.value;">
                         </div>
                         <div>
+                            <label class="text-muted text-xs uppercase font-bold">Ende Datum</label>
+                            <input type="date" name="endDate" id="endDateInput" class="form-input dark-date">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 items-end">
+                        <div>
                             <label class="text-muted text-xs uppercase font-bold">Uhrzeit</label>
-                            <input type="time" name="time" class="form-input dark-date">
+                            <input type="time" name="time" id="eventTimeInput" class="form-input dark-date">
+                        </div>
+                        <div class="h-[42px] flex items-center bg-dark-bg border border-dark-border rounded-xl px-3">
+                             <input type="checkbox" name="allDay" id="eventAllDay" class="w-4 h-4 rounded bg-dark-bg border-dark-border accent-blue-600" 
+                                onchange="const t = document.getElementById('eventTimeInput'); t.disabled = this.checked; if(this.checked) t.value = ''; else t.focus();">
+                             <label for="eventAllDay" class="ml-2 text-sm text-white cursor-pointer select-none">Ganztägig</label>
                         </div>
                     </div>
 
@@ -394,21 +400,28 @@ const GroupsView = {
         const group = Store.state.groups.find(g => g.id == groupId);
         const fd = new FormData(e.target);
         
+        const isAllDay = fd.get('allDay') === 'on';
+        let startDate = fd.get('date');
+        let endDate = fd.get('endDate');
+        
+        // Fallback wenn kein Enddatum gesetzt
+        if (!endDate) endDate = startDate;
+        
         const newEvent = {
             title: fd.get('title'),
-            date: fd.get('date'),
-            time: fd.get('time') || '00:00',
+            date: startDate,
+            endDate: endDate, // NEU
+            time: isAllDay ? null : (fd.get('time') || '00:00'),
+            allDay: isAllDay, // NEU
             location: fd.get('location'),
             description: fd.get('description'),
-            group: group.name, // Wichtig: Gruppenzuordnung
-            attendance: {}, // Leeres Objekt für Abstimmungen
-            allDay: !fd.get('time')
+            group: group.name, 
+            attendance: {} 
         };
         
         Store.add('events', newEvent);
         App.closeModal();
         App.showToast('Termin erstellt');
-        // Refresh Current View
         this.render(document.getElementById('content'));
     },
 
@@ -419,16 +432,22 @@ const GroupsView = {
         const group = Store.state.groups.find(g => g.name === e.group);
         const canManage = group && App.can('manage_group_content', group.name);
         
-        // Datumsformatierung
         const d = new Date(e.date);
         const dateStr = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        
+        let endStr = '';
+        if (e.endDate) {
+            const ed = new Date(e.endDate);
+            // Zeige Enddatum nur wenn es vom Startdatum abweicht
+            if (ed.getTime() !== d.getTime()) {
+                endStr = ' - ' + ed.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' });
+            }
+        }
 
-        // Anwesenheitslogik
         const attendance = e.attendance || {};
         const currentUser = App.user || (App.state && App.state.currentUser);
         const myStatus = currentUser ? attendance[currentUser.id] : null;
 
-        // Listen generieren (Wer kommt?)
         const members = Store.state.members || [];
         const getNamesByStatus = (status) => {
             const ids = Object.keys(attendance).filter(id => attendance[id] === status);
@@ -442,7 +461,6 @@ const GroupsView = {
         const maybeNames = getNamesByStatus('maybe');
         const noNames = getNamesByStatus('no');
 
-        // Button Styles Helper
         const btnClass = (active) => active 
             ? 'bg-blue-600 text-white border-blue-600 shadow-md' 
             : 'bg-dark-bg text-dark-muted border-dark-border hover:border-blue-500/50 hover:text-white';
@@ -454,10 +472,10 @@ const GroupsView = {
             <div class="p-6 h-full flex flex-col max-h-[90vh]">
                 <div class="flex justify-between items-start mb-6 border-b border-dark-border pb-4">
                     <div class="pr-4">
-                        <div class="text-blue-400 text-xs font-bold uppercase tracking-wider mb-1">${dateStr}</div>
+                        <div class="text-blue-400 text-xs font-bold uppercase tracking-wider mb-1">${dateStr} ${endStr}</div>
                         <h3 class="text-xl md:text-2xl font-bold text-white break-words">${e.title}</h3>
                         <div class="flex items-center gap-4 text-sm text-dark-muted mt-2">
-                            <span><i class="fa-regular fa-clock mr-1"></i> ${e.allDay ? 'Ganztägig' : e.time}</span>
+                            <span><i class="fa-regular fa-clock mr-1"></i> ${e.allDay ? 'Ganztägig' : e.time + ' Uhr'}</span>
                             ${e.location ? `<span><i class="fa-solid fa-location-dot mr-1"></i> ${e.location}</span>` : ''}
                         </div>
                     </div>
@@ -523,6 +541,8 @@ const GroupsView = {
         }
     },
 
+    // --- FIX: "Column 'id' can only be updated to default" ---
+    // Lösung: Wir entfernen die ID aus dem Update-Payload
     async setAttendance(eventId, status) {
         const currentUser = App.user || (App.state && App.state.currentUser);
         if(!currentUser) {
@@ -532,27 +552,40 @@ const GroupsView = {
 
         const e = Store.state.events.find(ev => ev.id == eventId);
         if(e) {
-            // Anwesenheitsobjekt klonen oder erstellen
+            // Anwesenheitsobjekt klonen
             const updatedAttendance = { ...(e.attendance || {}) };
             
-            // Toggle Logik: Wenn man nochmal auf das gleiche klickt, wird es entfernt
+            // Toggle Logik
             if (updatedAttendance[currentUser.id] === status) {
                 delete updatedAttendance[currentUser.id];
             } else {
                 updatedAttendance[currentUser.id] = status;
             }
 
-            const updatedEvent = { ...e, attendance: updatedAttendance };
+            // WICHTIG: Erstelle ein Update-Objekt OHNE die ID
+            // Postgres mag es nicht, wenn man versucht, die ID zu updaten
+            const { id, ...eventDataWithoutId } = e;
+            const updatePayload = {
+                ...eventDataWithoutId,
+                attendance: updatedAttendance
+            };
 
             try {
-                await Store.update('events', updatedEvent);
-                // Sofortiges Feedback im UI (Modal neu laden)
+                // Direkter Supabase Aufruf für maximale Kontrolle
+                const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+                const { error } = await _sb.from('events').update(updatePayload).eq('id', eventId);
+
+                if (error) throw error;
+
+                // Lokales Objekt aktualisieren (Referenz)
+                e.attendance = updatedAttendance;
+                
+                // UI neu laden
                 this.openEventDetailModal(eventId);
-                // Kalenderliste im Hintergrund aktualisieren
                 this.render(document.getElementById('content'));
             } catch(err) {
                 console.error(err);
-                App.showToast("Fehler beim Speichern", "error");
+                App.showToast("Fehler beim Speichern: " + err.message, "error");
             }
         }
     },
@@ -584,7 +617,6 @@ const GroupsView = {
         const group = Store.state.groups.find(g => g.id == id);
         if(!group) return;
 
-        // Security Check
         const user = App.user || (App.state && App.state.currentUser);
         const myGroupNames = user ? (Array.isArray(user.groups) ? user.groups : []) : [];
         const isMember = myGroupNames.includes(group.name);
@@ -629,7 +661,6 @@ const GroupsView = {
 
     // --- MODAL: Mitglied hinzufügen ---
     openAddMemberModal(groupId) {
-        // Berechtigungscheck
         const group = Store.state.groups.find(g => g.id == groupId);
         if(!group) return;
         if(!App.can('manage_group_content', group.name)) return;
