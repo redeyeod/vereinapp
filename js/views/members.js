@@ -1,14 +1,11 @@
 /**
  * =============================================================================
- * MEMBERS VIEW (Dynamic Roles Update)
- * Lädt nun die verfügbaren Rollen direkt aus der Datenbank für das Dropdown.
+ * MEMBERS VIEW (Multi-Role Update)
+ * Erlaubt nun die Zuweisung mehrerer Rollen per Checkbox.
  * =============================================================================
  */
 
 const MembersView = {
-    // Nur noch "Mitglied" als absoluter Notfall-Fallback
-    standardRoles: ["Mitglied"],
-
     render(container) {
         const canManage = App.can('manage_members');
         const addButtonHtml = canManage 
@@ -26,7 +23,6 @@ const MembersView = {
                         <input type="text" id="memberSearch" onkeyup="MembersView.filter()" placeholder="Suchen..." 
                             class="w-full bg-dark-bg border-none rounded-lg pl-9 pr-4 py-2 text-white focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm placeholder-dark-muted transition-shadow">
                     </div>
-                    <!-- Refresh Button -->
                     <button onclick="MembersView.refreshData()" class="bg-dark-bg hover:bg-dark-hover border border-dark-border text-dark-muted hover:text-white w-10 h-10 rounded-lg flex items-center justify-center transition-colors" title="Neu laden">
                         <i class="fa-solid fa-rotate-right"></i>
                     </button>
@@ -40,7 +36,6 @@ const MembersView = {
                         <i class="fa-solid fa-user-slash"></i>
                     </div>
                     <p class="text-sm font-bold">Keine Mitglieder gefunden.</p>
-                    <p class="text-xs mt-2 opacity-60">Liste ist leer oder wird geladen.</p>
                 </div>
             </div>
         `;
@@ -54,13 +49,20 @@ const MembersView = {
         
         if (typeof Store !== 'undefined' && Store.fetchTable) {
             await Store.fetchTable('members');
-            // Auch Rollen neu laden, damit das Dropdown aktuell ist
             await Store.fetchTable('roles');
         }
         this.updateList();
         
         if(icon) icon.classList.remove('animate-spin');
         App.showToast("Liste aktualisiert");
+    },
+
+    // Helfer um Rollen als String anzuzeigen
+    getRolesString(member) {
+        if (Array.isArray(member.roles) && member.roles.length > 0) {
+            return member.roles.join(', ');
+        }
+        return member.role || 'Mitglied'; // Fallback für alte Daten
     },
 
     updateList(filter = "") {
@@ -72,7 +74,8 @@ const MembersView = {
         const members = (Store.state && Store.state.members) ? Store.state.members : [];
 
         const filtered = members.filter(m => {
-            const searchStr = ((m.firstName || '') + ' ' + (m.lastName || '') + ' ' + (m.role || '')).toLowerCase();
+            const roleStr = this.getRolesString(m);
+            const searchStr = ((m.firstName || '') + ' ' + (m.lastName || '') + ' ' + roleStr).toLowerCase();
             const groupStr = Array.isArray(m.groups) ? m.groups.join(' ') : '';
             return searchStr.includes(filter.toLowerCase()) || groupStr.toLowerCase().includes(filter.toLowerCase());
         });
@@ -86,6 +89,7 @@ const MembersView = {
                 let groupsText = 'Keine Gruppen';
                 if (Array.isArray(m.groups) && m.groups.length > 0) groupsText = m.groups.join(', ');
                 
+                const roleDisplay = this.getRolesString(m);
                 const isActive = m.status === 'active';
                 const statusColor = isActive ? 'bg-green-500' : 'bg-red-500';
 
@@ -97,7 +101,7 @@ const MembersView = {
                     </div>
                     <div class="flex-1 min-w-0">
                         <h4 class="font-bold text-white truncate pr-4 text-base">${m.firstName || ''} ${m.lastName || ''}</h4>
-                        <p class="text-xs text-blue-400 font-medium truncate mb-0.5">${m.role || 'Mitglied'}</p>
+                        <p class="text-xs text-blue-400 font-medium truncate mb-0.5">${roleDisplay}</p>
                         <p class="text-[10px] text-dark-muted truncate flex items-center">
                             <i class="fa-solid fa-users mr-1.5 opacity-70"></i> ${groupsText}
                         </p>
@@ -135,6 +139,8 @@ const MembersView = {
             groupsHtml = m.groups.map(g => `<span class="bg-blue-900/30 text-blue-300 px-2 py-1 rounded-md text-xs border border-blue-500/30">${g}</span>`).join('');
         }
 
+        const roleDisplay = this.getRolesString(m);
+
         const hasAddress = m.street || m.city;
         const addressHtml = hasAddress 
             ? `<p class="text-white text-sm leading-relaxed">${m.street || ''} ${m.houseNumber || ''}<br>${m.zip || ''} ${m.city || ''}</p>`
@@ -163,7 +169,7 @@ const MembersView = {
                         </div>
                         <div class="min-w-0">
                             <h2 class="text-lg md:text-3xl font-bold text-white leading-tight truncate pr-1">${m.firstName || ''} ${m.lastName || ''}</h2>
-                            <p class="text-blue-400 font-medium text-xs md:text-lg mt-0.5 truncate">${m.role || 'Mitglied'}</p>
+                            <p class="text-blue-400 font-medium text-xs md:text-lg mt-0.5 truncate">${roleDisplay}</p>
                         </div>
                     </div>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors flex-shrink-0 bg-dark-bg/50 rounded-lg"><i class="fa-solid fa-times text-lg md:text-xl"></i></button>
@@ -215,21 +221,23 @@ const MembersView = {
         const btnText = isEdit ? "Speichern" : "Mitglied anlegen";
         const handler = isEdit ? `MembersView.handleUpdate(event, '${data.id}')` : "MembersView.handleAdd(event)";
         
-        // --- ROLLEN DROPDOWN LOGIK ---
-        const dbRoles = (Store.state.roles && Store.state.roles.length > 0) ? Store.state.roles : [];
-        let roleOptions = '';
-
-        if (dbRoles.length > 0) {
-            // Wenn DB-Rollen vorhanden sind, nutzen wir diese
-            roleOptions = dbRoles.map(r => 
-                `<option value="${r.name}" ${data.role === r.name ? 'selected' : ''}>${r.name}</option>`
-            ).join('');
-        } else {
-            // Fallback auf Standard-Liste (nur "Mitglied"), falls DB leer oder offline
-            roleOptions = this.standardRoles.map(r => 
-                `<option value="${r}" ${data.role === r ? 'selected' : ''}>${r}</option>`
-            ).join('');
-        }
+        // --- ROLLEN CHECKBOX LOGIK (NEU) ---
+        const dbRoles = (Store.state.roles && Store.state.roles.length > 0) ? Store.state.roles : [{name: 'Mitglied'}];
+        
+        // Aktuelle Rollen des Users ermitteln
+        let currentRoles = [];
+        if (Array.isArray(data.roles)) currentRoles = data.roles;
+        else if (data.role) currentRoles = [data.role]; // Fallback
+        
+        const roleCheckboxes = dbRoles.map(r => {
+            const isChecked = currentRoles.includes(r.name) ? 'checked' : '';
+            return `
+                <label class="flex items-center gap-3 p-3 bg-dark-bg/50 hover:bg-dark-bg rounded-lg cursor-pointer border border-transparent hover:border-blue-500/30 transition-all">
+                    <input type="checkbox" name="roles" value="${r.name}" ${isChecked} class="w-4 h-4 rounded border-dark-border bg-slate-800 text-blue-600 focus:ring-blue-500">
+                    <span class="text-sm font-medium text-white">${r.name}</span>
+                </label>
+            `;
+        }).join('');
 
         const html = `
             <div class="p-4 md:p-8 max-h-[85vh] overflow-y-auto custom-scrollbar">
@@ -264,16 +272,16 @@ const MembersView = {
                     <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Geburtsdatum</label><input type="date" name="birthdate" value="${data.birthdate||''}" class="form-input dark-date"></div>
 
                     <!-- Role & Status -->
-                    <div class="mt-4">
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Rolle (Rechte) *</label>
-                        <select name="roleSelect" class="form-input cursor-pointer">
-                            ${roleOptions}
-                        </select>
-                        <p class="text-[10px] text-dark-muted mt-1">Wähle eine der vom Admin definierten Rollen.</p>
+                    <div class="mt-6">
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-2 block">Rollen (Rechte)</label>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto custom-scrollbar bg-dark-bg/20 p-2 rounded-lg border border-dark-border">
+                            ${roleCheckboxes}
+                        </div>
+                        <p class="text-[10px] text-dark-muted mt-2">Du kannst einem Mitglied mehrere Rollen zuteilen.</p>
                     </div>
                     
                     ${isEdit ? `
-                    <div>
+                    <div class="mt-4">
                         <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Status</label>
                         <select name="status" class="form-input cursor-pointer">
                             <option value="active" ${data.status === 'active' ? 'selected' : ''}>Aktiv</option>
@@ -281,15 +289,24 @@ const MembersView = {
                         </select>
                     </div>` : ''}
                     
-                    ${!isEdit ? `<div class="bg-blue-500/10 p-3 rounded-lg text-xs text-blue-300 border border-blue-500/20 flex gap-2 items-start"><i class="fa-solid fa-key mt-0.5"></i> Ein sicheres Passwort wird automatisch generiert und im nächsten Schritt angezeigt.</div>` : ''}
+                    ${!isEdit ? `<div class="bg-blue-500/10 p-3 rounded-lg text-xs text-blue-300 border border-blue-500/20 flex gap-2 items-start mt-4"><i class="fa-solid fa-key mt-0.5"></i> Ein sicheres Passwort wird automatisch generiert und im nächsten Schritt angezeigt.</div>` : ''}
                     
-                    <button type="submit" class="btn-primary w-full mt-4">${btnText}</button>
+                    <button type="submit" class="btn-primary w-full mt-6">${btnText}</button>
                 </form>
             </div>
         `;
         App.openModal(html);
         const modalContainer = document.getElementById('modal-content');
         if(modalContainer) modalContainer.classList.add('max-h-[90vh]', 'overflow-y-auto', 'custom-scrollbar');
+    },
+
+    // Helfer: Sammelt alle angehakten Rollen ein
+    getSelectedRoles(form) {
+        const checkboxes = form.querySelectorAll('input[name="roles"]:checked');
+        const roles = [];
+        checkboxes.forEach(cb => roles.push(cb.value));
+        if(roles.length === 0) roles.push('Mitglied'); // Fallback: Mindestens "Mitglied"
+        return roles;
     },
 
     async handleAdd(e) {
@@ -301,7 +318,7 @@ const MembersView = {
 
         try {
             const fd = new FormData(e.target);
-            let role = fd.get('roleSelect');
+            const roles = this.getSelectedRoles(e.target);
             
             const firstName = fd.get('firstName');
             const email = fd.get('email');
@@ -327,7 +344,8 @@ const MembersView = {
                 phone: fd.get('phone'),
                 birthdate: fd.get('birthdate'),
                 email: email,
-                role: role, 
+                roles: roles, // NEU: Array speichern
+                role: roles[0], // BACKWARD COMPATIBILITY: Erste Rolle als String
                 status: 'active',
                 groups: []
             };
@@ -419,7 +437,7 @@ const MembersView = {
         btn.disabled = true;
 
         const fd = new FormData(e.target);
-        let role = fd.get('roleSelect');
+        const roles = this.getSelectedRoles(e.target);
         
         const updates = { 
             firstName: fd.get('firstName'), 
@@ -431,7 +449,8 @@ const MembersView = {
             email: fd.get('email'), 
             phone: fd.get('phone'),
             birthdate: fd.get('birthdate') ? fd.get('birthdate') : null,
-            role: role, 
+            roles: roles, // NEU: Array
+            role: roles[0], // FALLBACK: String
             status: fd.get('status') 
         };
             
