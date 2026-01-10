@@ -374,8 +374,8 @@ const MembersView = {
         return error;
     },
 
-    // NEU: Garantierte Update-Funktion mit Token
-    async safeUpdate(item) {
+    // NEU: Garantierte Update-Funktion mit Token, .select() und ID-Trennung
+    async safeUpdate(id, updates) {
         if(typeof supabase === 'undefined') return { message: "Supabase fehlt" };
         const sessionStr = localStorage.getItem('vm_supabase_session');
         if (!sessionStr) return { message: "Nicht eingeloggt" };
@@ -386,8 +386,16 @@ const MembersView = {
                 global: { headers: { Authorization: `Bearer ${token}` } }
             });
             
-            const { error } = await client.from('members').update(item).eq('id', item.id);
-            return error;
+            // WICHTIG: .select() hinzufügen, um zu prüfen ob wirklich was geändert wurde
+            const { data, error } = await client.from('members').update(updates).eq('id', id).select();
+            
+            if (error) return error;
+            // Prüfung auf Silent Fail (RLS)
+            if (!data || data.length === 0) {
+                return { message: "Keine Daten geändert. Fehlende Berechtigung oder ID nicht gefunden." };
+            }
+            
+            return null;
         } catch(e) {
             return e;
         }
@@ -404,41 +412,39 @@ const MembersView = {
         const fd = new FormData(e.target);
         let role = fd.get('roleSelect');
         if (role === 'custom') role = fd.get('customRole') || 'Mitglied';
-
-        const member = Store.state.members.find(m => m.id == id);
         
-        if(member) {
-            const updated = { 
-                ...member, 
-                firstName: fd.get('firstName'), 
-                lastName: fd.get('lastName'), 
-                street: fd.get('street'),
-                houseNumber: fd.get('houseNumber'),
-                zip: fd.get('zip'),
-                city: fd.get('city'),
-                email: fd.get('email'), 
-                phone: fd.get('phone'),
-                birthdate: fd.get('birthdate'),
-                role: role, 
-                status: fd.get('status') 
-            };
+        // WICHTIG: Wir bauen ein sauberes Objekt NUR mit den Feldern, die wir ändern wollen.
+        // Keine Spread-Syntax (...member), um Müll-Daten zu vermeiden.
+        const updates = { 
+            firstName: fd.get('firstName'), 
+            lastName: fd.get('lastName'), 
+            street: fd.get('street'),
+            houseNumber: fd.get('houseNumber'),
+            zip: fd.get('zip'),
+            city: fd.get('city'),
+            email: fd.get('email'), 
+            phone: fd.get('phone'),
+            // Datum sauber behandeln: Leerer String -> null
+            birthdate: fd.get('birthdate') ? fd.get('birthdate') : null,
+            role: role, 
+            status: fd.get('status') 
+        };
             
-            // BENUTZE safeUpdate STATT Store.update
-            const error = await this.safeUpdate(updated);
-            
-            if (error) {
-                console.error("Update Fehler:", error);
-                App.showToast(error.message || "Fehler beim Update", "error");
-                // Wir stoppen hier, schließen NICHT das Fenster und laden NICHTS neu
-                btn.innerText = oldText;
-                btn.disabled = false;
-                return;
-            }
-
-            // Nur bei Erfolg:
-            App.closeModal();
-            this.refreshData(); // Das triggert dann "Liste aktualisiert"
+        // Wir nutzen safeUpdate mit getrennter ID und sauberem Payload
+        const error = await this.safeUpdate(id, updates);
+        
+        if (error) {
+            console.error("Update Fehler:", error);
+            App.showToast(error.message || "Fehler beim Update", "error");
+            // Fehler anzeigen, Button resetten, Dialog NICHT schließen
+            btn.innerText = oldText;
+            btn.disabled = false;
+            return;
         }
+
+        // Erfolg
+        App.closeModal();
+        this.refreshData();
     }
 };
 
