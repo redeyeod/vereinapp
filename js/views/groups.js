@@ -1,14 +1,16 @@
 /**
  * =============================================================================
- * GROUPS VIEW (RBAC Fixed)
- * Zeigt Gruppen an und prüft RECHTE PRO GRUPPE individuell.
+ * GROUPS VIEW (RBAC Fixed & Member-Only Access)
+ * Zeigt Gruppen an.
+ * - Nicht-Mitglieder sehen Gruppen ausgegraut.
+ * - Nur Mitglieder können Gruppen öffnen.
+ * - Admins können bearbeiten (separater Button).
  * =============================================================================
  */
 
 const GroupsView = {
     render(container) {
-        // Prüfen, ob man überhaupt Gruppen sehen/verwalten darf (generell)
-        // Das erlaubt z.B. das Sehen des "Neue Gruppe" Buttons, falls man 'manage_all_groups' hat
+        // Prüfen, ob man überhaupt Gruppen sehen/verwalten darf
         const canCreate = App.can('manage_all_groups'); 
 
         const addButtonHtml = canCreate 
@@ -61,15 +63,30 @@ const GroupsView = {
             if(emptyState) emptyState.classList.add('hidden');
             
             container.innerHTML = filtered.map(g => {
-                // WICHTIG: Hier prüfen wir für JEDE Gruppe einzeln die Rechte!
-                // Wir übergeben den Namen der Gruppe als Kontext.
+                // 1. RECHTE PRÜFEN (Bearbeiten)
                 const canEditThisGroup = App.can('manage_group_content', g.name);
                 
-                // Mitglieder zählen
+                // 2. MITGLIEDSCHAFT PRÜFEN (Ansehen/Öffnen)
+                // Wir gehen davon aus, dass App.user.groups die Liste der Gruppennamen enthält, in denen der User ist.
+                // Fallback: Wenn App.user nicht gesetzt ist, ist man kein Mitglied.
+                const isMember = App.user && Array.isArray(App.user.groups) && App.user.groups.includes(g.name);
+
+                // 3. OPTIK & INTERAKTION BESTIMMEN
+                // Wenn Mitglied: Klickbar, Volle Deckkraft, Hover-Effekt
+                // Wenn kein Mitglied: Nicht klickbar, Ausgegraut, "Not Allowed" Cursor
+                const cardClasses = isMember 
+                    ? "hover:border-blue-500/30 cursor-pointer opacity-100" 
+                    : "opacity-60 grayscale-[0.8] cursor-not-allowed border-transparent";
+                
+                const clickAction = isMember 
+                    ? `onclick="GroupsView.openGroup('${g.id}')"` 
+                    : ""; // Kein Onclick für Nicht-Mitglieder
+
+                // Mitglieder zählen (für die Anzeige)
                 const memberCount = (Store.state.members || []).filter(m => Array.isArray(m.groups) && m.groups.includes(g.name)).length;
 
                 return `
-                <div class="bg-dark-card p-5 rounded-xl border border-dark-border flex flex-col gap-3 hover:border-blue-500/30 transition-all group relative overflow-hidden">
+                <div ${clickAction} class="bg-dark-card p-5 rounded-xl border border-dark-border flex flex-col gap-3 transition-all group relative overflow-hidden ${cardClasses}">
                     <div class="flex justify-between items-start">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 rounded-lg bg-slate-800 text-slate-300 flex items-center justify-center text-lg border border-slate-700">
@@ -82,7 +99,8 @@ const GroupsView = {
                         </div>
                         
                         ${canEditThisGroup ? `
-                            <button onclick="GroupsView.openEditModal('${g.id}')" class="w-8 h-8 rounded-lg bg-dark-bg text-dark-muted hover:text-blue-400 border border-transparent hover:border-dark-border flex items-center justify-center transition-colors">
+                            <!-- WICHTIG: stopPropagation damit der Klick auf Edit nicht die Gruppe öffnet -->
+                            <button onclick="event.stopPropagation(); GroupsView.openEditModal('${g.id}')" class="w-8 h-8 rounded-lg bg-dark-bg text-dark-muted hover:text-blue-400 border border-transparent hover:border-dark-border flex items-center justify-center transition-colors z-10">
                                 <i class="fa-solid fa-pen text-xs"></i>
                             </button>
                         ` : ''}
@@ -90,12 +108,37 @@ const GroupsView = {
                     
                     ${g.description ? `<p class="text-xs text-dark-muted line-clamp-2">${g.description}</p>` : ''}
                     
-                    <!-- Mitglieder Preview (Optional) -->
-                    <div class="flex -space-x-2 overflow-hidden py-1">
-                        ${this.renderMemberAvatars(g.name)}
-                    </div>
+                    ${!isMember ? `
+                        <div class="mt-2 text-[10px] uppercase font-bold text-red-400/70 tracking-wider flex items-center gap-1">
+                             <i class="fa-solid fa-lock"></i> Kein Zugriff
+                        </div>
+                    ` : `
+                         <!-- Mitglieder Preview nur anzeigen wenn Zugriff erlaubt -->
+                        <div class="flex -space-x-2 overflow-hidden py-1 mt-auto">
+                            ${this.renderMemberAvatars(g.name)}
+                        </div>
+                    `}
                 </div>`;
             }).join('');
+        }
+    },
+
+    // Neue Funktion zum Öffnen der Gruppe
+    openGroup(id) {
+        const g = Store.state.groups.find(gr => gr.id == id);
+        if (!g) return;
+
+        // Sicherheitscheck nochmal beim Öffnen
+        const isMember = App.user && Array.isArray(App.user.groups) && App.user.groups.includes(g.name);
+        
+        if (isMember) {
+            // HIER: Logik zum Navigieren in die Gruppe
+            // Zum Beispiel: App.navigate('group-details', { id: g.id });
+            console.log("Öffne Gruppe:", g.name);
+            App.showToast(`Öffne Gruppe: ${g.name}`, "info");
+            // App.router.navigate(...) oder ähnliches hier einfügen
+        } else {
+            App.showToast("Du bist kein Mitglied dieser Gruppe.", "error");
         }
     },
 
@@ -120,14 +163,11 @@ const GroupsView = {
     },
 
     openAddModal(editModeData = null) {
-        // Nur Super-Admins oder Gruppen-Admins dürfen modal öffnen
-        // (Bei Edit prüfen wir später nochmal spezifisch)
         if(!App.can('manage_groups')) return;
 
         const isEdit = !!editModeData;
         const data = editModeData || {};
         
-        // Sicherheitscheck bei Edit: Darf ich DIESE Gruppe bearbeiten?
         if (isEdit && !App.can('manage_group_content', data.name)) {
             App.showToast("Keine Berechtigung für diese Gruppe.", "error");
             return;
@@ -174,8 +214,6 @@ const GroupsView = {
 
     async handleAdd(e) {
         e.preventDefault();
-        // Nur Super-Admin darf neue Gruppen erstellen (meistens sinnvoll)
-        // Oder wir erlauben es 'manage_all_groups' inhabern
         if(!App.can('manage_all_groups')) {
             App.showToast("Nur Vorstände können neue Gruppen anlegen.", "error");
             return;
@@ -184,7 +222,6 @@ const GroupsView = {
         const fd = new FormData(e.target);
         const name = fd.get('name');
         
-        // Check Duplicate
         if(Store.state.groups.some(g => g.name.toLowerCase() === name.toLowerCase())) {
             App.showToast("Eine Gruppe mit diesem Namen existiert bereits.", "error");
             return;
@@ -204,7 +241,6 @@ const GroupsView = {
         const g = Store.state.groups.find(gr => gr.id == id);
         if(!g) return;
 
-        // Erneuter Sicherheitscheck vor dem Speichern
         if (!App.can('manage_group_content', g.name)) {
             App.showToast("Fehlende Berechtigung.", "error");
             return;
@@ -216,7 +252,6 @@ const GroupsView = {
             description: fd.get('description') 
         };
         
-        // ID sicher entfernen für Update (wie bei Members)
         const cleanUpdate = { ...updated };
         delete cleanUpdate.id;
 
@@ -225,7 +260,7 @@ const GroupsView = {
         if(error) {
             App.showToast(error.message, "error");
         } else {
-            await Store.fetchTable('groups'); // Refresh Data
+            await Store.fetchTable('groups');
             App.closeModal();
             this.updateList();
             App.showToast("Gruppe gespeichert");
@@ -233,8 +268,6 @@ const GroupsView = {
     },
 
     async delete(id) {
-        // Löschen ist kritisch -> Nur Super-Admin oder spezielle Berechtigung?
-        // Wir erlauben es demjenigen, der die Gruppe auch bearbeiten darf
         const g = Store.state.groups.find(gr => gr.id == id);
         if (!g) return;
 
