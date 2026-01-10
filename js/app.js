@@ -398,6 +398,24 @@ const App = {
         style.id = 'app-dynamic-styles';
         // Globale Styles für Konsistenz in dynamischen Views
         style.textContent = `
+            /* Fix für Mobile Viewports (Safari Adressleiste) */
+            #app-view {
+                height: 100dvh; 
+            }
+            @supports (-webkit-touch-callout: none) {
+                #app-view { height: -webkit-fill-available; }
+            }
+
+            /* Fix für Notch / Status Bar */
+            header {
+                padding-top: env(safe-area-inset-top);
+                height: auto !important; 
+                min-height: 4rem; /* h-16 */
+            }
+            @media (min-width: 768px) {
+                header { min-height: 5rem; /* h-20 */ }
+            }
+
             .form-input { 
                 width: 100%;
                 background-color: rgba(30, 41, 59, 0.5); border: 1px solid rgba(71, 85, 105, 0.5);
