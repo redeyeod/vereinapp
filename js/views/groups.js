@@ -5,8 +5,8 @@
  * - Gruppen-Verwaltung (RBAC)
  * - Mitglieder-Verwaltung
  * - Gruppen-Chat
- * - Gruppen-Kalender (FIX: Enddatum, Ganztägig, Abstimmung)
- * - Gruppen-Bearbeitung (FIX: Edit Modal implementiert)
+ * - Gruppen-Kalender (FIX: Enddatum, Ganztägig, Abstimmung, Bearbeiten)
+ * - Gruppen-Bearbeitung
  * =============================================================================
  */
 
@@ -469,6 +469,13 @@ const GroupsView = {
         const deleteBtn = canManage ? 
             `<button onclick="GroupsView.deleteGroupEvent('${e.id}')" class="text-red-400 hover:text-red-300 text-xs flex items-center gap-1 bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/20"><i class="fa-regular fa-trash-can"></i> Löschen</button>` : '';
 
+        // NEW: Bearbeiten Button für Admins
+        const editBtn = canManage ? 
+            `<button onclick="GroupsView.openEventEditModal('${e.id}')" class="text-blue-400 hover:text-blue-300 text-xs flex items-center gap-1 bg-blue-500/10 px-3 py-1.5 rounded-lg border border-blue-500/20 mr-2"><i class="fa-solid fa-pen"></i> Bearbeiten</button>` : '';
+
+        const footer = (editBtn || deleteBtn) ? 
+            `<div class="mt-6 pt-4 border-t border-dark-border flex justify-end gap-3">${editBtn}${deleteBtn}</div>` : '';
+
         const html = `
             <div class="p-6 h-full flex flex-col max-h-[90vh]">
                 <div class="flex justify-between items-start mb-6 border-b border-dark-border pb-4">
@@ -529,7 +536,7 @@ const GroupsView = {
                     </div>
                 </div>
 
-                ${deleteBtn ? `<div class="mt-6 pt-4 border-t border-dark-border flex justify-end">${deleteBtn}</div>` : ''}
+                ${footer}
             </div>
         `;
 
@@ -539,6 +546,120 @@ const GroupsView = {
         if(modalContainer) {
             modalContainer.classList.remove('max-w-md');
             modalContainer.classList.add('max-w-2xl', 'w-full');
+        }
+    },
+
+    // NEU: Modal zum Bearbeiten eines Termins
+    openEventEditModal(eventId) {
+        const e = Store.state.events.find(ev => ev.id == eventId);
+        if(!e) return;
+        
+        const group = Store.state.groups.find(g => g.name === e.group);
+        if(!group || !App.can('manage_group_content', group.name)) {
+             App.showToast("Keine Berechtigung", "error");
+             return;
+        }
+
+        const timeValue = e.time === '00:00' && e.allDay ? '' : e.time;
+
+        const html = `
+            <div class="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4">
+                    <h3 class="text-xl font-bold text-white">Termin bearbeiten</h3>
+                    <!-- Zurück Button statt Schließen -->
+                    <button onclick="GroupsView.openEventDetailModal('${eventId}')" class="text-dark-muted hover:text-white p-2 transition-colors flex items-center gap-2 text-xs">
+                        <i class="fa-solid fa-arrow-left"></i> Zurück
+                    </button>
+                </div>
+                
+                <form onsubmit="GroupsView.handleEventUpdate(event, '${eventId}')" class="space-y-5">
+                    <div>
+                        <label class="text-muted text-xs uppercase font-bold">Titel</label>
+                        <input type="text" name="title" value="${e.title}" required class="form-input">
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-muted text-xs uppercase font-bold">Start Datum</label>
+                            <input type="date" name="date" value="${e.date}" required class="form-input dark-date" onchange="document.getElementById('editEndDateInput').min = this.value">
+                        </div>
+                        <div>
+                            <label class="text-muted text-xs uppercase font-bold">Ende Datum</label>
+                            <input type="date" name="endDate" value="${e.endDate || e.date}" id="editEndDateInput" class="form-input dark-date">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 items-end">
+                        <div>
+                            <label class="text-muted text-xs uppercase font-bold">Uhrzeit</label>
+                            <input type="time" name="time" value="${timeValue}" id="editEventTimeInput" ${e.allDay ? 'disabled' : ''} class="form-input dark-date">
+                        </div>
+                        <div class="h-[42px] flex items-center bg-dark-bg border border-dark-border rounded-xl px-3">
+                             <input type="checkbox" name="allDay" id="editEventAllDay" ${e.allDay ? 'checked' : ''} class="w-4 h-4 rounded bg-dark-bg border-dark-border accent-blue-600" 
+                                onchange="const t = document.getElementById('editEventTimeInput'); t.disabled = this.checked; if(this.checked) t.value = ''; else t.focus();">
+                             <label for="editEventAllDay" class="ml-2 text-sm text-white cursor-pointer select-none">Ganztägig</label>
+                        </div>
+                    </div>
+
+                    <div>
+                         <label class="text-muted text-xs uppercase font-bold">Ort</label>
+                         <input type="text" name="location" value="${e.location || ''}" class="form-input">
+                    </div>
+                    
+                    <div>
+                        <label class="text-muted text-xs uppercase font-bold">Beschreibung / Infos</label>
+                        <textarea name="description" class="form-input h-24">${e.description || ''}</textarea>
+                    </div>
+
+                    <button type="submit" class="btn-primary w-full mt-2">Speichern</button>
+                </form>
+            </div>
+        `;
+        App.openModal(html);
+    },
+
+    // NEU: Update Logik für Termine
+    async handleEventUpdate(e, eventId) {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const originalEvent = Store.state.events.find(ev => ev.id == eventId);
+        if(!originalEvent) return;
+
+        const isAllDay = fd.get('allDay') === 'on';
+        let startDate = fd.get('date');
+        let endDate = fd.get('endDate');
+        
+        if (!endDate) endDate = startDate;
+
+        // Wir bauen ein Update Objekt OHNE die ID (wichtig für Supabase/Postgres)
+        const updates = {
+            title: fd.get('title'),
+            date: startDate,
+            endDate: endDate,
+            time: isAllDay ? null : (fd.get('time') || '00:00'),
+            allDay: isAllDay,
+            location: fd.get('location'),
+            description: fd.get('description')
+        };
+
+        try {
+            App.showToast("Speichere...", "info");
+            const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+            const { error } = await _sb.from('events').update(updates).eq('id', eventId);
+
+            if(error) throw error;
+
+            // Lokales Objekt aktualisieren
+            Object.assign(originalEvent, updates);
+            
+            App.showToast("Termin aktualisiert", "success");
+            // Zurück zur Detail-Ansicht, damit man die Änderungen sieht
+            this.openEventDetailModal(eventId);
+            // Liste im Hintergrund neu rendern
+            this.render(document.getElementById('content'));
+        } catch(err) {
+            console.error(err);
+            App.showToast("Fehler: " + err.message, "error");
         }
     },
 
