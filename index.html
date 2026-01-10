@@ -101,6 +101,9 @@
             
             <!-- Navigation -->
             <div class="flex items-center gap-3 sm:gap-6">
+                <!-- NEU: Admin Roles Button (Standardmäßig HIDDEN) -->
+                <button id="nav-btn-roles" onclick="if(typeof App !== 'undefined') App.router('admin_roles')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors hidden" title="Rollen & Rechte"><i class="fa-solid fa-shield-halved text-xl"></i></button>
+                
                 <button onclick="if(typeof App !== 'undefined') App.router('workhours')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Arbeitsstunden"><i class="fa-solid fa-briefcase text-xl"></i></button>
                 <button onclick="if(typeof App !== 'undefined') App.router('messenger')" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Messenger"><i class="fa-solid fa-comments text-xl"></i></button>
                 <button onclick="if(typeof App !== 'undefined') App.toggleNotifications()" class="relative p-2 text-dark-muted hover:text-blue-400 transition-colors" title="Benachrichtigungen"><i class="fa-regular fa-bell text-xl"></i><span id="notif-dot" class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-dark-card animate-pulse hidden"></span></button>
@@ -142,6 +145,8 @@
     <script src="js/views/messenger.js"></script>
     <script src="js/views/profile.js"></script>
     <script src="js/views/workhours.js"></script>
+    <!-- NEU: Admin Roles View -->
+    <script src="js/views/admin_roles.js"></script>
 
     <!-- 4. Hauptlogik (App) -->
     <script src="js/app.js"></script>
