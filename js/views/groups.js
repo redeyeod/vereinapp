@@ -6,6 +6,7 @@
  * - Mitglieder-Verwaltung
  * - Gruppen-Chat
  * - Gruppen-Kalender (FIX: Enddatum, Ganztägig, Abstimmung)
+ * - Gruppen-Bearbeitung (FIX: Edit Modal implementiert)
  * =============================================================================
  */
 
@@ -656,8 +657,77 @@ const GroupsView = {
         this.render(document.getElementById('content')); 
     },
 
-    openEditGroupModal(groupId) { /* ... */ },
-    async handleUpdateGroup(e, groupId) { /* ... */ },
+    openEditGroupModal(groupId) {
+        const group = Store.state.groups.find(g => g.id == groupId);
+        if(!group) return;
+        if(!App.can('manage_group_content', group.name)) {
+            App.showToast("Keine Berechtigung", "error");
+            return;
+        }
+
+        const html = `
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4">
+                    <h3 class="text-xl font-bold text-white">Gruppe bearbeiten</h3>
+                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
+                </div>
+                
+                <form onsubmit="GroupsView.handleUpdateGroup(event, '${groupId}')" class="space-y-5">
+                    <div>
+                        <label class="text-muted text-xs uppercase font-bold">Name der Gruppe</label>
+                        <input type="text" name="name" value="${group.name}" required class="form-input" placeholder="z.B. Jugendgruppe">
+                        <p class="text-[10px] text-dark-muted mt-1">Achtung: Änderungen am Namen können Verknüpfungen beeinflussen.</p>
+                    </div>
+
+                    <div class="pt-4 border-t border-dark-border flex justify-between items-center mt-6">
+                        <button type="button" onclick="if(confirm('Gruppe wirklich löschen?')) { GroupsView.delete('${groupId}'); App.closeModal(); }" class="text-red-400 hover:text-red-300 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                            <i class="fa-regular fa-trash-can"></i> Löschen
+                        </button>
+                        <button type="submit" class="btn-primary">Speichern</button>
+                    </div>
+                </form>
+            </div>
+        `;
+        App.openModal(html);
+    },
+
+    async handleUpdateGroup(e, groupId) {
+        e.preventDefault();
+        const group = Store.state.groups.find(g => g.id == groupId);
+        if (!group) return;
+
+        const fd = new FormData(e.target);
+        const newName = fd.get('name');
+
+        if (newName === group.name) {
+            App.closeModal();
+            return;
+        }
+
+        try {
+            App.showToast("Speichere...", "info");
+            
+            // Direct Supabase Update
+            const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+            const { error } = await _sb.from('groups').update({ name: newName }).eq('id', groupId);
+
+            if (error) throw error;
+
+            // Local State Update
+            group.name = newName;
+            
+            App.closeModal();
+            App.showToast("Gruppe aktualisiert", "success");
+            this.render(document.getElementById('content'));
+            
+            // Reload data to be safe
+            if(Store.fetchTable) Store.fetchTable('groups');
+
+        } catch (err) {
+            console.error(err);
+            App.showToast("Fehler: " + err.message, "error");
+        }
+    },
 
     // --- MODAL: Mitglied hinzufügen ---
     openAddMemberModal(groupId) {
