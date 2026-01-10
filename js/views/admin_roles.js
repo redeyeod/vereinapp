@@ -2,23 +2,23 @@
  * =============================================================================
  * ADMIN ROLES VIEW
  * Verwaltung von Rollen und deren Berechtigungen (RBAC)
+ * NEU: Unterstützt jetzt spezifische Gruppen-Berechtigungen
  * =============================================================================
  */
 
 const AdminRolesView = {
-    // Verfügbare Berechtigungs-Flags für das System
-    availablePermissions: [
+    // Globale System-Rechte
+    systemPermissions: [
         { key: 'admin_global', label: '👑 Super-Admin (Alles erlaubt)' },
         { key: 'manage_members', label: '👥 Mitglieder verwalten' },
-        { key: 'manage_workhours', label: '⏱️ Arbeitsstunden verwalten/genehmigen' },
-        { key: 'manage_all_groups', label: 'dunkelblau_Alle Gruppen bearbeiten' },
-        { key: 'manage_own_group', label: '🔵 Nur eigene Gruppen bearbeiten' },
+        { key: 'manage_workhours', label: '⏱️ Arbeitsstunden verwalten' },
+        { key: 'manage_all_groups', label: '🌐 Alle Gruppen bearbeiten (Vorstand)' },
+        // 'manage_own_group' entfernt oder optional, da wir jetzt spezifisch werden wollen
         { key: 'manage_news', label: '📰 News & Events erstellen' },
-        { key: 'manage_docs', label: 'bei_Dokumente hochladen' },
+        { key: 'manage_docs', label: '📁 Dokumente hochladen' },
     ],
 
     render(container) {
-        // Sicherheitscheck: Nur Admins dürfen hier rein
         if (!App.can('admin_global')) {
             container.innerHTML = `<div class="p-10 text-center text-red-400">Zugriff verweigert.</div>`;
             return;
@@ -30,7 +30,7 @@ const AdminRolesView = {
             <div class="flex justify-between items-center mb-6 fade-in">
                 <div>
                     <h3 class="text-xl font-bold text-white">Rollen & Rechte</h3>
-                    <p class="text-xs text-dark-muted">Definiere, was welche Rolle darf.</p>
+                    <p class="text-xs text-dark-muted">Definiere präzise, wer welche Gruppe bearbeiten darf.</p>
                 </div>
                 <button onclick="AdminRolesView.openModal()" class="btn-primary flex items-center gap-2 text-sm">
                     <i class="fa-solid fa-shield-halved"></i> Neue Rolle
@@ -48,13 +48,29 @@ const AdminRolesView = {
     renderRoleCard(role) {
         const perms = Array.isArray(role.permissions) ? role.permissions : [];
         
-        // Zähle Berechtigungen für Anzeige
-        const permBadges = perms.slice(0, 3).map(p => {
-            const def = this.availablePermissions.find(ap => ap.key === p);
-            return `<span class="text-[10px] bg-dark-bg border border-dark-border px-1.5 py-0.5 rounded text-dark-muted">${def ? def.label.split(' ')[0] : p}</span>`;
-        }).join('');
-        
-        const moreCount = perms.length > 3 ? `+${perms.length - 3}` : '';
+        // Anzeige aufhübschen
+        let badgeCount = 0;
+        const badges = [];
+
+        // 1. System Rechte anzeigen
+        this.systemPermissions.forEach(sp => {
+            if(perms.includes(sp.key)) {
+                badges.push(`<span class="text-[10px] bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded text-blue-300">${sp.label.split(' ')[0]}</span>`);
+                badgeCount++;
+            }
+        });
+
+        // 2. Gruppen Rechte anzeigen (Prefix 'manage_group:')
+        const groupPerms = perms.filter(p => p.startsWith('manage_group:'));
+        groupPerms.forEach(gp => {
+            if(badgeCount < 4) {
+                const groupName = gp.replace('manage_group:', '');
+                badges.push(`<span class="text-[10px] bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded text-green-300">${groupName}</span>`);
+                badgeCount++;
+            }
+        });
+
+        const moreCount = perms.length - badgeCount;
 
         return `
             <div class="bg-dark-card p-5 rounded-xl border border-dark-border hover:border-blue-500/30 transition-all group relative">
@@ -68,7 +84,7 @@ const AdminRolesView = {
                 <div class="flex flex-wrap gap-1 mb-4 h-6 overflow-hidden">
                     ${perms.includes('admin_global') 
                         ? '<span class="text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded font-bold">SUPER ADMIN</span>' 
-                        : permBadges + (moreCount ? `<span class="text-[10px] text-dark-muted self-center ml-1">${moreCount}</span>` : '')
+                        : badges.join('') + (moreCount > 0 ? `<span class="text-[10px] text-dark-muted self-center ml-1">+${moreCount}</span>` : '')
                     }
                 </div>
 
@@ -85,16 +101,30 @@ const AdminRolesView = {
         if (roleId && !role) return;
 
         const currentPerms = role.permissions || [];
+        const groups = Store.state.groups || [];
 
-        const checksHtml = this.availablePermissions.map(p => {
+        // System Checkboxen
+        const systemChecks = this.systemPermissions.map(p => {
             const checked = currentPerms.includes(p.key) ? 'checked' : '';
             return `
-                <label class="flex items-center gap-3 p-3 bg-dark-bg/50 rounded-lg border border-dark-border cursor-pointer hover:border-blue-500/30 transition-colors">
+                <label class="flex items-center gap-3 p-2 hover:bg-dark-bg/50 rounded cursor-pointer transition-colors">
                     <input type="checkbox" name="perms" value="${p.key}" ${checked} class="w-4 h-4 rounded border-dark-border bg-slate-800 text-blue-600 focus:ring-blue-500">
                     <span class="text-sm text-white">${p.label}</span>
                 </label>
             `;
         }).join('');
+
+        // Gruppen Checkboxen (Dynamisch)
+        const groupChecks = groups.length > 0 ? groups.map(g => {
+            const key = `manage_group:${g.name}`; // Spezieller Key für jede Gruppe
+            const checked = currentPerms.includes(key) ? 'checked' : '';
+            return `
+                <label class="flex items-center gap-3 p-2 hover:bg-dark-bg/50 rounded cursor-pointer transition-colors">
+                    <input type="checkbox" name="perms" value="${key}" ${checked} class="w-4 h-4 rounded border-dark-border bg-slate-800 text-green-500 focus:ring-green-500">
+                    <span class="text-sm text-dark-muted group-hover:text-white truncate">Gruppe: <span class="text-white font-medium">${g.name}</span></span>
+                </label>
+            `;
+        }).join('') : '<p class="text-xs text-dark-muted italic p-2">Keine Gruppen angelegt.</p>';
 
         const html = `
             <div class="p-6 md:p-8 max-h-[85vh] overflow-y-auto custom-scrollbar">
@@ -105,21 +135,27 @@ const AdminRolesView = {
                 
                 <form onsubmit="AdminRolesView.save(event, '${roleId || ''}')" class="space-y-6">
                     <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Bezeichnung der Rolle</label>
-                        <input type="text" name="name" value="${role.name}" class="form-input" placeholder="z.B. Gruppenleiter" required>
-                        <p class="text-[10px] text-dark-muted mt-1">Dieser Name wird den Mitgliedern angezeigt.</p>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Rollen-Name</label>
+                        <input type="text" name="name" value="${role.name}" class="form-input" placeholder="z.B. Leiter Nachtkrabb" required>
                     </div>
 
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-3 block">Berechtigungen</label>
-                        <div class="space-y-2">
-                            ${checksHtml}
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- System Rechte -->
+                        <div>
+                            <label class="text-xs font-bold text-blue-400 uppercase mb-2 block border-b border-blue-500/20 pb-1">Allgemeine Rechte</label>
+                            <div class="space-y-1">
+                                ${systemChecks}
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs text-blue-300">
-                        <i class="fa-solid fa-circle-info mr-1"></i>
-                        "Nur eigene Gruppen bearbeiten" greift nur, wenn der Benutzer auch Mitglied in der entsprechenden Gruppe ist.
+                        <!-- Gruppen Rechte -->
+                        <div>
+                            <label class="text-xs font-bold text-green-400 uppercase mb-2 block border-b border-green-500/20 pb-1">Spezifische Gruppen</label>
+                            <div class="space-y-1 max-h-60 overflow-y-auto custom-scrollbar bg-dark-card/50 rounded-lg border border-dark-border p-2">
+                                ${groupChecks}
+                            </div>
+                            <p class="text-[10px] text-dark-muted mt-2">Hake hier die Gruppen an, die diese Rolle bearbeiten darf.</p>
+                        </div>
                     </div>
 
                     <button type="submit" class="btn-primary w-full">Speichern</button>
@@ -133,7 +169,6 @@ const AdminRolesView = {
         e.preventDefault();
         const fd = new FormData(e.target);
         
-        // Checkboxen einsammeln
         const perms = [];
         e.target.querySelectorAll('input[name="perms"]:checked').forEach(cb => perms.push(cb.value));
 
@@ -143,11 +178,9 @@ const AdminRolesView = {
         };
 
         if (id) {
-            // Update
             roleData.id = id;
             await Store.update('roles', roleData);
         } else {
-            // Create
             await Store.add('roles', roleData);
         }
 
@@ -156,7 +189,7 @@ const AdminRolesView = {
     },
 
     async deleteRole(id) {
-        if(confirm("Rolle wirklich löschen? Mitglieder mit dieser Rolle verlieren ihre Rechte.")) {
+        if(confirm("Rolle wirklich löschen?")) {
             await Store.remove('roles', id);
             this.render(document.getElementById('content'));
         }
