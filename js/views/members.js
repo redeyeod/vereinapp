@@ -90,8 +90,9 @@ const MembersView = {
                 const isActive = m.status === 'active';
                 const statusColor = isActive ? 'bg-green-500' : 'bg-red-500';
 
+                // FIX: ID muss als String übergeben werden, falls es eine UUID ist -> '${m.id}'
                 return `
-                <div onclick="MembersView.openDetailModal(${m.id})" class="bg-dark-card p-4 rounded-xl border border-dark-border flex items-center gap-4 hover:border-blue-500/50 transition-all cursor-pointer group shadow-sm relative overflow-hidden">
+                <div onclick="MembersView.openDetailModal('${m.id}')" class="bg-dark-card p-4 rounded-xl border border-dark-border flex items-center gap-4 hover:border-blue-500/50 transition-all cursor-pointer group shadow-sm relative overflow-hidden">
                     <div class="absolute right-3 top-3 w-2 h-2 ${statusColor} rounded-full shadow-sm"></div>
                     <div class="w-12 h-12 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center text-sm font-bold border border-slate-700 flex-shrink-0">
                         ${(m.firstName || '?').charAt(0)}${(m.lastName || '?').charAt(0)}
@@ -104,7 +105,7 @@ const MembersView = {
                         </p>
                     </div>
                     ${canManage ? `
-                        <button onclick="event.stopPropagation(); MembersView.openEditModal(${m.id})" class="w-8 h-8 rounded-lg bg-dark-bg text-dark-muted hover:text-blue-400 border border-transparent hover:border-dark-border flex items-center justify-center transition-colors">
+                        <button onclick="event.stopPropagation(); MembersView.openEditModal('${m.id}')" class="w-8 h-8 rounded-lg bg-dark-bg text-dark-muted hover:text-blue-400 border border-transparent hover:border-dark-border flex items-center justify-center transition-colors">
                             <i class="fa-solid fa-pen text-xs"></i>
                         </button>
                     ` : '<i class="fa-solid fa-chevron-right text-dark-muted text-xs opacity-50"></i>'}
@@ -148,10 +149,11 @@ const MembersView = {
             ${!m.email && !m.phone && !m.birthdate ? '<p class="text-dark-muted italic text-xs">Keine Kontaktdaten</p>' : ''}
         `;
 
+        // FIX: ID in Anführungszeichen setzen für delete und openEditModal
         const footerHtml = canManage ? `
             <div class="mt-6 pt-4 border-t border-dark-border flex gap-3">
-                <button onclick="MembersView.openEditModal(${m.id})" class="btn-primary flex-1">Bearbeiten</button>
-                <button onclick="MembersView.delete(${m.id}); App.closeModal()" class="flex-1 py-3 bg-dark-bg border border-dark-border rounded-xl text-red-400 font-bold hover:bg-red-900/20">Löschen</button>
+                <button onclick="MembersView.openEditModal('${m.id}')" class="btn-primary flex-1">Bearbeiten</button>
+                <button onclick="MembersView.delete('${m.id}'); App.closeModal()" class="flex-1 py-3 bg-dark-bg border border-dark-border rounded-xl text-red-400 font-bold hover:bg-red-900/20">Löschen</button>
             </div>
         ` : '';
 
@@ -214,7 +216,9 @@ const MembersView = {
         const data = editModeData || {};
         const title = isEdit ? "Mitglied bearbeiten" : "Neues Mitglied";
         const btnText = isEdit ? "Speichern" : "Mitglied anlegen";
-        const handler = isEdit ? `MembersView.handleUpdate(event, ${data.id})` : "MembersView.handleAdd(event)";
+        
+        // FIX: WICHTIG! Anführungszeichen um data.id hinzugefügt, damit UUIDs kein JS crashen
+        const handler = isEdit ? `MembersView.handleUpdate(event, '${data.id}')` : "MembersView.handleAdd(event)";
         const roleOptions = this.standardRoles.map(r => `<option value="${r}" ${data.role === r ? 'selected' : ''}>${r}</option>`).join('');
 
         const html = `
