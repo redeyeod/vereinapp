@@ -1,6 +1,6 @@
 /**
  * =============================================================================
- * MESSENGER VIEW
+ * MESSENGER VIEW (Clean & Mobile First)
  * Zentraler Ort für alle Kommunikation (News, Gruppen, Privat)
  * =============================================================================
  */
@@ -11,9 +11,9 @@ const MessengerView = {
         activeType: 'news', // 'news', 'group', 'private'
         activeId: 0,        // 0 oder null bedeutet: Kein Chat ausgewählt
         filterTerm: '',     // Für die Suche
-        myId: 1,            // Fallback
         showAttachMenu: false, 
-        showEmojiPicker: false 
+        showEmojiPicker: false,
+        mobileChatVisible: false // Steuert die Ansicht auf Mobile
     },
 
     // Helper um die aktuelle User-ID zu holen
@@ -25,35 +25,31 @@ const MessengerView = {
      * Haupt-Render Funktion
      */
     render(container) {
-        // Mobile-Logik: Wenn Chat aktiv ist, verstecke Sidebar auf kleinen Screens
-        const isChatActive = this.state.activeId !== 0 && this.state.activeId !== null;
-        
-        const sidebarClass = isChatActive ? 'hidden md:flex' : 'flex';
-        const chatAreaClass = isChatActive ? 'flex' : 'hidden md:flex';
+        const showChatOnMobile = this.state.mobileChatVisible; 
 
         container.innerHTML = `
-            <div class="flex h-[calc(100vh-140px)] bg-dark-card rounded-bubble border border-dark-border overflow-hidden shadow-2xl fade-in">
+            <div class="flex h-[calc(100vh-140px)] md:h-[calc(100vh-180px)] bg-dark-card/50 backdrop-blur-sm rounded-2xl border border-dark-border overflow-hidden shadow-2xl fade-in relative">
                 
                 <!-- Sidebar: Kontaktliste -->
-                <div class="${sidebarClass} w-full md:w-1/3 border-r border-dark-border flex-col bg-dark-bg/30">
+                <div class="${showChatOnMobile ? 'hidden' : 'flex'} md:flex w-full md:w-1/3 lg:w-1/4 border-r border-dark-border flex-col bg-dark-bg/50">
                     <!-- Suchleiste -->
-                    <div class="p-3 md:p-4 border-b border-dark-border sticky top-0 bg-dark-card z-10">
-                        <div class="relative">
-                            <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted text-sm"></i>
+                    <div class="p-4 border-b border-dark-border sticky top-0 bg-dark-bg/95 backdrop-blur z-10">
+                        <div class="relative group">
+                            <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted group-focus-within:text-brand-500 transition-colors text-sm"></i>
                             <input type="text" id="messenger-search" onkeyup="MessengerView.handleSearch(this.value)" placeholder="Suchen..." 
-                                class="w-full bg-dark-bg border border-dark-border rounded-xl pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors placeholder-dark-muted shadow-inner"
+                                class="w-full bg-dark-card border border-dark-border rounded-xl pl-10 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all placeholder-dark-muted"
                                 value="${this.state.filterTerm}">
                         </div>
                     </div>
 
                     <!-- Liste -->
-                    <div id="messenger-list" class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-4">
+                    <div id="messenger-list" class="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-6">
                         <!-- Inhalt kommt durch renderSidebarList() -->
                     </div>
                 </div>
 
                 <!-- Hauptbereich: Chat Fenster -->
-                <div class="${chatAreaClass} flex-1 flex-col bg-dark-card relative h-full" id="messenger-chat-area">
+                <div class="${showChatOnMobile ? 'flex' : 'hidden'} md:flex flex-1 flex-col bg-dark-card relative h-full w-full" id="messenger-chat-area">
                     ${this.renderActiveChat()}
                 </div>
             </div>
@@ -63,7 +59,7 @@ const MessengerView = {
         this.renderSidebarList();
         
         // Scroll zum Ende des Chats, falls sichtbar
-        if (isChatActive) {
+        if (showChatOnMobile || window.innerWidth >= 768) {
             this.scrollToBottom();
         }
         
@@ -105,7 +101,7 @@ const MessengerView = {
         if ('ankündigungen'.includes(term) || term === '') {
             newsHTML = `
                 <div class="mb-2">
-                    <p class="px-3 mb-1 text-[10px] font-bold text-dark-muted uppercase tracking-wider opacity-70">Allgemein</p>
+                    <p class="px-2 mb-2 text-[10px] font-bold text-dark-muted uppercase tracking-wider opacity-70">Allgemein</p>
                     ${this.renderContactItem('news', 0, 'Ankündigungen', 'fa-bullhorn', 'red')}
                 </div>`;
         }
@@ -118,9 +114,9 @@ const MessengerView = {
         if (filteredGroups.length > 0) {
             groupsHTML = `
                 <div class="mb-2">
-                    <p class="px-3 mb-1 text-[10px] font-bold text-dark-muted uppercase tracking-wider opacity-70">Gruppen</p>
+                    <p class="px-2 mb-2 text-[10px] font-bold text-dark-muted uppercase tracking-wider opacity-70">Gruppen</p>
                     <div class="space-y-1">
-                        ${filteredGroups.map(g => this.renderContactItem('group', g.id, g.name, 'fa-users', 'green')).join('')}
+                        ${filteredGroups.map(g => this.renderContactItem('group', g.id, g.name, 'fa-users', 'emerald')).join('')}
                     </div>
                 </div>`;
         }
@@ -130,6 +126,7 @@ const MessengerView = {
         let membersToShow = [];
 
         if (term === '') {
+            // Zeige Mitglieder mit Chatverlauf oder Favoriten (hier vereinfacht: alle mit Chat)
             membersToShow = allMembers.filter(m => m.privateChat && m.privateChat.length > 0);
         } else {
             membersToShow = allMembers.filter(m => (m.firstName + ' ' + m.lastName).toLowerCase().includes(term));
@@ -140,7 +137,7 @@ const MessengerView = {
             const title = term === '' ? 'Letzte Chats' : 'Suchergebnisse';
             privateHTML = `
                 <div>
-                    <p class="px-3 mb-1 text-[10px] font-bold text-dark-muted uppercase tracking-wider opacity-70">${title}</p>
+                    <p class="px-2 mb-2 text-[10px] font-bold text-dark-muted uppercase tracking-wider opacity-70">${title}</p>
                     <div class="space-y-1">
                         ${membersToShow.map(m => this.renderContactItem('private', m.id, `${m.firstName} ${m.lastName}`, 'fa-user', 'blue', m.status)).join('')}
                     </div>
@@ -163,26 +160,35 @@ const MessengerView = {
         
         let statusDot = '';
         if (type === 'private' && status) {
-            const statusColor = status === 'active' ? 'bg-green-500' : 'bg-gray-500';
+            const statusColor = status === 'active' ? 'bg-emerald-500' : 'bg-slate-500';
             statusDot = `<span class="w-2.5 h-2.5 ${statusColor} rounded-full border-2 border-dark-card absolute bottom-0 right-0 shadow-sm"></span>`;
         }
 
+        // Dynamische Tailwind Farben müssen vollständig geschrieben sein für JIT, oder safelisted.
+        // Wir nutzen hier inline styles oder Standardklassen für die Farben um sicherzugehen.
+        const colorMap = {
+            red: 'text-red-400 bg-red-500/10 border-red-500/20',
+            emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+            blue: 'text-blue-400 bg-blue-500/10 border-blue-500/20'
+        };
+        const colorClasses = colorMap[color] || colorMap['blue'];
+
         return `
             <button onclick="MessengerView.selectChat('${type}', ${id})" 
-                class="w-full flex items-center gap-3 p-2.5 rounded-xl transition-all text-left group
-                ${isActive ? 'bg-blue-600/10 border border-blue-500/30 shadow-sm' : 'hover:bg-dark-hover border border-transparent'}">
+                class="w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left group
+                ${isActive ? 'bg-dark-card border border-brand-500/30 shadow-md' : 'hover:bg-dark-hover/50 border border-transparent'}">
                 
-                <div class="relative w-10 h-10 rounded-full bg-${color}-500/10 text-${color}-400 flex items-center justify-center text-sm shrink-0 border border-${color}-500/20">
+                <div class="relative w-10 h-10 rounded-xl flex items-center justify-center text-sm shrink-0 border ${colorClasses}">
                     <i class="fa-solid ${icon}"></i>
                     ${statusDot}
                 </div>
                 
                 <div class="flex-1 min-w-0">
-                    <p class="text-sm font-bold ${isActive ? 'text-blue-400' : 'text-white'} truncate">${name}</p>
+                    <p class="text-sm font-bold ${isActive ? 'text-brand-400' : 'text-white'} truncate">${name}</p>
                     <p class="text-[10px] text-dark-muted truncate group-hover:text-dark-text transition-colors">Klicken zum Chatten</p>
                 </div>
                 
-                ${isActive ? '<i class="fa-solid fa-chevron-right text-[10px] text-blue-500"></i>' : ''}
+                ${isActive ? '<i class="fa-solid fa-chevron-right text-[10px] text-brand-500"></i>' : ''}
             </button>
         `;
     },
@@ -192,20 +198,19 @@ const MessengerView = {
         this.state.activeId = id;
         this.state.showAttachMenu = false;
         this.state.showEmojiPicker = false;
+        this.state.mobileChatVisible = true; // Auf Mobile zur Chat-Ansicht wechseln
         
-        // Kompletten Render aufrufen, um Mobile-Switch (Sidebar -> Chat) auszulösen
         this.render(document.getElementById('content'));
     },
 
-    // Mobile-Helper: Zurück zur Liste
     closeChat() {
-        this.state.activeId = 0; // Kein Chat aktiv
+        this.state.mobileChatVisible = false; // Zurück zur Liste auf Mobile
         this.render(document.getElementById('content'));
     },
 
     renderActiveChat() {
-        // Falls kein Chat ausgewählt ist (nur auf Desktop relevant, da Mobile ausgeblendet)
-        if (this.state.activeId === 0 && this.state.activeType !== 'news') {
+        // Leerer Zustand (Desktop)
+        if (!this.state.mobileChatVisible && this.state.activeId === 0 && this.state.activeType !== 'news') {
             return `
                 <div class="flex flex-col items-center justify-center h-full text-dark-muted opacity-30 select-none">
                     <i class="fa-regular fa-comments text-6xl mb-4"></i>
@@ -231,7 +236,7 @@ const MessengerView = {
             messages = (Store.state.news || []).map(n => ({
                 id: n.id,
                 sender: 'Vorstand',
-                text: `<strong>${n.title}</strong><br>${n.content}`,
+                text: `<strong class="block mb-1 text-base text-brand-400">${n.title}</strong>${n.content}`,
                 time: n.date,
                 isMe: false,
                 isSystem: true
@@ -246,7 +251,7 @@ const MessengerView = {
                 messages = group.chat || [];
                 headerClickAction = `onclick="App.router('groups'); GroupsView.openGroup(${id})"`;
                 headerCursorClass = "cursor-pointer hover:bg-white/5 rounded-lg pr-4 transition-colors";
-                headerTitleHint = '<span class="text-[9px] md:text-[10px] text-blue-400 font-normal block -mt-0.5 truncate">Zur Gruppe <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i></span>';
+                headerTitleHint = '<span class="text-[9px] md:text-[10px] text-brand-400 font-normal block -mt-0.5 truncate">Zur Gruppe <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i></span>';
             } else {
                 return `<div class="flex items-center justify-center h-full text-dark-muted">Gruppe nicht gefunden</div>`;
             }
@@ -260,7 +265,7 @@ const MessengerView = {
                 messages = member.privateChat;
                 headerClickAction = `onclick="MessengerView.showUserProfile(${id})"`;
                 headerCursorClass = "cursor-pointer hover:bg-white/5 rounded-lg pr-4 transition-colors";
-                headerTitleHint = '<span class="text-[9px] md:text-[10px] text-blue-400 font-normal block -mt-0.5 truncate">Profil <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i></span>';
+                headerTitleHint = '<span class="text-[9px] md:text-[10px] text-brand-400 font-normal block -mt-0.5 truncate">Profil <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i></span>';
             } else {
                 return `<div class="flex items-center justify-center h-full text-dark-muted">Mitglied nicht gefunden</div>`;
             }
@@ -300,33 +305,33 @@ const MessengerView = {
             <div class="border-t border-dark-border bg-dark-bg/50 backdrop-blur-sm relative z-20 pb-safe">
                 ${canWrite ? `
                     <!-- Attachment Menu (Dropdown) -->
-                    <div id="attach-menu" class="${this.state.showAttachMenu ? 'block' : 'hidden'} absolute bottom-full left-2 md:left-4 mb-2 bg-dark-card border border-dark-border rounded-xl shadow-2xl p-2 min-w-[200px] animate-in slide-in-from-bottom-2 fade-in duration-200 z-30">
+                    <div id="attach-menu" class="${this.state.showAttachMenu ? 'block' : 'hidden'} absolute bottom-full left-2 md:left-4 mb-2 bg-dark-card border border-dark-border rounded-2xl shadow-2xl p-2 min-w-[200px] animate-in slide-in-from-bottom-2 fade-in duration-200 z-30">
                         <div class="grid grid-cols-1 gap-1">
-                            <button onclick="MessengerView.sendAttachment('camera'); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-dark-hover text-sm text-white transition-colors text-left">
+                            <button onclick="MessengerView.sendAttachment('camera'); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-dark-hover text-sm text-white transition-colors text-left">
                                 <div class="w-6 text-center"><i class="fa-solid fa-camera text-blue-400"></i></div> Kamera
                             </button>
-                            <button onclick="MessengerView.sendAttachment('image'); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-dark-hover text-sm text-white transition-colors text-left">
+                            <button onclick="MessengerView.sendAttachment('image'); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-dark-hover text-sm text-white transition-colors text-left">
                                 <div class="w-6 text-center"><i class="fa-regular fa-image text-purple-400"></i></div> Galerie
                             </button>
-                            <button onclick="MessengerView.sendAttachment('file'); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-dark-hover text-sm text-white transition-colors text-left">
+                            <button onclick="MessengerView.sendAttachment('file'); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-dark-hover text-sm text-white transition-colors text-left">
                                 <div class="w-6 text-center"><i class="fa-solid fa-paperclip text-yellow-400"></i></div> Datei
                             </button>
-                            <button onclick="MessengerView.sendAttachment('location'); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-dark-hover text-sm text-white transition-colors text-left">
+                            <button onclick="MessengerView.sendAttachment('location'); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-dark-hover text-sm text-white transition-colors text-left">
                                 <div class="w-6 text-center"><i class="fa-solid fa-location-dot text-red-400"></i></div> Standort
                             </button>
-                            <button onclick="MessengerView.openContactSelectModal(); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-dark-hover text-sm text-white transition-colors text-left">
+                            <button onclick="MessengerView.openContactSelectModal(); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-dark-hover text-sm text-white transition-colors text-left">
                                 <div class="w-6 text-center"><i class="fa-solid fa-address-book text-orange-400"></i></div> Kontakt
                             </button>
                             <div class="h-px bg-dark-border my-1"></div>
-                            <button onclick="MessengerView.openPollModal(); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-dark-hover text-sm text-white transition-colors text-left">
-                                <div class="w-6 text-center"><i class="fa-solid fa-square-poll-vertical text-green-400"></i></div> Umfrage
+                            <button onclick="MessengerView.openPollModal(); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-dark-hover text-sm text-white transition-colors text-left">
+                                <div class="w-6 text-center"><i class="fa-solid fa-square-poll-vertical text-emerald-400"></i></div> Umfrage
                             </button>
                         </div>
                     </div>
 
                     <!-- Emoji Picker -->
                     ${this.state.showEmojiPicker ? `
-                        <div id="emoji-picker" class="absolute bottom-full right-2 md:right-4 mb-2 bg-dark-card border border-dark-border rounded-xl shadow-2xl p-2 w-[90vw] md:w-80 h-64 overflow-y-auto custom-scrollbar animate-in slide-in-from-bottom-2 fade-in duration-200 z-30 grid grid-cols-8 gap-1">
+                        <div id="emoji-picker" class="absolute bottom-full right-2 md:right-4 mb-2 bg-dark-card border border-dark-border rounded-2xl shadow-2xl p-2 w-[90vw] md:w-80 h-64 overflow-y-auto custom-scrollbar animate-in slide-in-from-bottom-2 fade-in duration-200 z-30 grid grid-cols-8 gap-1">
                             ${this.getEmojiList().map(e => `
                                 <button onclick="MessengerView.addEmoji('${e}')" class="text-xl hover:bg-white/10 p-1.5 rounded transition-colors text-center">${e}</button>
                             `).join('')}
@@ -336,27 +341,22 @@ const MessengerView = {
                     <!-- Text Input Bar -->
                     <form onsubmit="MessengerView.sendMessage(event)" class="flex items-end gap-2 px-3 py-3 md:px-4">
                         <!-- Plus Button -->
-                        <button type="button" onclick="MessengerView.toggleAttachMenu()" class="w-10 h-10 rounded-full bg-dark-bg border border-dark-border hover:border-blue-500/50 text-dark-muted hover:text-blue-400 transition-all flex items-center justify-center shrink-0 shadow-sm mb-px">
+                        <button type="button" onclick="MessengerView.toggleAttachMenu()" class="w-10 h-10 rounded-full bg-dark-bg border border-dark-border hover:border-brand-500/50 text-dark-muted hover:text-brand-400 transition-all flex items-center justify-center shrink-0 shadow-sm mb-px">
                             <i class="fa-solid fa-plus text-lg"></i>
                         </button>
                         
                         <!-- Textfeld -->
-                        <div class="flex-1 bg-dark-bg border border-dark-border rounded-2xl flex items-center pr-1 focus-within:border-blue-500/50 focus-within:ring-1 focus-within:ring-blue-500/20 transition-all shadow-inner min-h-[44px]">
+                        <div class="flex-1 bg-dark-bg border border-dark-border rounded-2xl flex items-center pr-1 focus-within:border-brand-500/50 focus-within:ring-1 focus-within:ring-brand-500/20 transition-all shadow-inner min-h-[44px]">
                             <input type="text" name="message" id="chat-input" autocomplete="off" placeholder="Nachricht..." 
-                                class="flex-1 bg-transparent border-none px-4 py-3 text-white focus:outline-none text-sm h-full w-full">
+                                class="flex-1 bg-transparent border-none px-4 py-3 text-white focus:outline-none text-sm h-full w-full placeholder-dark-muted">
                             
                             <button type="button" onclick="MessengerView.toggleEmojiPicker()" class="p-2 text-dark-muted hover:text-yellow-400 transition-colors ${this.state.showEmojiPicker ? 'text-yellow-400' : ''}">
                                 <i class="fa-regular fa-face-smile text-lg"></i>
                             </button>
                         </div>
 
-                        <!-- Mikrofon (Sprachnachricht) -->
-                        <button type="button" onclick="MessengerView.sendAttachment('voice')" class="w-10 h-10 rounded-full bg-dark-bg border border-dark-border hover:bg-slate-700 text-dark-muted hover:text-white flex items-center justify-center transition-all shrink-0 mb-px shadow-sm">
-                            <i class="fa-solid fa-microphone text-sm"></i>
-                        </button>
-
                         <!-- Senden -->
-                        <button type="submit" class="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-all shadow-lg shadow-blue-900/20 hover:scale-105 active:scale-95 shrink-0 mb-px">
+                        <button type="submit" class="w-10 h-10 rounded-full bg-brand-600 hover:bg-brand-500 text-white flex items-center justify-center transition-all shadow-lg shadow-brand-500/20 hover:scale-105 active:scale-95 shrink-0 mb-px">
                             <i class="fa-solid fa-paper-plane text-sm"></i>
                         </button>
                     </form>
@@ -373,12 +373,12 @@ const MessengerView = {
         if (msg.isSystem) {
             return `
                 <div class="flex justify-center my-4 animate-in fade-in zoom-in duration-300">
-                    <div class="bg-slate-800/80 border border-slate-700/50 rounded-xl p-3 max-w-[85%] text-center shadow-sm backdrop-blur-sm">
-                        <p class="text-[10px] text-red-400 font-bold uppercase mb-1 flex items-center justify-center gap-1">
+                    <div class="bg-dark-bg/80 border border-dark-border rounded-xl p-3 max-w-[85%] text-center shadow-sm backdrop-blur-sm">
+                        <p class="text-[10px] text-brand-400 font-bold uppercase mb-1 flex items-center justify-center gap-1">
                             <i class="fa-solid fa-bullhorn"></i> ${msg.sender}
                         </p>
                         <div class="text-sm text-slate-200 leading-snug">${msg.text}</div>
-                        <span class="text-[9px] text-slate-500 mt-2 block">${new Date(msg.time).toLocaleDateString()}</span>
+                        <span class="text-[9px] text-dark-muted mt-2 block">${new Date(msg.time).toLocaleDateString()}</span>
                     </div>
                 </div>
             `;
@@ -411,7 +411,7 @@ const MessengerView = {
                         <div class="w-8 h-8 rounded bg-white/10 flex items-center justify-center text-lg"><i class="fa-solid fa-file-lines"></i></div>
                         <div class="flex-1 min-w-0">
                             <p class="text-xs font-bold truncate">${msg.content}</p>
-                            <p class="text-[9px] opacity-70">PDF • 2 MB</p>
+                            <p class="text-[9px] opacity-70">Datei</p>
                         </div>
                         <i class="fa-solid fa-download opacity-70 cursor-pointer p-1"></i>
                     </div>`;
@@ -493,7 +493,7 @@ const MessengerView = {
         }
 
         let bubbleClass = isMe 
-            ? 'bg-blue-600 text-white rounded-2xl rounded-br-sm' 
+            ? 'bg-brand-600 text-white rounded-2xl rounded-br-sm' 
             : 'bg-slate-800 border border-slate-700/50 text-slate-200 rounded-2xl rounded-bl-sm';
             
         if (isDeleted) bubbleClass = 'bg-slate-800/50 border border-slate-700/50 text-slate-400 rounded-2xl';
@@ -609,11 +609,11 @@ const MessengerView = {
                 </div>
                 
                 <input type="text" onkeyup="MessengerView.filterContactSelect(this)" placeholder="Mitglied suchen..." 
-                    class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500 mb-4">
+                    class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-2 text-white focus:outline-none focus:border-brand-500 mb-4">
 
                 <div id="share-contact-list" class="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                     ${allMembers.map(m => `
-                        <div class="share-contact-item flex justify-between items-center p-3 rounded-lg bg-dark-bg border border-dark-border hover:border-blue-500/50 cursor-pointer transition-colors"
+                        <div class="share-contact-item flex justify-between items-center p-3 rounded-lg bg-dark-bg border border-dark-border hover:border-brand-500/50 cursor-pointer transition-colors"
                              onclick="MessengerView.confirmShareContact(${m.id}, '${m.firstName} ${m.lastName}', '${m.role}')">
                             <div class="flex items-center gap-3">
                                 <div class="w-10 h-10 rounded-full bg-slate-700 text-white flex items-center justify-center font-bold">
@@ -624,7 +624,7 @@ const MessengerView = {
                                     <p class="text-xs text-dark-muted">${m.role}</p>
                                 </div>
                             </div>
-                            <i class="fa-solid fa-share text-blue-500"></i>
+                            <i class="fa-solid fa-share text-brand-500"></i>
                         </div>
                     `).join('')}
                 </div>
@@ -655,12 +655,12 @@ const MessengerView = {
             <div class="p-8">
                 <div class="flex justify-between items-start mb-8 border-b border-dark-border pb-6">
                     <div class="flex items-center gap-5">
-                        <div class="w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center text-3xl font-bold text-white shadow-lg">
+                        <div class="w-20 h-20 rounded-full bg-brand-600 flex items-center justify-center text-3xl font-bold text-white shadow-lg">
                             ${(m.firstName || 'U').charAt(0)}${(m.lastName || '').charAt(0)}
                         </div>
                         <div>
                             <h2 class="text-3xl font-bold text-white leading-tight">${m.firstName} ${m.lastName}</h2>
-                            <p class="text-blue-400 font-medium text-lg mt-1">${m.role}</p>
+                            <p class="text-brand-400 font-medium text-lg mt-1">${m.role}</p>
                         </div>
                     </div>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-2xl"></i></button>
@@ -669,11 +669,11 @@ const MessengerView = {
                     <div class="bg-dark-bg p-5 rounded-xl border border-dark-border">
                         <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-4">Gruppen</h4>
                         <div class="flex flex-wrap gap-2">
-                            ${Array.isArray(m.groups) ? m.groups.map(g => `<span class="bg-blue-900/30 text-blue-300 px-3 py-1 rounded-full text-sm border border-blue-500/30">${g}</span>`).join('') : '<span class="text-dark-muted">Keine Gruppen</span>'}
+                            ${Array.isArray(m.groups) ? m.groups.map(g => `<span class="bg-brand-500/10 text-brand-300 px-3 py-1 rounded-full text-sm border border-brand-500/30">${g}</span>`).join('') : '<span class="text-dark-muted">Keine Gruppen</span>'}
                         </div>
                     </div>
                 </div>
-                <button onclick="MessengerView.startPrivateChat(${m.id})" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition-colors shadow-lg shadow-blue-900/20 text-lg">
+                <button onclick="MessengerView.startPrivateChat(${m.id})" class="w-full bg-brand-600 hover:bg-brand-500 text-white py-3 rounded-xl font-bold transition-colors shadow-lg shadow-brand-500/20 text-lg">
                     <i class="fa-solid fa-comments mr-2"></i> Nachricht senden
                 </button>
             </div>
@@ -793,11 +793,11 @@ const MessengerView = {
                             <input type="text" name="option[]" required class="form-input" placeholder="Option 1">
                             <input type="text" name="option[]" required class="form-input" placeholder="Option 2">
                         </div>
-                        <button type="button" onclick="MessengerView.addPollOptionInput()" class="text-xs text-blue-400 mt-2 hover:underline">+ Option hinzufügen</button>
+                        <button type="button" onclick="MessengerView.addPollOptionInput()" class="text-xs text-brand-400 mt-2 hover:underline">+ Option hinzufügen</button>
                     </div>
 
                     <div class="mb-6 flex items-center">
-                        <input type="checkbox" name="multiple" id="pollMulti" class="w-4 h-4 rounded bg-dark-bg border-dark-border accent-blue-600">
+                        <input type="checkbox" name="multiple" id="pollMulti" class="w-4 h-4 rounded bg-dark-bg border-dark-border accent-brand-600">
                         <label for="pollMulti" class="ml-2 text-sm text-dark-muted cursor-pointer">Mehrfachauswahl erlauben</label>
                     </div>
 
