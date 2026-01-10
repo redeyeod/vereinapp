@@ -305,6 +305,9 @@ const App = {
         // Alias für Views, die nur fragen "Darf ich überhaupt irgendeine Gruppe sehen?"
         // Wird z.B. genutzt um den "Bearbeiten" Button generell anzuzeigen
         if (action === 'manage_groups') {
+            // FIX: Wenn ein Kontext (Gruppe) übergeben wird, leiten wir an die detaillierte Prüfung weiter!
+            if (context) return this.can('manage_group_content', context);
+
             // Darf alles ODER darf eigene ODER hat mindestens eine spezifische Gruppenberechtigung
             const hasSpecificGroup = perms.some(p => p.startsWith('manage_group:'));
             return perms.includes('manage_all_groups') || perms.includes('manage_own_group') || hasSpecificGroup;
