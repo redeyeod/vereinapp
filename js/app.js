@@ -20,7 +20,6 @@ const App = {
         this.injectStyles();
 
         // 2. Benutzer sofort laden (aus LocalStorage Session), damit wir nicht ausgeloggt werden
-        //    Wir warten NICHT auf den Store, damit der Login-Status sofort da ist.
         this.loadCurrentUser();
         this.initTheme();
 
@@ -56,7 +55,7 @@ const App = {
 
         // 4. Entscheidung: App oder Login anzeigen
         if (this.state.currentUser) {
-            // FIX: Letzte Ansicht wiederherstellen
+            // FIX: Letzte Ansicht wiederherstellen (bleibt bei F5 erhalten)
             const lastView = localStorage.getItem('vm_last_view') || 'dashboard';
             console.log("Stelle letzte Ansicht wieder her:", lastView);
             this.router(lastView);
@@ -90,7 +89,12 @@ const App = {
                 throw new Error("Login fehlgeschlagen.");
             }
 
-            localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
+            // WICHTIG: Nur speichern, wenn Session wirklich da ist
+            if (data.session) {
+                localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
+            } else {
+                throw new Error("Keine Session empfangen. Bitte nochmal versuchen.");
+            }
             
             // Versuch Daten zu laden, aber nicht blockieren wenn es fehlschlägt
             try {
@@ -127,7 +131,8 @@ const App = {
         
         this.updateHeaderUI();
         
-        // FIX: Auch nach Login zur zuletzt besuchten Seite oder Dashboard
+        // FIX: Nach frischem Login immer zum Dashboard (außer bei Reload, da greift init())
+        // Da wir im logout() die 'vm_last_view' löschen, ist sie hier leer -> Dashboard
         const lastView = localStorage.getItem('vm_last_view') || 'dashboard';
         this.router(lastView);
         
@@ -138,8 +143,11 @@ const App = {
         if(confirm("Abmelden?")) {
             localStorage.removeItem('vm_supabase_session');
             localStorage.removeItem('vm_current_user_id');
-            // View Reset beim Logout
-            localStorage.setItem('vm_last_view', 'dashboard'); 
+            
+            // WICHTIG: Hier löschen wir das Gedächtnis für die letzte Seite!
+            // Beim nächsten Login landet man also auf dem Dashboard.
+            localStorage.removeItem('vm_last_view'); 
+            
             location.reload();
         }
     },
@@ -154,7 +162,7 @@ const App = {
 
             const email = session.user.email.toLowerCase();
             
-            // 1. Zuerst Fallback-User aus Session bauen (damit wir SOFORT eingeloggt sind)
+            // 1. Zuerst Fallback-User aus Session bauen
             let user = { id: session.user.id, email: email, firstName: 'User', role: 'Mitglied' };
             
             // 2. Wenn Store Daten hat, nehmen wir die "echten" Daten
@@ -168,14 +176,12 @@ const App = {
             this.state.currentUser = user;
             this.updateHeaderUI();
             
-            // UI Switch sofort machen, falls wir noch im Auth Screen hängen
+            // UI Switch sofort machen
             document.getElementById('auth-view').classList.add('hidden');
             document.getElementById('app-view').classList.remove('hidden');
 
         } catch(e) { 
             console.error("Session Parse Error:", e); 
-            // Session nur löschen, wenn sie wirklich kaputt ist (JSON Fehler)
-            // Nicht löschen, nur weil Store noch lädt!
         }
     },
 
@@ -191,10 +197,11 @@ const App = {
     // --- ROUTER ---
     
     router(viewName) {
-        // FIX: Fallback auf gespeicherte View, falls Parameter leer
-        if(!viewName) viewName = localStorage.getItem('vm_last_view') || 'dashboard';
+        // Fallback
+        if(!viewName) viewName = 'dashboard';
         
-        // FIX: Speichern der neuen View für den nächsten Reload
+        // WICHTIG: Wir merken uns JEDEN Seitenwechsel sofort.
+        // Das sorgt dafür, dass F5 (Reload) auf der Seite bleibt.
         localStorage.setItem('vm_last_view', viewName);
         
         if (Store && Store.state) {
