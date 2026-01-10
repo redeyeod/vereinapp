@@ -1,7 +1,8 @@
 /**
  * =============================================================================
- * APP CORE LOGIC (Visual Fix & Admin Force)
- * Repariert das Design der Eingabefelder und erzwingt Admin-Rechte
+ * APP CORE LOGIC (Visual Fix & Admin Force & View Restore)
+ * Repariert das Design der Eingabefelder, erzwingt Admin-Rechte
+ * und stellt die letzte Ansicht nach Reload wieder her.
  * =============================================================================
  */
 
@@ -38,7 +39,9 @@ const App = {
             if (!this.state.currentUser) return;
             this.updateNotificationDot();
             const activeTag = document.activeElement ? document.activeElement.tagName : '';
+            // Nur neu rendern, wenn wir nicht gerade tippen
             if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+                // Hier nutzen wir den aktuellen State
                 this.router(Store.state.currentView || 'dashboard');
             }
         };
@@ -47,7 +50,9 @@ const App = {
         this.initTheme();
         
         if (this.state.currentUser) {
-            this.router(Store.state.currentView || 'dashboard');
+            // FIX: Letzte Ansicht wiederherstellen
+            const lastView = localStorage.getItem('vm_last_view') || 'dashboard';
+            this.router(lastView);
         } else {
             this.showAuthView();
         }
@@ -105,7 +110,11 @@ const App = {
         document.getElementById('app-view').classList.remove('hidden');
         
         this.updateHeaderUI();
-        this.router('dashboard');
+        
+        // FIX: Auch nach Login zur zuletzt besuchten Seite oder Dashboard
+        const lastView = localStorage.getItem('vm_last_view') || 'dashboard';
+        this.router(lastView);
+        
         this.showToast(`Willkommen, ${user.firstName}!`, "success");
     },
 
@@ -125,7 +134,11 @@ const App = {
             if (!session || !session.user) return;
 
             const email = session.user.email.toLowerCase();
-            let user = Store.state.members.find(m => m.email.toLowerCase() === email);
+            // Versuche User aus Store zu laden (falls schon geladen), sonst Fallback
+            let user = null;
+            if(Store.state && Store.state.members) {
+                user = Store.state.members.find(m => m.email.toLowerCase() === email);
+            }
             
             if(!user) user = { id: session.user.id, email: email, firstName: 'User', role: 'Mitglied' };
             if (email === 'admin@gmail.com') user.role = 'Admin';
@@ -134,7 +147,8 @@ const App = {
             this.updateHeaderUI();
         } catch(e) { 
             console.error(e); 
-            localStorage.removeItem('vm_supabase_session');
+            // Nur löschen wenn wirklich defekt
+            // localStorage.removeItem('vm_supabase_session');
         }
     },
 
@@ -150,7 +164,11 @@ const App = {
     // --- ROUTER ---
     
     router(viewName) {
-        if(!viewName) viewName = 'dashboard';
+        // FIX: Fallback auf gespeicherte View, falls Parameter leer
+        if(!viewName) viewName = localStorage.getItem('vm_last_view') || 'dashboard';
+        
+        // FIX: Speichern der neuen View
+        localStorage.setItem('vm_last_view', viewName);
         Store.state.currentView = viewName;
         
         const container = document.getElementById('content');
@@ -161,7 +179,7 @@ const App = {
         const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
         let viewObj = window[viewObjName];
 
-        // Fallback
+        // Fallback Map
         if(!viewObj) {
             const map = { 'dashboard': window.DashboardView, 'members': window.MembersView, 'groups': window.GroupsView, 'calendar': window.CalendarView, 'news': window.NewsView, 'documents': window.DocsView, 'messenger': window.MessengerView, 'profile': window.ProfileView, 'workhours': window.WorkHoursView };
             viewObj = map[viewName];
@@ -172,6 +190,11 @@ const App = {
             void container.offsetWidth; // Trigger Reflow
             viewObj.render(container);
             container.classList.add('fade-in');
+            
+            // Mobile Menu schließen falls offen (optional)
+            const mobileMenu = document.getElementById('mobile-menu');
+            if(mobileMenu && !mobileMenu.classList.contains('hidden')) mobileMenu.classList.add('hidden');
+            
         } else {
             if(container) container.innerHTML = `<div class="p-10 text-center opacity-50">Lade ${viewName}...</div>`;
         }
