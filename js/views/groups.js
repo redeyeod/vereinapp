@@ -3,8 +3,8 @@
  * GROUPS VIEW (RBAC Fixed & Member-Only Access)
  * Zeigt Gruppen an.
  * - Nicht-Mitglieder sehen Gruppen ausgegraut.
- * - Nur Mitglieder können Gruppen öffnen.
- * - Admins können bearbeiten (separater Button).
+ * - Mitglieder UND Admins/Betreuer können Gruppen öffnen.
+ * - Admins können bearbeiten.
  * =============================================================================
  */
 
@@ -63,26 +63,26 @@ const GroupsView = {
             if(emptyState) emptyState.classList.add('hidden');
             
             container.innerHTML = filtered.map(g => {
-                // 1. RECHTE PRÜFEN (Bearbeiten)
+                // 1. RECHTE PRÜFEN (Bearbeiten & Zugriff)
+                // Wer bearbeiten darf (Admin/Betreuer), hat automatisch auch Lesezugriff
                 const canEditThisGroup = App.can('manage_group_content', g.name);
                 
-                // 2. MITGLIEDSCHAFT PRÜFEN (Ansehen/Öffnen)
-                // Wir gehen davon aus, dass App.user.groups die Liste der Gruppennamen enthält, in denen der User ist.
-                // Fallback: Wenn App.user nicht gesetzt ist, ist man kein Mitglied.
+                // 2. MITGLIEDSCHAFT PRÜFEN
                 const isMember = App.user && Array.isArray(App.user.groups) && App.user.groups.includes(g.name);
 
-                // 3. OPTIK & INTERAKTION BESTIMMEN
-                // Wenn Mitglied: Klickbar, Volle Deckkraft, Hover-Effekt
-                // Wenn kein Mitglied: Nicht klickbar, Ausgegraut, "Not Allowed" Cursor
-                const cardClasses = isMember 
+                // 3. ZUGRIFFSBRECHTIGUNG (Entweder Admin ODER Mitglied)
+                const hasAccess = canEditThisGroup || isMember;
+
+                // 4. OPTIK & INTERAKTION BESTIMMEN
+                const cardClasses = hasAccess 
                     ? "hover:border-blue-500/30 cursor-pointer opacity-100" 
                     : "opacity-60 grayscale-[0.8] cursor-not-allowed border-transparent";
                 
-                const clickAction = isMember 
+                const clickAction = hasAccess 
                     ? `onclick="GroupsView.openGroup('${g.id}')"` 
-                    : ""; // Kein Onclick für Nicht-Mitglieder
+                    : ""; 
 
-                // Mitglieder zählen (für die Anzeige)
+                // Mitglieder zählen
                 const memberCount = (Store.state.members || []).filter(m => Array.isArray(m.groups) && m.groups.includes(g.name)).length;
 
                 return `
@@ -108,12 +108,11 @@ const GroupsView = {
                     
                     ${g.description ? `<p class="text-xs text-dark-muted line-clamp-2">${g.description}</p>` : ''}
                     
-                    ${!isMember ? `
+                    ${!hasAccess ? `
                         <div class="mt-2 text-[10px] uppercase font-bold text-red-400/70 tracking-wider flex items-center gap-1">
                              <i class="fa-solid fa-lock"></i> Kein Zugriff
                         </div>
                     ` : `
-                         <!-- Mitglieder Preview nur anzeigen wenn Zugriff erlaubt -->
                         <div class="flex -space-x-2 overflow-hidden py-1 mt-auto">
                             ${this.renderMemberAvatars(g.name)}
                         </div>
@@ -123,22 +122,20 @@ const GroupsView = {
         }
     },
 
-    // Neue Funktion zum Öffnen der Gruppe
     openGroup(id) {
         const g = Store.state.groups.find(gr => gr.id == id);
         if (!g) return;
 
-        // Sicherheitscheck nochmal beim Öffnen
+        // Sicherheitscheck beim Öffnen: Admin/Betreuer ODER Mitglied
+        const canEditThisGroup = App.can('manage_group_content', g.name);
         const isMember = App.user && Array.isArray(App.user.groups) && App.user.groups.includes(g.name);
         
-        if (isMember) {
-            // HIER: Logik zum Navigieren in die Gruppe
-            // Zum Beispiel: App.navigate('group-details', { id: g.id });
+        if (canEditThisGroup || isMember) {
             console.log("Öffne Gruppe:", g.name);
             App.showToast(`Öffne Gruppe: ${g.name}`, "info");
-            // App.router.navigate(...) oder ähnliches hier einfügen
+            // App.router.navigate(...) oder Logik hier einfügen
         } else {
-            App.showToast("Du bist kein Mitglied dieser Gruppe.", "error");
+            App.showToast("Du hast keinen Zugriff auf diese Gruppe.", "error");
         }
     },
 
