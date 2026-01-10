@@ -1,16 +1,13 @@
 /**
  * =============================================================================
- * MEMBERS VIEW (Final Fix - Full Profile)
- * Verwaltet Mitglieder mit vollständigem Profil (Adresse, Kontakt etc.)
+ * MEMBERS VIEW (Dynamic Roles Update)
+ * Lädt nun die verfügbaren Rollen direkt aus der Datenbank für das Dropdown.
  * =============================================================================
  */
 
 const MembersView = {
-    standardRoles: [
-        "1. Vorstand", "2. Vorstand", "3. Vorstand", "4. Vorstand",
-        "Präsident", "Vize-Präsident",
-        "Kassenwart", "Protokollant", "Ehren-Mitglied", "Beisitzer", "Mitglied"
-    ],
+    // Nur noch "Mitglied" als absoluter Notfall-Fallback
+    standardRoles: ["Mitglied"],
 
     render(container) {
         const canManage = App.can('manage_members');
@@ -57,6 +54,8 @@ const MembersView = {
         
         if (typeof Store !== 'undefined' && Store.fetchTable) {
             await Store.fetchTable('members');
+            // Auch Rollen neu laden, damit das Dropdown aktuell ist
+            await Store.fetchTable('roles');
         }
         this.updateList();
         
@@ -90,7 +89,6 @@ const MembersView = {
                 const isActive = m.status === 'active';
                 const statusColor = isActive ? 'bg-green-500' : 'bg-red-500';
 
-                // FIX: ID muss als String übergeben werden, falls es eine UUID ist -> '${m.id}'
                 return `
                 <div onclick="MembersView.openDetailModal('${m.id}')" class="bg-dark-card p-4 rounded-xl border border-dark-border flex items-center gap-4 hover:border-blue-500/50 transition-all cursor-pointer group shadow-sm relative overflow-hidden">
                     <div class="absolute right-3 top-3 w-2 h-2 ${statusColor} rounded-full shadow-sm"></div>
@@ -149,7 +147,6 @@ const MembersView = {
             ${!m.email && !m.phone && !m.birthdate ? '<p class="text-dark-muted italic text-xs">Keine Kontaktdaten</p>' : ''}
         `;
 
-        // FIX: ID in Anführungszeichen setzen für delete und openEditModal
         const footerHtml = canManage ? `
             <div class="mt-6 pt-4 border-t border-dark-border flex gap-3">
                 <button onclick="MembersView.openEditModal('${m.id}')" class="btn-primary flex-1">Bearbeiten</button>
@@ -216,10 +213,23 @@ const MembersView = {
         const data = editModeData || {};
         const title = isEdit ? "Mitglied bearbeiten" : "Neues Mitglied";
         const btnText = isEdit ? "Speichern" : "Mitglied anlegen";
-        
-        // FIX: WICHTIG! Anführungszeichen um data.id hinzugefügt, damit UUIDs kein JS crashen
         const handler = isEdit ? `MembersView.handleUpdate(event, '${data.id}')` : "MembersView.handleAdd(event)";
-        const roleOptions = this.standardRoles.map(r => `<option value="${r}" ${data.role === r ? 'selected' : ''}>${r}</option>`).join('');
+        
+        // --- ROLLEN DROPDOWN LOGIK ---
+        const dbRoles = (Store.state.roles && Store.state.roles.length > 0) ? Store.state.roles : [];
+        let roleOptions = '';
+
+        if (dbRoles.length > 0) {
+            // Wenn DB-Rollen vorhanden sind, nutzen wir diese
+            roleOptions = dbRoles.map(r => 
+                `<option value="${r.name}" ${data.role === r.name ? 'selected' : ''}>${r.name}</option>`
+            ).join('');
+        } else {
+            // Fallback auf Standard-Liste (nur "Mitglied"), falls DB leer oder offline
+            roleOptions = this.standardRoles.map(r => 
+                `<option value="${r}" ${data.role === r ? 'selected' : ''}>${r}</option>`
+            ).join('');
+        }
 
         const html = `
             <div class="p-4 md:p-8 max-h-[85vh] overflow-y-auto custom-scrollbar">
@@ -255,11 +265,11 @@ const MembersView = {
 
                     <!-- Role & Status -->
                     <div class="mt-4">
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Rolle *</label>
-                        <select name="roleSelect" class="form-input cursor-pointer" onchange="document.getElementById('customRoleInput').classList.toggle('hidden', this.value !== 'custom'); if(this.value === 'custom') document.getElementById('customRoleInput').focus();">
-                            ${roleOptions}<option value="" disabled>──────────</option><option value="custom" ${isEdit && !this.standardRoles.includes(data.role) ? 'selected' : ''}>✎ Eigene...</option>
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Rolle (Rechte) *</label>
+                        <select name="roleSelect" class="form-input cursor-pointer">
+                            ${roleOptions}
                         </select>
-                        <input type="text" name="customRole" id="customRoleInput" value="${isEdit && !this.standardRoles.includes(data.role) ? data.role : ''}" class="form-input mt-2 ${isEdit && !this.standardRoles.includes(data.role) ? '' : 'hidden'}" placeholder="Bezeichnung der Rolle eingeben">
+                        <p class="text-[10px] text-dark-muted mt-1">Wähle eine der vom Admin definierten Rollen.</p>
                     </div>
                     
                     ${isEdit ? `
@@ -292,8 +302,7 @@ const MembersView = {
         try {
             const fd = new FormData(e.target);
             let role = fd.get('roleSelect');
-            if (role === 'custom') role = fd.get('customRole') || 'Mitglied';
-
+            
             const firstName = fd.get('firstName');
             const email = fd.get('email');
             const generatedPassword = this.generatePassword();
@@ -374,7 +383,6 @@ const MembersView = {
         return error;
     },
 
-    // NEU: Garantierte Update-Funktion mit Token, .select() und explizitem Entfernen der ID
     async safeUpdate(id, updates) {
         if(typeof supabase === 'undefined') return { message: "Supabase fehlt" };
         const sessionStr = localStorage.getItem('vm_supabase_session');
@@ -386,18 +394,12 @@ const MembersView = {
                 global: { headers: { Authorization: `Bearer ${token}` } }
             });
             
-            // WICHTIG: Erstelle eine Kopie und lösche 'id' explizit raus!
-            // Das verhindert den "column id can only be updated to DEFAULT" Fehler
             const cleanUpdates = { ...updates };
             if ('id' in cleanUpdates) delete cleanUpdates.id;
 
-            console.log("Sende Update (bereinigt):", cleanUpdates); // Debugging
-
-            // .select() um die Antwort zu bekommen
             const { data, error } = await client.from('members').update(cleanUpdates).eq('id', id).select();
             
             if (error) return error;
-            // Prüfung auf Silent Fail (RLS)
             if (!data || data.length === 0) {
                 return { message: "Keine Daten geändert. Fehlende Berechtigung oder ID nicht gefunden." };
             }
@@ -418,9 +420,7 @@ const MembersView = {
 
         const fd = new FormData(e.target);
         let role = fd.get('roleSelect');
-        if (role === 'custom') role = fd.get('customRole') || 'Mitglied';
         
-        // WICHTIG: Wir bauen ein sauberes Objekt NUR mit den Feldern, die wir ändern wollen.
         const updates = { 
             firstName: fd.get('firstName'), 
             lastName: fd.get('lastName'), 
@@ -430,25 +430,21 @@ const MembersView = {
             city: fd.get('city'),
             email: fd.get('email'), 
             phone: fd.get('phone'),
-            // Datum sauber behandeln: Leerer String -> null
             birthdate: fd.get('birthdate') ? fd.get('birthdate') : null,
             role: role, 
             status: fd.get('status') 
         };
             
-        // Wir nutzen safeUpdate mit getrennter ID und sauberem Payload
         const error = await this.safeUpdate(id, updates);
         
         if (error) {
             console.error("Update Fehler:", error);
             App.showToast(error.message || "Fehler beim Update", "error");
-            // Fehler anzeigen, Button resetten, Dialog NICHT schließen
             btn.innerText = oldText;
             btn.disabled = false;
             return;
         }
 
-        // Erfolg
         App.closeModal();
         this.refreshData();
     }
