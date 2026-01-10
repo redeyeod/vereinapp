@@ -321,6 +321,36 @@ const WorkHoursView = {
     // GENERAL ACTIONS
     // =========================================================================
 
+    // NEU: Garantierte Update-Funktion (Kopie der Logik aus members.js)
+    async safeUpdate(id, updates) {
+        if(typeof supabase === 'undefined') return { message: "Supabase fehlt" };
+        const sessionStr = localStorage.getItem('vm_supabase_session');
+        if (!sessionStr) return { message: "Nicht eingeloggt" };
+        
+        try {
+            const token = JSON.parse(sessionStr).access_token;
+            const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, {
+                global: { headers: { Authorization: `Bearer ${token}` } }
+            });
+            
+            // WICHTIG: Erstelle eine Kopie und lösche 'id' explizit raus!
+            const cleanUpdates = { ...updates };
+            if ('id' in cleanUpdates) delete cleanUpdates.id;
+
+            // .select() um zu prüfen ob wirklich was geändert wurde
+            const { data, error } = await client.from('work_entries').update(cleanUpdates).eq('id', id).select();
+            
+            if (error) return error;
+            if (!data || data.length === 0) {
+                return { message: "Keine Daten geändert. Fehlende Berechtigung oder Eintrag nicht gefunden." };
+            }
+            
+            return null;
+        } catch(e) {
+            return e;
+        }
+    },
+
     deleteEntry(id) {
         if(confirm("Diesen Eintrag wirklich unwiderruflich löschen?")) {
             Store.remove('work_entries', id);
@@ -339,15 +369,26 @@ const WorkHoursView = {
     async decide(id, status) {
         const entry = Store.state.work_entries.find(e => e.id == id);
         if(entry) {
-            const updatedEntry = { ...entry, status: status };
-            await Store.update('work_entries', updatedEntry);
+            // FIX: Wir senden nur das Status-Update, nicht das ganze Objekt
+            // Und wir nutzen safeUpdate um den Auth-Token zu garantieren
+            const updates = { status: status };
+            const error = await this.safeUpdate(id, updates);
             
-            // Lokales Update
+            if (error) {
+                console.error("Genehmigung gescheitert:", error);
+                App.showToast("Fehler beim Speichern: " + (error.message || "Unbekannt"), "error");
+                return;
+            }
+            
+            // Lokales Update für sofortiges Feedback
             const idx = Store.state.work_entries.indexOf(entry);
-            if(idx !== -1) Store.state.work_entries[idx] = updatedEntry;
+            if(idx !== -1) Store.state.work_entries[idx] = { ...entry, status };
 
             App.showToast(status === 'approved' ? 'Stunden genehmigt' : 'Antrag abgelehnt');
             this.render(document.getElementById('content'));
+            
+            // Daten sicherheitshalber neu laden
+            if(Store.fetchTable) Store.fetchTable('work_entries');
         }
     },
 
