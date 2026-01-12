@@ -56,6 +56,8 @@
         .fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
+        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        
         /* Toast */
         #toast { visibility: hidden; min-width: 280px; background-color: #1e293b; color: #fff; border: 1px solid #334155; border-radius: 99px; padding: 12px 24px; position: fixed; z-index: 100; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(20px); transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); opacity: 0; box-shadow: 0 10px 30px -5px rgba(0,0,0,0.3); }
         #toast.show { visibility: visible; opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -108,10 +110,10 @@
 
     <!-- APP VIEW -->
     <div id="app-view" class="h-screen flex flex-col overflow-hidden hidden bg-dark-bg">
-        <!-- Header -->
-        <header class="h-16 md:h-20 bg-dark-card/80 backdrop-blur-md border-b border-dark-border flex items-center justify-between px-4 md:px-8 z-30 sticky top-0">
+        <!-- Header (Wird im Chat-Modus auf Mobile ausgeblendet) -->
+        <header id="main-header" class="h-16 md:h-20 bg-dark-card/80 backdrop-blur-md border-b border-dark-border flex items-center justify-between px-4 md:px-8 z-30 sticky top-0 transition-transform duration-300">
             <!-- Logo -->
-            <button onclick="if(typeof App !== 'undefined') App.router('dashboard')" class="flex items-center gap-3 group">
+            <button onclick="if(typeof App !== 'undefined') App.switchMobileMode('app')" class="flex items-center gap-3 group">
                 <div class="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform">
                     <i class="fa-solid fa-users-rectangle text-sm md:text-base"></i>
                 </div>
@@ -153,28 +155,17 @@
 
         <!-- Mobile Menu Overlay -->
         <div id="mobile-menu" class="fixed inset-0 z-50 pointer-events-none">
-            <!-- Backdrop -->
             <div id="mobile-menu-backdrop" onclick="App.toggleMobileMenu()" class="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 transition-opacity duration-300"></div>
-            
-            <!-- Drawer -->
             <div id="mobile-menu-drawer" class="absolute right-0 top-0 h-full w-[80%] max-w-xs bg-dark-card border-l border-dark-border shadow-2xl transform translate-x-full transition-transform duration-300 flex flex-col pointer-events-auto">
                 <div class="p-6 border-b border-dark-border flex items-center justify-between">
                     <span class="text-lg font-bold text-white">Menü</span>
                     <button onclick="App.toggleMobileMenu()" class="w-8 h-8 rounded-full bg-dark-bg flex items-center justify-center text-dark-muted hover:text-white"><i class="fa-solid fa-times"></i></button>
                 </div>
-                
                 <div class="flex-1 overflow-y-auto p-4 space-y-2">
-                    <!-- User Info Mobile -->
                     <div onclick="App.router('profile')" class="bg-dark-bg/50 p-4 rounded-xl border border-dark-border flex items-center gap-3 mb-6 cursor-pointer active:scale-95 transition-transform">
-                        <div class="w-10 h-10 rounded-full bg-brand-600 flex items-center justify-center text-white font-bold shadow-lg">
-                            <i class="fa-solid fa-user"></i>
-                        </div>
-                        <div>
-                            <p class="text-sm font-bold text-white" id="mobile-user-name">User</p>
-                            <p class="text-xs text-brand-500" id="mobile-user-role">Rolle</p>
-                        </div>
+                        <div class="w-10 h-10 rounded-full bg-brand-600 flex items-center justify-center text-white font-bold shadow-lg"><i class="fa-solid fa-user"></i></div>
+                        <div><p class="text-sm font-bold text-white" id="mobile-user-name">User</p><p class="text-xs text-brand-500" id="mobile-user-role">Rolle</p></div>
                     </div>
-
                     <p class="text-xs font-bold text-dark-muted uppercase tracking-wider px-2 mb-2">Apps</p>
                     <button onclick="App.router('dashboard')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-house w-6 text-center"></i> Dashboard</button>
                     <button onclick="App.router('members')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-users w-6 text-center"></i> Mitglieder</button>
@@ -182,27 +173,34 @@
                     <button onclick="App.router('calendar')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-calendar w-6 text-center"></i> Kalender</button>
                     <button onclick="App.router('news')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-newspaper w-6 text-center"></i> News</button>
                     <button onclick="App.router('workhours')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-briefcase w-6 text-center"></i> Arbeitsstunden</button>
-                    <button onclick="App.router('messenger')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-comments w-6 text-center"></i> Messenger</button>
-                    
                     <div id="mobile-admin-section" class="hidden">
                         <div class="h-px bg-dark-border my-2"></div>
                         <p class="text-xs font-bold text-dark-muted uppercase tracking-wider px-2 mb-2 mt-4">Verwaltung</p>
                         <button onclick="App.router('admin_roles')" class="w-full text-left p-3 rounded-xl text-brand-500 bg-brand-500/10 hover:bg-brand-500/20 flex items-center gap-3 transition-colors"><i class="fa-solid fa-shield-halved w-6 text-center"></i> Rollen & Rechte</button>
                     </div>
                 </div>
-
                 <div class="p-4 border-t border-dark-border">
-                    <button onclick="App.logout()" class="w-full py-3 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 font-bold transition-colors flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-right-from-bracket"></i> Abmelden
-                    </button>
+                    <button onclick="App.logout()" class="w-full py-3 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 font-bold transition-colors flex items-center justify-center gap-2"><i class="fa-solid fa-right-from-bracket"></i> Abmelden</button>
                 </div>
             </div>
         </div>
 
         <!-- Content Area -->
-        <main id="content" class="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 scroll-smooth max-w-7xl mx-auto w-full relative">
+        <main id="content" class="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 pb-20 md:pb-8 scroll-smooth max-w-7xl mx-auto w-full relative">
             <!-- Views werden hier geladen -->
         </main>
+
+        <!-- NEW: Mobile Bottom Navigation -->
+        <div id="mobile-bottom-nav" class="md:hidden fixed bottom-0 left-0 w-full h-16 bg-dark-card border-t border-dark-border flex items-center justify-around z-40 pb-safe">
+            <button onclick="App.switchMobileMode('app')" class="flex flex-col items-center justify-center w-1/2 h-full text-brand-500 transition-colors" id="btn-mode-app">
+                <i class="fa-solid fa-layer-group text-xl mb-1"></i>
+                <span class="text-[10px] font-bold uppercase tracking-wider">App</span>
+            </button>
+            <button onclick="App.switchMobileMode('chat')" class="flex flex-col items-center justify-center w-1/2 h-full text-dark-muted hover:text-white transition-colors" id="btn-mode-chat">
+                <i class="fa-solid fa-comments text-xl mb-1"></i>
+                <span class="text-[10px] font-bold uppercase tracking-wider">Chat</span>
+            </button>
+        </div>
     </div>
 
     <!-- Global Modals & Toasts -->
