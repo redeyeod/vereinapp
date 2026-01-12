@@ -13,7 +13,6 @@ const GroupsView = {
     },
 
     render(container) {
-        // Sicherheits-Check: Container muss existieren
         if (!container) return;
 
         if (this.state.activeGroupId) {
@@ -27,15 +26,12 @@ const GroupsView = {
     // LISTEN-ANSICHT (GRID)
     // -------------------------------------------------------------------------
     renderList(container) {
-        // Daten sicher abrufen
         const members = (Store.state && Store.state.members) ? Store.state.members : [];
         const groups = (Store.state && Store.state.groups) ? Store.state.groups : [];
         
-        // Zähler berechnen: Wie viele Mitglieder pro Gruppe?
         const counts = {};
         members.forEach(m => {
             const memberGroups = Array.isArray(m.groups) ? m.groups : [];
-            // Legacy Support (falls noch alte Datenstruktur 'm.group' existiert)
             if (m.group && m.group !== 'Keine' && !memberGroups.includes(m.group)) {
                 memberGroups.push(m.group);
             }
@@ -44,21 +40,17 @@ const GroupsView = {
             });
         });
 
-        // Rechte & Filter
         const canManageAll = App.can('manage_all_groups'); 
         const currentUser = App.state.currentUser;
         
-        // Meine Gruppen ermitteln
         let myGroupNames = [];
         if (currentUser && Array.isArray(currentUser.groups)) {
             myGroupNames = currentUser.groups;
         }
 
-        // Aufteilung: Meine vs. Andere
         const myGroups = groups.filter(g => myGroupNames.includes(g.name));
         const otherGroups = groups.filter(g => !myGroupNames.includes(g.name));
 
-        // Add Button (als Karte)
         const addButtonHtml = canManageAll 
             ? `<button onclick="GroupsView.openAddModal()" class="w-full bg-dark-card hover:bg-dark-hover border border-dashed border-dark-border hover:border-brand-500/50 rounded-2xl p-6 flex flex-col items-center justify-center gap-3 transition-all group min-h-[160px]">
                 <div class="w-12 h-12 rounded-full bg-dark-bg border border-dark-border flex items-center justify-center text-dark-muted group-hover:text-brand-500 group-hover:border-brand-500/50 transition-colors">
@@ -73,15 +65,12 @@ const GroupsView = {
             const canManage = App.can('manage_group_content', group.name);
             const hasAccess = isMyGroup || canManage || App.can('admin_global');
             
-            // Design Klassen
             const baseClass = "relative flex flex-col justify-between p-5 rounded-2xl border transition-all min-h-[160px] group overflow-hidden";
             const stateClass = hasAccess 
                 ? "bg-dark-card border-dark-border hover:border-brand-500/50 hover:shadow-lg cursor-pointer" 
                 : "bg-dark-bg/50 border-dark-border/50 opacity-60 cursor-not-allowed";
             
             const iconColor = hasAccess ? "text-brand-500 bg-brand-500/10" : "text-dark-muted bg-dark-bg";
-
-            // Click-Logik: Nur öffnen wenn Zugriff erlaubt
             const clickAction = hasAccess ? `onclick="GroupsView.openGroup('${group.id}')"` : `onclick="App.showToast('Kein Zugriff', 'error')"`;
 
             return `
@@ -107,7 +96,6 @@ const GroupsView = {
 
         container.innerHTML = `
             <div class="fade-in space-y-8 pb-20">
-                <!-- Header -->
                 <div class="flex items-center justify-between">
                     <div>
                         <h2 class="text-2xl md:text-3xl font-bold text-white">Gruppen</h2>
@@ -115,7 +103,6 @@ const GroupsView = {
                     </div>
                 </div>
 
-                <!-- Meine Gruppen -->
                 <div>
                     <h3 class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-4 px-1">Meine Mitgliedschaften</h3>
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -124,7 +111,6 @@ const GroupsView = {
                     </div>
                 </div>
 
-                <!-- Andere Gruppen -->
                 ${otherGroups.length > 0 ? `
                 <div class="pt-4 border-t border-dark-border/50">
                     <h3 class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-4 px-1">Weitere Gruppen</h3>
@@ -143,7 +129,6 @@ const GroupsView = {
         const group = Store.state.groups ? Store.state.groups.find(g => g.id == this.state.activeGroupId) : null;
         if (!group) { this.closeGroup(); return; }
 
-        // Fallback Arrays falls leer
         if (!group.chat) group.chat = [];
         if (!group.files) group.files = []; 
 
@@ -158,7 +143,6 @@ const GroupsView = {
 
         container.innerHTML = `
             <div class="fade-in flex flex-col h-full max-h-[calc(100vh-140px)] md:max-h-none pb-20">
-                <!-- Header Toolbar -->
                 <div class="flex items-center gap-3 mb-6">
                     <button onclick="GroupsView.closeGroup()" class="w-10 h-10 rounded-xl bg-dark-card border border-dark-border text-dark-muted hover:text-white hover:bg-dark-hover flex items-center justify-center transition-all flex-shrink-0 shadow-sm">
                         <i class="fa-solid fa-arrow-left"></i>
@@ -172,7 +156,6 @@ const GroupsView = {
                     </button>` : ''}
                 </div>
 
-                <!-- Tabs (Scrollable Pills) -->
                 <div class="flex gap-2 mb-6 overflow-x-auto pb-1 no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
                     ${tabs.map(tab => `
                         <button onclick="GroupsView.switchTab('${tab.id}')" 
@@ -185,14 +168,12 @@ const GroupsView = {
                     `).join('')}
                 </div>
 
-                <!-- Tab Content Area -->
                 <div class="flex-1 bg-dark-card/50 border border-dark-border rounded-2xl p-4 md:p-6 overflow-y-auto custom-scrollbar relative">
                     ${this.getTabContent(group)}
                 </div>
             </div>
         `;
         
-        // Scroll nach unten, wenn Chat aktiv
         if(this.state.activeTab === 'chat') {
             setTimeout(() => {
                 const chatBox = document.getElementById('chat-messages');
@@ -215,7 +196,6 @@ const GroupsView = {
     renderTabMembers(group) {
         const members = (Store.state.members || []).filter(m => {
             const groups = Array.isArray(m.groups) ? m.groups : [];
-            // Legacy + Array Check
             if (m.group === group.name) return true; 
             return groups.includes(group.name);
         });
@@ -382,7 +362,6 @@ const GroupsView = {
             timestamp: new Date().toISOString()
         };
 
-        // Optimistic UI Update
         const chat = group.chat || [];
         const updatedChat = [...chat, newMessage];
         group.chat = updatedChat;
@@ -409,11 +388,9 @@ const GroupsView = {
     // --- NAVIGATION & LOGIC ---
 
     openGroup(id) { 
-        // WICHTIG: Typumwandlung sicherstellen, da IDs mal string mal int sein können
         const group = Store.state.groups.find(g => g.id == id);
         
         if(!group) {
-            console.error("Gruppe nicht gefunden:", id);
             App.showToast("Gruppe nicht gefunden", "error");
             return;
         }
@@ -499,7 +476,6 @@ const GroupsView = {
         const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
         await _sb.from('groups').update({ name: newName }).eq('id', groupId);
         
-        // Local Update
         const group = Store.state.groups.find(g => g.id == groupId);
         if(group) group.name = newName;
         
@@ -579,20 +555,58 @@ const GroupsView = {
         App.showToast("Entfernt");
     },
 
-    // --- EVENT MODALS (Analog Calendar View) ---
+    // --- EVENT MODALS (mit Ganztägig, Enddatum, Abbruch) ---
     openEventAddModal(groupId) {
         const html = `
             <div class="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <h3 class="text-xl font-bold text-white mb-6">Neuer Termin</h3>
-                <form onsubmit="GroupsView.handleEventAdd(event, '${groupId}')" class="space-y-4">
-                    <input name="title" class="form-input" placeholder="Titel" required>
-                    <div class="grid grid-cols-2 gap-4">
-                        <input type="date" name="date" class="form-input dark-date" required>
-                        <input type="time" name="time" class="form-input dark-date">
+                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4">
+                    <h3 class="text-xl font-bold text-white">Neuer Termin</h3>
+                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2"><i class="fa-solid fa-times text-xl"></i></button>
+                </div>
+                
+                <form onsubmit="GroupsView.handleEventAdd(event, '${groupId}')" class="space-y-5">
+                    <div>
+                        <label class="text-muted text-xs uppercase font-bold">Titel</label>
+                        <input name="title" class="form-input" placeholder="Titel" required>
                     </div>
-                    <input name="location" class="form-input" placeholder="Ort">
-                    <textarea name="description" class="form-input h-24" placeholder="Infos..."></textarea>
-                    <button class="btn-primary w-full">Erstellen</button>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-muted text-xs uppercase font-bold">Start</label>
+                            <input type="date" name="date" id="startDateInput" class="form-input dark-date" required onchange="document.getElementById('endDateInput').min = this.value; if(!document.getElementById('endDateInput').value) document.getElementById('endDateInput').value = this.value;">
+                        </div>
+                        <div>
+                            <label class="text-muted text-xs uppercase font-bold">Ende</label>
+                            <input type="date" name="endDate" id="endDateInput" class="form-input dark-date">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 items-end">
+                        <div>
+                            <label class="text-muted text-xs uppercase font-bold">Uhrzeit</label>
+                            <input type="time" name="time" id="eventTimeInput" class="form-input dark-date" required>
+                        </div>
+                        <label class="flex items-center gap-3 p-3 bg-dark-bg/50 border border-dark-border rounded-xl cursor-pointer hover:border-brand-500/50 transition-colors h-[46px]">
+                            <input type="checkbox" name="allDay" class="w-5 h-5 rounded border-dark-border bg-dark-bg text-brand-600 focus:ring-brand-500" 
+                                onchange="const t = document.getElementById('eventTimeInput'); t.disabled = this.checked; if(this.checked) t.value = ''; else t.focus(); t.required = !this.checked;">
+                            <span class="text-sm font-medium text-white">Ganztägig</span>
+                        </label>
+                    </div>
+
+                    <div>
+                        <label class="text-muted text-xs uppercase font-bold">Ort</label>
+                        <input name="location" class="form-input" placeholder="Ort">
+                    </div>
+                    
+                    <div>
+                        <label class="text-muted text-xs uppercase font-bold">Beschreibung</label>
+                        <textarea name="description" class="form-input h-24" placeholder="Infos..."></textarea>
+                    </div>
+
+                    <div class="flex gap-3 pt-2">
+                        <button type="button" onclick="App.closeModal()" class="flex-1 py-3 border border-dark-border rounded-xl text-dark-muted hover:text-white transition-colors">Abbrechen</button>
+                        <button type="submit" class="flex-1 btn-primary">Erstellen</button>
+                    </div>
                 </form>
             </div>
         `;
@@ -604,10 +618,17 @@ const GroupsView = {
         const fd = new FormData(e.target);
         const group = Store.state.groups.find(g => g.id == groupId);
         
+        const isAllDay = fd.get('allDay') === 'on';
+        let startDate = fd.get('date');
+        let endDate = fd.get('endDate');
+        if (!endDate) endDate = startDate;
+
         const event = {
             title: fd.get('title'),
-            date: fd.get('date'),
-            time: fd.get('time') || '00:00',
+            date: startDate,
+            endDate: endDate,
+            time: isAllDay ? null : fd.get('time'),
+            allDay: isAllDay,
             location: fd.get('location'),
             description: fd.get('description'),
             group: group.name,
@@ -624,28 +645,132 @@ const GroupsView = {
         const e = Store.state.events.find(ev => ev.id == eventId);
         if(!e) return;
         
-        // Einfaches Modal, wenn man die komplexe Kalender-Logik hier nicht duplizieren will
-        // Du kannst hier auch CalendarView.openDetailModal(e.id) aufrufen, falls verfügbar
-        if (window.CalendarView && window.CalendarView.openDetailModal) {
-            window.CalendarView.openDetailModal(e.id);
-            return;
+        // Berechtigungen prüfen
+        const group = Store.state.groups.find(g => g.name === e.group);
+        const canManage = group && App.can('manage_group_content', group.name);
+
+        const startDate = new Date(e.date);
+        const endDate = e.endDate ? new Date(e.endDate) : null;
+        const dateStr = startDate.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        
+        let endStr = '';
+        if (endDate && endDate.getTime() !== startDate.getTime()) {
+            endStr = ' - ' + endDate.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' });
         }
 
+        // Abstimmung
+        const attendance = e.attendance || {};
+        const yesCount = Object.values(attendance).filter(v => v === 'yes').length;
+        const maybeCount = Object.values(attendance).filter(v => v === 'maybe').length;
+        const noCount = Object.values(attendance).filter(v => v === 'no').length;
+        
+        const currentUser = App.state.currentUser;
+        const myStatus = currentUser ? attendance[currentUser.id] : null;
+
+        const btnClass = (active) => active 
+            ? 'bg-brand-600 text-white border-brand-600 shadow-lg scale-105' 
+            : 'bg-dark-bg text-dark-muted border-dark-border hover:border-brand-500/50 hover:text-white';
+
         const html = `
-            <div class="p-6">
-                <div class="flex justify-between mb-4">
-                    <h3 class="text-xl font-bold text-white">${e.title}</h3>
-                    <button onclick="App.closeModal()"><i class="fa-solid fa-times text-dark-muted"></i></button>
+            <div class="p-6 h-full flex flex-col">
+                <div class="flex justify-between items-start mb-6 border-b border-dark-border pb-4">
+                    <div>
+                        <div class="text-brand-400 text-xs font-bold uppercase tracking-wider mb-1">${dateStr}${endStr}</div>
+                        <h3 class="text-xl md:text-2xl font-bold text-white leading-tight">${e.title}</h3>
+                        <div class="flex items-center gap-4 text-sm text-dark-muted mt-2">
+                            <span><i class="fa-regular fa-clock mr-1"></i> ${e.allDay ? 'Ganztägig' : e.time + ' Uhr'}</span>
+                            ${e.location ? `<span><i class="fa-solid fa-location-dot mr-1"></i> ${e.location}</span>` : ''}
+                        </div>
+                    </div>
+                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
-                <div class="space-y-3 text-sm text-dark-text mb-6">
-                    <p><i class="fa-regular fa-clock w-6"></i> ${new Date(e.date).toLocaleDateString()} ${e.time}</p>
-                    <p><i class="fa-solid fa-location-dot w-6"></i> ${e.location || 'Kein Ort'}</p>
-                    <p class="bg-dark-bg p-3 rounded-xl border border-dark-border">${e.description || 'Keine Beschreibung'}</p>
+
+                <div class="flex-1 overflow-y-auto custom-scrollbar space-y-6">
+                    ${e.description ? `
+                    <div class="bg-dark-bg/50 p-4 rounded-xl border border-dark-border text-sm leading-relaxed text-white whitespace-pre-wrap">
+                        ${e.description}
+                    </div>` : ''}
+
+                    <!-- Abstimmung Buttons -->
+                    <div>
+                        <h4 class="text-xs font-bold text-dark-muted uppercase mb-3">Deine Antwort</h4>
+                        <div class="grid grid-cols-3 gap-3">
+                            <button onclick="GroupsView.setAttendance('${e.id}', 'yes')" class="p-3 rounded-xl border font-bold text-sm transition-all flex flex-col items-center gap-1 ${btnClass(myStatus === 'yes')}">
+                                <i class="fa-solid fa-check text-lg"></i> Dabei
+                            </button>
+                            <button onclick="GroupsView.setAttendance('${e.id}', 'maybe')" class="p-3 rounded-xl border font-bold text-sm transition-all flex flex-col items-center gap-1 ${btnClass(myStatus === 'maybe')}">
+                                <i class="fa-solid fa-question text-lg"></i> Vielleicht
+                            </button>
+                            <button onclick="GroupsView.setAttendance('${e.id}', 'no')" class="p-3 rounded-xl border font-bold text-sm transition-all flex flex-col items-center gap-1 ${btnClass(myStatus === 'no')}">
+                                <i class="fa-solid fa-xmark text-lg"></i> Absage
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Statistik -->
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div class="bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
+                            <div class="text-xl font-bold text-emerald-400">${yesCount}</div>
+                            <div class="text-[10px] uppercase text-emerald-500/70 font-bold">Zusagen</div>
+                        </div>
+                        <div class="bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
+                            <div class="text-xl font-bold text-amber-400">${maybeCount}</div>
+                            <div class="text-[10px] uppercase text-amber-500/70 font-bold">Vielleicht</div>
+                        </div>
+                        <div class="bg-red-500/10 p-3 rounded-xl border border-red-500/20">
+                            <div class="text-xl font-bold text-red-400">${noCount}</div>
+                            <div class="text-[10px] uppercase text-red-500/70 font-bold">Absagen</div>
+                        </div>
+                    </div>
                 </div>
-                <button onclick="GroupsView.deleteGroupEvent('${e.id}')" class="w-full py-3 border border-red-500/30 text-red-400 rounded-xl font-bold">Löschen</button>
+
+                ${canManage ? `
+                <div class="mt-6 pt-4 border-t border-dark-border">
+                    <button onclick="GroupsView.deleteGroupEvent('${e.id}')" class="w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl font-bold border border-red-500/20 transition-all flex items-center justify-center gap-2">
+                        <i class="fa-regular fa-trash-can"></i> Termin löschen
+                    </button>
+                </div>` : ''}
             </div>
         `;
         App.openModal(html);
+    },
+
+    // Attendance Logik (wie im CalendarView)
+    async setAttendance(eventId, status) {
+        const currentUser = App.state.currentUser;
+        if(!currentUser) return;
+
+        const e = Store.state.events.find(ev => ev.id == eventId);
+        if(e) {
+            const updatedAttendance = { ...(e.attendance || {}) };
+            
+            if (updatedAttendance[currentUser.id] === status) {
+                delete updatedAttendance[currentUser.id]; // Toggle Off
+            } else {
+                updatedAttendance[currentUser.id] = status; // Set Status
+            }
+
+            const { id, ...eventDataWithoutId } = e;
+            const updatePayload = {
+                ...eventDataWithoutId,
+                attendance: updatedAttendance
+            };
+
+            try {
+                const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+                const { error } = await _sb.from('events').update(updatePayload).eq('id', eventId);
+
+                if (error) throw error;
+
+                // Local Update & Refresh
+                e.attendance = updatedAttendance;
+                this.openEventDetailModal(eventId);
+                this.render(document.getElementById('content'));
+            } catch(err) {
+                console.error(err);
+                App.showToast("Fehler: " + err.message, "error");
+            }
+        }
     },
 
     async deleteGroupEvent(id) {
