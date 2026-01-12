@@ -156,14 +156,14 @@ const MessengerView = {
     },
 
     renderListItem(item) {
-        const isActive = this.state.activeType === item.type && (item.type === 'news' || this.state.activeId === item.id);
+        // FIX: Loose comparison '==' used for ID check to handle string vs number types
+        const isActive = this.state.activeType === item.type && (item.type === 'news' || this.state.activeId == item.id);
         let preview = "Klicken um zu starten";
         let dateStr = "";
         
         if (item.lastMsg) {
             const txt = item.lastMsg.text || (item.lastMsg.type === 'image' ? '📷 Foto' : '📎 Datei');
             
-            // FIX: Dynamische Prüfung, ob die Nachricht von mir ist (für Checkmarks)
             const myId = this.getMyId();
             const isMe = item.lastMsg.senderId ? (item.lastMsg.senderId == myId) : item.lastMsg.isMe;
 
@@ -172,8 +172,9 @@ const MessengerView = {
             dateStr = (d.toDateString() === new Date().toDateString()) ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : d.toLocaleDateString([], {day:'2-digit', month:'2-digit', year:'2-digit'});
         }
 
+        // FIX: Added quotes around item.id in onclick to support UUID strings
         return `
-            <div onclick="MessengerView.selectChat('${item.type}', ${item.id})" class="flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-[#202c33] ${isActive ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]'} group">
+            <div onclick="MessengerView.selectChat('${item.type}', '${item.id}')" class="flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-[#202c33] ${isActive ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]'} group">
                 <div class="relative w-12 h-12 rounded-full bg-[#6a7f8a] flex items-center justify-center shrink-0 overflow-hidden text-white text-lg font-bold">
                     ${item.type === 'private' ? item.name.charAt(0) : `<i class="fa-solid ${item.icon}"></i>`}
                 </div>
@@ -206,7 +207,7 @@ const MessengerView = {
 
     renderActiveChat() {
         const C = this.config;
-        if (!this.state.mobileChatVisible && this.state.activeId === 0 && this.state.activeType !== 'news') {
+        if (!this.state.mobileChatVisible && this.state.activeId == 0 && this.state.activeType !== 'news') {
             return `<div class="flex flex-col items-center justify-center h-full bg-[#222e35] text-center border-b-[6px] border-[#00a884]"><div class="mb-5"><i class="fa-regular fa-comments text-[#41525d] text-7xl"></i></div><h2 class="text-[#e9edef] text-3xl font-light mb-4">Vereins Messenger</h2><p class="text-[#8696a0] text-sm">Wähle einen Chat aus.</p></div>`;
         }
 
@@ -219,27 +220,27 @@ const MessengerView = {
             messages = (Store.state.news || []).map(n => ({ id: n.id, sender: 'Vorstand', text: `📢 **${n.title}**\n\n${n.content}`, time: n.date, isMe: false, isSystem: true })).sort((a,b) => new Date(a.time) - new Date(b.time));
             canWrite = false;
         } else if (type === 'group') {
-            const g = Store.state.groups.find(x => x.id === id);
+            // FIX: Use loose equality '==' for ID lookup
+            const g = Store.state.groups.find(x => x.id == id);
             if(g) { 
                 title = g.name; 
                 subTitle = 'Tippen für Gruppeninfo'; 
                 messages = g.chat || [];
-                clickAction = `onclick="MessengerView.showGroupInfo(${id})"`;
+                // FIX: Quote ID in function call
+                clickAction = `onclick="MessengerView.showGroupInfo('${id}')"`;
             }
         } else if (type === 'private') {
-            const m = Store.state.members.find(x => x.id === id);
+            // FIX: Use loose equality '==' for ID lookup
+            const m = Store.state.members.find(x => x.id == id);
             if(m) { 
                 title = `${m.firstName} ${m.lastName}`; 
                 subTitle = m.status === 'active' ? 'Online' : 'Klicken für Profil'; 
                 messages = this.getMemberChat(m);
-                clickAction = `onclick="MessengerView.showUserProfile(${id})"`;
+                // FIX: Quote ID in function call
+                clickAction = `onclick="MessengerView.showUserProfile('${id}')"`;
             }
         }
 
-        // Pinned Logic: Packe gepinnte Nachrichten nach oben (optional, hier einfach markiert)
-        // messages.sort(...) wenn gewünscht
-
-        // Header Styling: Sticky Top für Sichtbarkeit bei Tastatur
         return `
             <div class="h-16 px-4 py-2 ${C.headerBg} flex items-center justify-between shadow-sm z-30 shrink-0 border-l border-[#2a3942] sticky top-0 w-full">
                 <div class="flex items-center gap-3 overflow-hidden cursor-pointer" ${clickAction}>
@@ -342,6 +343,7 @@ const MessengerView = {
         if (msg.type === 'image') contentHtml = `<img src="${msg.content}" class="rounded-lg max-w-full sm:max-w-[300px] mb-1 cursor-pointer" onclick="window.open('${msg.content}')">`;
         else if (msg.type === 'poll') { /* Poll Logic shortened for brevity */ contentHtml = `<b>Umfrage:</b> ${msg.content.question}`; }
 
+        // FIX: Quote ID in toggleMsgMenu call
         const contextMenuId = `ctx-${msg.id}`;
 
         return `
@@ -373,14 +375,14 @@ const MessengerView = {
                 <!-- Context Menu (Dropdown) -->
                 <div id="${contextMenuId}" class="hidden absolute top-8 ${isMe ? 'right-4' : 'left-4'} bg-[#233138] border border-[#2a3942] rounded-lg shadow-2xl z-50 w-48 animate-scale-in py-1">
                     <div class="flex justify-around p-2 border-b border-[#2a3942] bg-[#1f2c34]">
-                        ${['👍','❤️','😂','😮','🙏'].map(e => `<button onclick="MessengerView.reactToMessage(${msg.id}, '${e}')" class="hover:scale-125 transition text-lg">${e}</button>`).join('')}
+                        ${['👍','❤️','😂','😮','🙏'].map(e => `<button onclick="MessengerView.reactToMessage('${msg.id}', '${e}')" class="hover:scale-125 transition text-lg">${e}</button>`).join('')}
                     </div>
-                    <button onclick="MessengerView.replyTo(${msg.id})" class="w-full text-left px-4 py-2.5 text-sm text-[#e9edef] hover:bg-[#111b21] flex gap-3 items-center"><i class="fa-solid fa-reply w-4"></i> Antworten</button>
+                    <button onclick="MessengerView.replyTo('${msg.id}')" class="w-full text-left px-4 py-2.5 text-sm text-[#e9edef] hover:bg-[#111b21] flex gap-3 items-center"><i class="fa-solid fa-reply w-4"></i> Antworten</button>
                     <button onclick="MessengerView.copyMessageText('${msg.text}')" class="w-full text-left px-4 py-2.5 text-sm text-[#e9edef] hover:bg-[#111b21] flex gap-3 items-center"><i class="fa-regular fa-copy w-4"></i> Kopieren</button>
-                    <button onclick="MessengerView.pinMessage(${msg.id})" class="w-full text-left px-4 py-2.5 text-sm text-[#e9edef] hover:bg-[#111b21] flex gap-3 items-center"><i class="fa-solid fa-thumbtack w-4"></i> ${msg.isPinned ? 'Lösen' : 'Anpinnen'}</button>
-                    <button onclick="MessengerView.forwardMessage(${msg.id})" class="w-full text-left px-4 py-2.5 text-sm text-[#e9edef] hover:bg-[#111b21] flex gap-3 items-center"><i class="fa-solid fa-share w-4"></i> Weiterleiten</button>
-                    ${isMe ? `<button onclick="MessengerView.editMessage(${msg.id})" class="w-full text-left px-4 py-2.5 text-sm text-[#e9edef] hover:bg-[#111b21] flex gap-3 items-center"><i class="fa-solid fa-pen w-4"></i> Bearbeiten</button>` : ''}
-                    ${isMe || App.can('admin') ? `<button onclick="MessengerView.deleteMessage(${msg.id})" class="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-[#111b21] flex gap-3 items-center"><i class="fa-solid fa-trash w-4"></i> Löschen</button>` : ''}
+                    <button onclick="MessengerView.pinMessage('${msg.id}')" class="w-full text-left px-4 py-2.5 text-sm text-[#e9edef] hover:bg-[#111b21] flex gap-3 items-center"><i class="fa-solid fa-thumbtack w-4"></i> ${msg.isPinned ? 'Lösen' : 'Anpinnen'}</button>
+                    <button onclick="MessengerView.forwardMessage('${msg.id}')" class="w-full text-left px-4 py-2.5 text-sm text-[#e9edef] hover:bg-[#111b21] flex gap-3 items-center"><i class="fa-solid fa-share w-4"></i> Weiterleiten</button>
+                    ${isMe ? `<button onclick="MessengerView.editMessage('${msg.id}')" class="w-full text-left px-4 py-2.5 text-sm text-[#e9edef] hover:bg-[#111b21] flex gap-3 items-center"><i class="fa-solid fa-pen w-4"></i> Bearbeiten</button>` : ''}
+                    ${isMe || App.can('admin') ? `<button onclick="MessengerView.deleteMessage('${msg.id}')" class="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-[#111b21] flex gap-3 items-center"><i class="fa-solid fa-trash w-4"></i> Löschen</button>` : ''}
                 </div>
             </div>
         `;
@@ -403,12 +405,13 @@ const MessengerView = {
         const type = this.state.activeType;
         const id = this.state.activeId;
         if(type === 'group') {
-            const g = Store.state.groups.find(g => g.id === id);
-            return g ? g.chat.find(m => m.id === msgId) : null;
+            // FIX: Use loose equality '=='
+            const g = Store.state.groups.find(g => g.id == id);
+            return g ? g.chat.find(m => m.id == msgId) : null;
         }
         if(type === 'private') {
-            const m = Store.state.members.find(x => x.id === this.getMyId()); // Suche in MEINEM Chatverlauf
-            return m && m.privateChat ? m.privateChat.find(msg => msg.id === msgId) : null;
+            const m = Store.state.members.find(x => x.id == this.getMyId()); // Suche in MEINEM Chatverlauf
+            return m && m.privateChat ? m.privateChat.find(msg => msg.id == msgId) : null;
         }
         return null;
     },
@@ -467,20 +470,22 @@ const MessengerView = {
         const id = this.state.activeId;
         
         if (type === 'group') {
-            let parentObj = Store.state.groups.find(g => g.id === id);
+            // FIX: Use loose equality '=='
+            let parentObj = Store.state.groups.find(g => g.id == id);
             if(parentObj) {
-                const msg = parentObj.chat.find(m => m.id === msgId);
+                const msg = parentObj.chat.find(m => m.id == msgId);
                 if(msg) { cb(msg); this.safeUpdate('groups', parentObj); }
             }
         } else if (type === 'private') {
             // Update bei beiden Teilnehmern
             const myId = this.getMyId();
+            // FIX: Use loose equality '=='
             const me = Store.state.members.find(m => m.id == myId);
             const other = Store.state.members.find(m => m.id == id);
             
             [me, other].forEach(user => {
                 if(user && user.privateChat) {
-                    const msg = user.privateChat.find(m => m.id === msgId);
+                    const msg = user.privateChat.find(m => m.id == msgId);
                     if(msg) { cb(msg); this.safeUpdate('members', user); }
                 }
             });
@@ -490,7 +495,8 @@ const MessengerView = {
 
     // --- GROUP INFO MODAL ---
     showGroupInfo(groupId) {
-        const g = Store.state.groups.find(x => x.id === groupId);
+        // FIX: Use loose equality '=='
+        const g = Store.state.groups.find(x => x.id == groupId);
         if(!g) return;
         const membersList = g.members ? g.members.map(name => `<li class="py-2 border-b border-white/10 flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center text-xs text-white">${name.charAt(0)}</div><span>${name}</span></li>`).join('') : '<li class="text-muted">Keine Mitglieder</li>';
         
@@ -566,7 +572,8 @@ const MessengerView = {
         let table = '';
 
         if (type === 'group') {
-            parentObj = Store.state.groups.find(g => g.id === activeId);
+            // FIX: Use loose equality '=='
+            parentObj = Store.state.groups.find(g => g.id == activeId);
             if(parentObj) {
                 if(!parentObj.chat) parentObj.chat = [];
                 parentObj.chat.push(newMessage);
@@ -579,7 +586,8 @@ const MessengerView = {
                 myUser.privateChat.push(newMessage);
                 this.safeUpdate('members', myUser); 
             }
-            const partnerUser = Store.state.members.find(m => m.id === activeId);
+            // FIX: Use loose equality '=='
+            const partnerUser = Store.state.members.find(m => m.id == activeId);
             if(partnerUser) {
                 if(!partnerUser.privateChat) partnerUser.privateChat = [];
                 partnerUser.privateChat.push(newMessage);
@@ -597,9 +605,10 @@ const MessengerView = {
         let parentObj = null;
         
         if(type === 'group') {
-            parentObj = Store.state.groups.find(g => g.id === id);
+            // FIX: Use loose equality '=='
+            parentObj = Store.state.groups.find(g => g.id == id);
             if(parentObj) {
-                const msg = parentObj.chat.find(m => m.id === msgId);
+                const msg = parentObj.chat.find(m => m.id == msgId);
                 if(msg) { msg.isDeleted = true; msg.text = ''; this.safeUpdate('groups', parentObj); }
             }
         } else if (type === 'private') {
@@ -609,7 +618,7 @@ const MessengerView = {
             const other = Store.state.members.find(m => m.id == id);
             [me, other].forEach(u => {
                 if(u && u.privateChat) {
-                    const m = u.privateChat.find(msg => msg.id === msgId);
+                    const m = u.privateChat.find(msg => msg.id == msgId);
                     if(m) { m.isDeleted = true; m.text = ''; this.safeUpdate('members', u); }
                 }
             });
@@ -647,7 +656,7 @@ const MessengerView = {
     toggleEmojiPicker() { this.state.showEmojiPicker = !this.state.showEmojiPicker; this.state.showAttachMenu = false; this.render(document.getElementById('content')); },
     addEmoji(char) { const input = document.getElementById('chat-input'); if(input) { input.value += char; input.focus(); } },
     sendAttachment(type) { let content = ''; if(type === 'image') content = 'https://picsum.photos/400/300'; if(type === 'file') content = 'Protokoll.pdf'; this.addMessageToChat({ text: '', type: type, content: content }); },
-    votePoll(msgId, optId) { this.updateMsgProperty(msgId, (msg) => { const opt = msg.content.options.find(o => o.id === optId); if(opt) { const myId = this.getMyId(); if(opt.votes.includes(myId)) opt.votes = opt.votes.filter(v => v !== myId); else opt.votes.push(myId); } }); },
+    votePoll(msgId, optId) { this.updateMsgProperty(msgId, (msg) => { const opt = msg.content.options.find(o => o.id == optId); if(opt) { const myId = this.getMyId(); if(opt.votes.includes(myId)) opt.votes = opt.votes.filter(v => v !== myId); else opt.votes.push(myId); } }); },
     scrollToBottom(smooth = false) { const container = document.getElementById('msg-scroll-container'); if (container) { container.scrollTo({ top: container.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }); } }
 };
 
