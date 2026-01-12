@@ -237,7 +237,7 @@ const GroupsView = {
         `;
     },
 
-    // --- TAB: KALENDER ---
+    // --- TAB: KALENDER (KOMPLETT NEUES DESIGN) ---
     renderTabCalendar(group) {
         const allEvents = Store.state.events || [];
         const groupEvents = allEvents
@@ -246,69 +246,102 @@ const GroupsView = {
 
         const canManage = App.can('manage_group_content', group.name);
 
+        // Gruppierung nach Monaten für bessere Übersicht
+        const groupedEvents = {};
+        groupEvents.forEach(e => {
+            const date = new Date(e.date);
+            const key = date.toLocaleString('de-DE', { month: 'long', year: 'numeric' });
+            if (!groupedEvents[key]) groupedEvents[key] = [];
+            groupedEvents[key].push(e);
+        });
+
+        const renderEventItem = (e) => {
+            const startDate = new Date(e.date);
+            const endDate = e.endDate ? new Date(e.endDate) : null;
+            const dayName = startDate.toLocaleDateString('de-DE', { weekday: 'short' });
+            const dayNum = startDate.getDate();
+            
+            // Teilnahme-Logik für Preview
+            const attendance = e.attendance || {};
+            const yesIds = Object.keys(attendance).filter(id => attendance[id] === 'yes');
+            const userStatus = App.state.currentUser ? attendance[App.state.currentUser.id] : null;
+
+            // Border Farbe je nach Status des Users
+            let borderClass = 'border-dark-border';
+            if (userStatus === 'yes') borderClass = 'border-emerald-500/50';
+            else if (userStatus === 'no') borderClass = 'border-red-500/30 opacity-60';
+
+            return `
+                <div onclick="GroupsView.openEventDetailModal('${e.id}')" class="bg-dark-bg/50 hover:bg-dark-hover/50 border ${borderClass} rounded-2xl p-4 cursor-pointer transition-all mb-3 relative overflow-hidden group">
+                     <!-- Status Stripe -->
+                     ${userStatus === 'yes' ? '<div class="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500"></div>' : ''}
+                     
+                     <div class="flex items-start gap-4">
+                        <!-- Date Box -->
+                        <div class="flex flex-col items-center justify-center bg-dark-card border border-dark-border rounded-xl w-14 h-14 shrink-0 shadow-sm">
+                            <span class="text-[10px] uppercase font-bold text-dark-muted leading-none">${dayName}</span>
+                            <span class="text-xl font-bold text-white leading-none mt-1">${dayNum}</span>
+                        </div>
+
+                        <!-- Content -->
+                        <div class="flex-1 min-w-0">
+                            <h4 class="text-white font-bold text-sm md:text-base leading-tight mb-1 truncate pr-6">${e.title}</h4>
+                            <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-dark-muted">
+                                <span class="flex items-center"><i class="fa-regular fa-clock mr-1.5 text-brand-400"></i> ${e.allDay ? 'Ganztägig' : e.time}</span>
+                                ${e.location ? `<span class="flex items-center truncate max-w-[150px]"><i class="fa-solid fa-location-dot mr-1.5 text-brand-400"></i> ${e.location}</span>` : ''}
+                            </div>
+                        </div>
+
+                        <!-- Mini Avatars (Participants) -->
+                        ${yesIds.length > 0 ? `
+                        <div class="hidden sm:flex -space-x-2 shrink-0">
+                            ${yesIds.slice(0, 3).map(id => {
+                                const m = Store.state.members.find(mem => mem.id == id);
+                                if (!m) return '';
+                                return `<div class="w-6 h-6 rounded-full bg-slate-700 border border-dark-bg flex items-center justify-center text-[8px] text-white font-bold" title="${m.firstName}">${m.firstName.charAt(0)}</div>`;
+                            }).join('')}
+                            ${yesIds.length > 3 ? `<div class="w-6 h-6 rounded-full bg-dark-card border border-dark-bg flex items-center justify-center text-[8px] text-dark-muted font-bold">+${yesIds.length - 3}</div>` : ''}
+                        </div>` : ''}
+                    </div>
+
+                    <!-- Status Icon absolute right -->
+                    <div class="absolute top-4 right-4 text-dark-muted">
+                         ${userStatus === 'yes' ? '<i class="fa-solid fa-circle-check text-emerald-500"></i>' : 
+                           userStatus === 'maybe' ? '<i class="fa-solid fa-circle-question text-amber-500"></i>' : 
+                           userStatus === 'no' ? '<i class="fa-solid fa-circle-xmark text-red-500"></i>' : 
+                           '<i class="fa-regular fa-circle"></i>'}
+                    </div>
+                </div>
+            `;
+        };
+
         return `
             <div class="flex flex-col h-full">
-                <div class="flex justify-between items-center mb-4">
-                    <span class="text-xs font-bold text-dark-muted uppercase tracking-wider">Nächste Termine</span>
+                <div class="flex justify-between items-center mb-6">
+                    <span class="text-xs font-bold text-dark-muted uppercase tracking-wider">Planung</span>
                     ${canManage ? `
-                    <button onclick="GroupsView.openEventAddModal('${group.id}')" class="bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-lg flex items-center gap-2">
-                        <i class="fa-solid fa-plus"></i> Neu
+                    <button onclick="GroupsView.openEventAddModal('${group.id}')" class="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg flex items-center gap-2">
+                        <i class="fa-solid fa-calendar-plus"></i> Termin
                     </button>` : ''}
                 </div>
                 
-                <div class="space-y-3 flex-1 overflow-y-auto pr-1 custom-scrollbar">
-                    ${groupEvents.length > 0 ? groupEvents.map(e => this.renderEventCard(e)).join('') : 
-                    `<div class="text-center py-12 text-dark-muted border border-dashed border-dark-border rounded-2xl bg-dark-bg/20">
-                        <i class="fa-regular fa-calendar-times text-3xl mb-2 opacity-50"></i>
-                        <p class="text-sm">Keine Termine geplant.</p>
+                <div class="flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                    ${Object.keys(groupedEvents).length > 0 ? Object.keys(groupedEvents).map(month => `
+                        <div class="mb-6">
+                            <h5 class="text-sm font-bold text-white mb-3 sticky top-0 bg-dark-card/95 backdrop-blur py-2 z-10 border-b border-dark-border/50 w-full">
+                                ${month}
+                            </h5>
+                            ${groupedEvents[month].map(e => renderEventItem(e)).join('')}
+                        </div>
+                    `).join('') : 
+                    `<div class="flex flex-col items-center justify-center py-16 text-dark-muted bg-dark-bg/20 rounded-3xl border border-dashed border-dark-border">
+                        <div class="w-16 h-16 bg-dark-card rounded-full flex items-center justify-center mb-4 text-2xl shadow-sm">
+                            <i class="fa-regular fa-calendar"></i>
+                        </div>
+                        <p class="font-bold text-white mb-1">Keine Termine</p>
+                        <p class="text-xs">In dieser Gruppe steht aktuell nichts an.</p>
                     </div>`}
                 </div>
-            </div>
-        `;
-    },
-
-    renderEventCard(e) {
-        const startDate = new Date(e.date);
-        const endDate = e.endDate ? new Date(e.endDate) : null;
-        
-        let dateRangeText = '';
-        if (endDate && (endDate.getDate() !== startDate.getDate() || endDate.getMonth() !== startDate.getMonth())) {
-            dateRangeText = `<span class="block text-[9px] text-dark-muted border-t border-white/10 mt-1 pt-1">bis ${endDate.getDate()}.${endDate.toLocaleString('de-DE', { month: 'numeric' })}.</span>`;
-        }
-        
-        const attendance = e.attendance || {};
-        const yesCount = Object.values(attendance).filter(v => v === 'yes').length;
-        const currentUser = App.state.currentUser;
-        const myStatus = currentUser && attendance[currentUser.id] ? attendance[currentUser.id] : null;
-        
-        let statusBadge = '';
-        if(myStatus === 'yes') statusBadge = '<i class="fa-solid fa-circle-check text-emerald-500 ml-2"></i>';
-        else if(myStatus === 'maybe') statusBadge = '<i class="fa-solid fa-circle-question text-amber-500 ml-2"></i>';
-        else if(myStatus === 'no') statusBadge = '<i class="fa-solid fa-circle-xmark text-red-500 ml-2"></i>';
-
-        return `
-            <div onclick="GroupsView.openEventDetailModal('${e.id}')" class="bg-dark-bg/50 hover:bg-dark-hover/50 border border-dark-border p-3 rounded-xl flex items-center gap-4 cursor-pointer group transition-all">
-                <div class="bg-dark-card border border-dark-border rounded-lg p-2 text-center min-w-[56px] group-hover:border-brand-500/30 transition-colors">
-                    <div class="text-[10px] font-bold uppercase text-brand-500">${startDate.toLocaleString('de-DE', { month: 'short' })}</div>
-                    <div class="text-lg font-bold text-white leading-none mt-0.5">${startDate.getDate()}</div>
-                    ${dateRangeText}
-                </div>
-
-                <div class="flex-1 min-w-0">
-                    <div class="flex justify-between items-start">
-                        <h4 class="text-white font-bold text-sm truncate">${e.title}</h4>
-                        <div class="text-xs">${statusBadge}</div>
-                    </div>
-                    
-                    <div class="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-dark-muted mt-1">
-                        <span class="flex items-center"><i class="fa-regular fa-clock mr-1.5 opacity-70"></i> ${e.allDay ? 'Ganztägig' : e.time}</span>
-                        ${e.location ? `<span class="flex items-center truncate"><i class="fa-solid fa-location-dot mr-1.5 opacity-70"></i> ${e.location}</span>` : ''}
-                    </div>
-                    
-                    ${yesCount > 0 ? `<div class="mt-1.5 text-[10px] text-dark-muted flex items-center"><i class="fa-solid fa-user-check text-emerald-500/70 mr-1.5"></i> ${yesCount} Zusagen</div>` : ''}
-                </div>
-                
-                <i class="fa-solid fa-chevron-right text-dark-muted text-xs opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all"></i>
             </div>
         `;
     },
