@@ -1,7 +1,7 @@
 /**
  * =============================================================================
- * MESSENGER VIEW (Clean & Mobile First)
- * Zentraler Ort für alle Kommunikation (News, Gruppen, Privat)
+ * MODERN MESSENGER VIEW (WhatsApp/Signal Style)
+ * Optimiert für Mobile & Desktop
  * =============================================================================
  */
 
@@ -9,67 +9,143 @@ const MessengerView = {
     // Lokaler State
     state: {
         activeType: 'news', // 'news', 'group', 'private'
-        activeId: 0,        // 0 oder null bedeutet: Kein Chat ausgewählt
-        filterTerm: '',     // Für die Suche
-        showAttachMenu: false, 
+        activeId: 0,        // 0 = kein Chat
+        filterTerm: '',
+        showAttachMenu: false,
         showEmojiPicker: false,
-        mobileChatVisible: false // Steuert die Ansicht auf Mobile
+        mobileChatVisible: false,
+        // Cache für Scroll-Positionen
+        scrollPositions: {}
     },
 
-    // Helper um die aktuelle User-ID zu holen
+    // Farben und Styles Konfiguration (WhatsApp Dark Mode Palette)
+    config: {
+        accentColor: 'bg-[#00a884]', 
+        accentColorHover: 'hover:bg-[#008f6f]',
+        myMessageBg: 'bg-[#005c4b]',
+        otherMessageBg: 'bg-[#202c33]',
+        pageBg: 'bg-[#111b21]',
+        sidebarBg: 'bg-[#111b21]',
+        headerBg: 'bg-[#202c33]',
+        border: 'border-[#2a3942]',
+        textMain: 'text-[#e9edef]',
+        textMuted: 'text-[#8696a0]'
+    },
+
+    // Helper: Current User ID
     getMyId() {
         return (App.state.currentUser && App.state.currentUser.id) || localStorage.getItem('vm_current_user_id') || 1;
+    },
+
+    // Initialisierung: Styles injizieren (Hintergrundmuster & Scrollbars)
+    init() {
+        this.injectStyles();
+    },
+
+    injectStyles() {
+        if (document.getElementById('messenger-custom-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'messenger-custom-styles';
+        style.innerHTML = `
+            /* Chat Hintergrund Muster */
+            .msg-bg-pattern {
+                background-color: #0b141a;
+                background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%232a3942' fill-opacity='0.2' fill-rule='evenodd'/%3E%3C/svg%3E");
+            }
+            .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+            .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+            .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(134, 150, 160, 0.3); border-radius: 4px; }
+            .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(134, 150, 160, 0.5); }
+            
+            /* Bubble Tails (Sprechblasen Ecken) */
+            .bubble-tail-in { border-top-left-radius: 0 !important; }
+            .bubble-tail-out { border-top-right-radius: 0 !important; }
+            
+            /* Animation für Modal/Popups */
+            @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+            .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        `;
+        document.head.appendChild(style);
     },
 
     /**
      * Haupt-Render Funktion
      */
     render(container) {
-        const showChatOnMobile = this.state.mobileChatVisible; 
+        this.init();
+        const { mobileChatVisible } = this.state;
+        const C = this.config;
 
+        // Container-Grundgerüst (Responsive: 1 Spalte Mobile, 2 Spalten Desktop)
         container.innerHTML = `
-            <div class="flex h-[calc(100vh-140px)] md:h-[calc(100vh-180px)] bg-dark-card/50 backdrop-blur-sm rounded-2xl border border-dark-border overflow-hidden shadow-2xl fade-in relative">
+            <div class="flex h-[calc(100vh-80px)] md:h-[calc(100vh-100px)] max-w-[1600px] mx-auto overflow-hidden bg-black shadow-2xl relative rounded-xl border border-[#333]">
                 
-                <!-- Sidebar: Kontaktliste -->
-                <div class="${showChatOnMobile ? 'hidden' : 'flex'} md:flex w-full md:w-1/3 lg:w-1/4 border-r border-dark-border flex-col bg-dark-bg/50">
-                    <!-- Suchleiste -->
-                    <div class="p-4 border-b border-dark-border sticky top-0 bg-dark-bg/95 backdrop-blur z-10">
-                        <div class="relative group">
-                            <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted group-focus-within:text-brand-500 transition-colors text-sm"></i>
-                            <input type="text" id="messenger-search" onkeyup="MessengerView.handleSearch(this.value)" placeholder="Suchen..." 
-                                class="w-full bg-dark-card border border-dark-border rounded-xl pl-10 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all placeholder-dark-muted"
-                                value="${this.state.filterTerm}">
+                <!-- LEFT SIDEBAR (Liste) -->
+                <!-- Mobile: Versteckt wenn Chat offen. Desktop: Immer sichtbar (w-1/3) -->
+                <div class="${mobileChatVisible ? 'hidden md:flex' : 'flex'} w-full md:w-[400px] lg:w-[450px] flex-col ${C.sidebarBg} border-r ${C.border} z-20">
+                    
+                    <!-- Header Sidebar -->
+                    <div class="h-16 px-4 ${C.headerBg} flex items-center justify-between shrink-0 border-b ${C.border}">
+                        <div class="flex items-center gap-3">
+                            <!-- Avatar des Users (Dummy) -->
+                            <div class="w-10 h-10 rounded-full bg-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition flex items-center justify-center">
+                                <i class="fa-solid fa-user text-slate-300"></i>
+                            </div>
+                            <h2 class="font-bold text-white tracking-wide">Chats</h2>
+                        </div>
+                        <div class="flex gap-4 text-slate-400">
+                             <button class="hover:text-white transition"><i class="fa-solid fa-circle-notch"></i></button>
+                             <button class="hover:text-white transition"><i class="fa-solid fa-message"></i></button>
+                             <button class="hover:text-white transition"><i class="fa-solid fa-ellipsis-vertical"></i></button>
                         </div>
                     </div>
 
-                    <!-- Liste -->
-                    <div id="messenger-list" class="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-6">
-                        <!-- Inhalt kommt durch renderSidebarList() -->
+                    <!-- Search Bar -->
+                    <div class="p-3 ${C.sidebarBg} border-b ${C.border}">
+                        <div class="relative bg-[#202c33] rounded-lg flex items-center px-3 h-9 focus-within:bg-[#202c33]/80 transition-colors">
+                            <i class="fa-solid fa-magnifying-glass text-[#8696a0] text-sm cursor-pointer ${this.state.filterTerm ? 'hidden' : 'block'}"></i>
+                            <button class="${this.state.filterTerm ? 'block' : 'hidden'} text-[#00a884]" onclick="MessengerView.handleSearch('')">
+                                <i class="fa-solid fa-arrow-left"></i>
+                            </button>
+                            <input type="text" 
+                                placeholder="Suchen oder neuer Chat" 
+                                value="${this.state.filterTerm}"
+                                onkeyup="MessengerView.handleSearch(this.value)"
+                                id="messenger-search-input"
+                                class="bg-transparent border-none text-[#d1d7db] text-sm w-full ml-3 focus:outline-none placeholder-[#8696a0] h-full"
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Chat List -->
+                    <div id="messenger-list" class="flex-1 overflow-y-auto custom-scrollbar">
+                        <!-- Wird durch renderSidebarList() gefüllt -->
                     </div>
                 </div>
 
-                <!-- Hauptbereich: Chat Fenster -->
-                <div class="${showChatOnMobile ? 'flex' : 'hidden'} md:flex flex-1 flex-col bg-dark-card relative h-full w-full" id="messenger-chat-area">
+                <!-- RIGHT MAIN (Chat) -->
+                <!-- Mobile: Sichtbar wenn Chat offen. Desktop: Immer sichtbar (flex-1) -->
+                <div id="messenger-chat-area" class="${mobileChatVisible ? 'flex fixed inset-0 z-50 md:static' : 'hidden md:flex'} flex-col flex-1 bg-[#0b141a] relative w-full h-full">
                     ${this.renderActiveChat()}
                 </div>
+
             </div>
         `;
 
-        // Liste initial befüllen
         this.renderSidebarList();
         
-        // Scroll zum Ende des Chats, falls sichtbar
-        if (showChatOnMobile || window.innerWidth >= 768) {
-            this.scrollToBottom();
+        // Scroll wiederherstellen oder nach unten scrollen
+        if (mobileChatVisible || window.innerWidth >= 768) {
+            this.scrollToBottom(false); // false = smooth scroll
         }
         
-        // Fokus wiederherstellen
-        const searchInput = document.getElementById('messenger-search');
-        if(this.state.filterTerm && searchInput) {
-            searchInput.focus();
-            const val = searchInput.value;
-            searchInput.value = '';
-            searchInput.value = val;
+        // Fokus Input wiederherstellen
+        const input = document.getElementById('messenger-search-input');
+        if(input && this.state.filterTerm) {
+            input.focus();
+            const val = input.value;
+            input.value = '';
+            input.value = val;
         }
     },
 
@@ -82,7 +158,7 @@ const MessengerView = {
     },
 
     /**
-     * Rendert die Liste in der Sidebar
+     * Rendert die Liste in der Sidebar (Kontaktliste)
      */
     renderSidebarList() {
         const container = document.getElementById('messenger-list');
@@ -93,103 +169,127 @@ const MessengerView = {
         const members = Store.state.members || [];
         const groups = Store.state.groups || [];
         const me = members.find(m => m.id == myId) || { groups: [] };
-        
+        const C = this.config;
+
+        // Filter Logic
         const myGroupNames = Array.isArray(me.groups) ? me.groups : (me.group && me.group !== 'Keine' ? [me.group] : []);
-
-        // 1. ANKÜNDIGUNGEN
-        let newsHTML = '';
-        if ('ankündigungen'.includes(term) || term === '') {
-            newsHTML = `
-                <div class="mb-2">
-                    <p class="px-2 mb-2 text-[10px] font-bold text-dark-muted uppercase tracking-wider opacity-70">Allgemein</p>
-                    ${this.renderContactItem('news', 0, 'Ankündigungen', 'fa-bullhorn', 'red')}
-                </div>`;
-        }
-
-        // 2. GRUPPEN
-        const myGroups = groups.filter(g => myGroupNames.includes(g.name));
-        const filteredGroups = myGroups.filter(g => g.name.toLowerCase().includes(term));
         
-        let groupsHTML = '';
-        if (filteredGroups.length > 0) {
-            groupsHTML = `
-                <div class="mb-2">
-                    <p class="px-2 mb-2 text-[10px] font-bold text-dark-muted uppercase tracking-wider opacity-70">Gruppen</p>
-                    <div class="space-y-1">
-                        ${filteredGroups.map(g => this.renderContactItem('group', g.id, g.name, 'fa-users', 'emerald')).join('')}
-                    </div>
-                </div>`;
+        // Items sammeln
+        let items = [];
+
+        // 1. News
+        if ('ankündigungen'.includes(term) || !term) {
+            items.push({ type: 'news', id: 0, name: 'Ankündigungen', icon: 'fa-bullhorn', color: 'text-yellow-500', time: new Date() });
         }
 
-        // 3. PRIVAT
+        // 2. Groups
+        const myGroups = groups.filter(g => myGroupNames.includes(g.name));
+        myGroups.forEach(g => {
+            if (g.name.toLowerCase().includes(term)) {
+                const lastMsg = g.chat && g.chat.length > 0 ? g.chat[g.chat.length-1] : null;
+                items.push({ 
+                    type: 'group', 
+                    id: g.id, 
+                    name: g.name, 
+                    icon: 'fa-users', 
+                    color: 'text-blue-400',
+                    lastMsg: lastMsg,
+                    time: lastMsg ? new Date(lastMsg.time) : new Date(0)
+                });
+            }
+        });
+
+        // 3. Private
         const allMembers = members.filter(m => m.id != myId);
-        let membersToShow = [];
+        allMembers.forEach(m => {
+            const name = `${m.firstName} ${m.lastName}`;
+            const hasChat = m.privateChat && m.privateChat.length > 0;
+            
+            if (term && name.toLowerCase().includes(term)) {
+                items.push({ 
+                    type: 'private', 
+                    id: m.id, 
+                    name: name, 
+                    icon: 'fa-user', 
+                    color: 'text-slate-400',
+                    lastMsg: hasChat ? m.privateChat[m.privateChat.length-1] : null,
+                    time: hasChat ? new Date(m.privateChat[m.privateChat.length-1].time) : new Date(0),
+                    status: m.status
+                });
+            } else if (!term && hasChat) {
+                items.push({ 
+                    type: 'private', 
+                    id: m.id, 
+                    name: name, 
+                    icon: 'fa-user', 
+                    color: 'text-slate-400',
+                    lastMsg: m.privateChat[m.privateChat.length-1],
+                    time: new Date(m.privateChat[m.privateChat.length-1].time),
+                    status: m.status
+                });
+            }
+        });
 
-        if (term === '') {
-            // Zeige Mitglieder mit Chatverlauf oder Favoriten (hier vereinfacht: alle mit Chat)
-            membersToShow = allMembers.filter(m => m.privateChat && m.privateChat.length > 0);
-        } else {
-            membersToShow = allMembers.filter(m => (m.firstName + ' ' + m.lastName).toLowerCase().includes(term));
+        // Sortieren nach Zeit (neueste oben)
+        items.sort((a, b) => b.time - a.time);
+
+        if (items.length === 0) {
+            container.innerHTML = `<div class="p-8 text-center ${C.textMuted} text-sm">Keine Chats gefunden.<br>Suche nach einem Mitglied.</div>`;
+            return;
         }
 
-        let privateHTML = '';
-        if (membersToShow.length > 0) {
-            const title = term === '' ? 'Letzte Chats' : 'Suchergebnisse';
-            privateHTML = `
-                <div>
-                    <p class="px-2 mb-2 text-[10px] font-bold text-dark-muted uppercase tracking-wider opacity-70">${title}</p>
-                    <div class="space-y-1">
-                        ${membersToShow.map(m => this.renderContactItem('private', m.id, `${m.firstName} ${m.lastName}`, 'fa-user', 'blue', m.status)).join('')}
-                    </div>
-                </div>`;
-        } else if (term !== '' && membersToShow.length === 0) {
-            privateHTML = `<div class="p-4 text-center text-xs text-dark-muted italic">Keine Mitglieder gefunden</div>`;
-        } else if (term === '' && membersToShow.length === 0) {
-            privateHTML = `<div class="p-8 text-center text-xs text-dark-muted opacity-50 flex flex-col items-center"><i class="fa-regular fa-paper-plane text-2xl mb-2"></i>Starten Sie einen Chat über die Suche.</div>`;
-        }
-
-        container.innerHTML = `
-            ${newsHTML}
-            ${groupsHTML}
-            ${privateHTML}
-        `;
+        container.innerHTML = items.map(item => this.renderListItem(item)).join('');
     },
 
-    renderContactItem(type, id, name, icon, color, status) {
-        const isActive = this.state.activeType === type && (type === 'news' || this.state.activeId === id);
+    renderListItem(item) {
+        const isActive = this.state.activeType === item.type && (item.type === 'news' || this.state.activeId === item.id);
+        const C = this.config;
         
-        let statusDot = '';
-        if (type === 'private' && status) {
-            const statusColor = status === 'active' ? 'bg-emerald-500' : 'bg-slate-500';
-            statusDot = `<span class="w-2.5 h-2.5 ${statusColor} rounded-full border-2 border-dark-card absolute bottom-0 right-0 shadow-sm"></span>`;
+        // Letzte Nachricht Preview
+        let preview = "Klicken um zu starten";
+        let dateStr = "";
+        
+        if (item.lastMsg) {
+            const txt = item.lastMsg.text || (item.lastMsg.type === 'image' ? '📷 Foto' : '📎 Datei');
+            preview = (item.lastMsg.isMe ? '<span class="text-[#00a884] mr-1"><i class="fa-solid fa-check-double"></i></span>' : '') + txt;
+            
+            // Datum formatieren
+            const d = new Date(item.lastMsg.time);
+            const today = new Date();
+            if(d.toDateString() === today.toDateString()) {
+                dateStr = d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            } else {
+                dateStr = d.toLocaleDateString([], {day: '2-digit', month: '2-digit', year:'2-digit'});
+            }
+        } else if (item.type === 'news') {
+            preview = "Neuigkeiten vom Verein";
         }
 
-        // Dynamische Tailwind Farben müssen vollständig geschrieben sein für JIT, oder safelisted.
-        // Wir nutzen hier inline styles oder Standardklassen für die Farben um sicherzugehen.
-        const colorMap = {
-            red: 'text-red-400 bg-red-500/10 border-red-500/20',
-            emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-            blue: 'text-blue-400 bg-blue-500/10 border-blue-500/20'
-        };
-        const colorClasses = colorMap[color] || colorMap['blue'];
+        const bgClass = isActive ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]';
 
         return `
-            <button onclick="MessengerView.selectChat('${type}', ${id})" 
-                class="w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left group
-                ${isActive ? 'bg-dark-card border border-brand-500/30 shadow-md' : 'hover:bg-dark-hover/50 border border-transparent'}">
+            <div onclick="MessengerView.selectChat('${item.type}', ${item.id})" 
+                 class="flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-[#202c33] ${bgClass} group">
                 
-                <div class="relative w-10 h-10 rounded-xl flex items-center justify-center text-sm shrink-0 border ${colorClasses}">
-                    <i class="fa-solid ${icon}"></i>
-                    ${statusDot}
+                <!-- Avatar Icon -->
+                <div class="relative w-12 h-12 rounded-full bg-[#6a7f8a] flex items-center justify-center shrink-0 overflow-hidden">
+                    ${item.type === 'private' 
+                        ? `<div class="font-bold text-white text-lg">${item.name.charAt(0)}</div>` 
+                        : `<i class="fa-solid ${item.icon} text-white text-xl"></i>`
+                    }
                 </div>
-                
-                <div class="flex-1 min-w-0">
-                    <p class="text-sm font-bold ${isActive ? 'text-brand-400' : 'text-white'} truncate">${name}</p>
-                    <p class="text-[10px] text-dark-muted truncate group-hover:text-dark-text transition-colors">Klicken zum Chatten</p>
+
+                <!-- Content -->
+                <div class="flex-1 min-w-0 flex flex-col justify-center">
+                    <div class="flex justify-between items-baseline">
+                        <h3 class="text-[#e9edef] font-normal text-[17px] truncate">${item.name}</h3>
+                        <span class="text-xs text-[#8696a0] shrink-0">${dateStr}</span>
+                    </div>
+                    <div class="flex justify-between items-center mt-0.5">
+                        <p class="text-[#8696a0] text-sm truncate pr-2 w-full group-hover:text-[#d1d7db] transition-colors">${preview}</p>
+                    </div>
                 </div>
-                
-                ${isActive ? '<i class="fa-solid fa-chevron-right text-[10px] text-brand-500"></i>' : ''}
-            </button>
+            </div>
         `;
     },
 
@@ -198,187 +298,152 @@ const MessengerView = {
         this.state.activeId = id;
         this.state.showAttachMenu = false;
         this.state.showEmojiPicker = false;
-        this.state.mobileChatVisible = true; // Auf Mobile zur Chat-Ansicht wechseln
+        this.state.mobileChatVisible = true;
         
         this.render(document.getElementById('content'));
     },
 
     closeChat() {
-        this.state.mobileChatVisible = false; // Zurück zur Liste auf Mobile
+        this.state.mobileChatVisible = false;
         this.render(document.getElementById('content'));
     },
 
+    /**
+     * Rendert den rechten Chat-Bereich
+     */
     renderActiveChat() {
-        // Leerer Zustand (Desktop)
+        const C = this.config;
+        
+        // Empty State (Nur Desktop)
         if (!this.state.mobileChatVisible && this.state.activeId === 0 && this.state.activeType !== 'news') {
             return `
-                <div class="flex flex-col items-center justify-center h-full text-dark-muted opacity-30 select-none">
-                    <i class="fa-regular fa-comments text-6xl mb-4"></i>
-                    <p class="text-sm">Wählen Sie einen Chat aus</p>
+                <div class="flex flex-col items-center justify-center h-full bg-[#222e35] text-center border-b-[6px] border-[#00a884]">
+                    <div class="mb-5">
+                        <i class="fa-regular fa-comments text-[#41525d] text-7xl"></i>
+                    </div>
+                    <h2 class="text-[#e9edef] text-3xl font-light mb-4">Vereins Messenger</h2>
+                    <p class="text-[#8696a0] text-sm">Senden und empfangen Sie Nachrichten in Echtzeit.<br>Wählen Sie einen Chat aus, um zu beginnen.</p>
                 </div>
             `;
         }
 
+        // Daten holen
         const type = this.state.activeType;
         const id = this.state.activeId;
-        let title = "";
+        let title = "Chat";
+        let subTitle = "";
         let messages = [];
         let canWrite = true;
-        let icon = "";
-        
-        let headerClickAction = "";
-        let headerCursorClass = "";
-        let headerTitleHint = "";
 
         if (type === 'news') {
             title = "Ankündigungen";
-            icon = "fa-bullhorn";
+            subTitle = "Nur Administratoren";
             messages = (Store.state.news || []).map(n => ({
-                id: n.id,
-                sender: 'Vorstand',
-                text: `<strong class="block mb-1 text-base text-brand-400">${n.title}</strong>${n.content}`,
-                time: n.date,
-                isMe: false,
-                isSystem: true
+                id: n.id, sender: 'Vorstand', text: `📢 **${n.title}**\n\n${n.content}`, time: n.date, isMe: false, isSystem: true
             })).sort((a,b) => new Date(a.time) - new Date(b.time));
             canWrite = false;
-
         } else if (type === 'group') {
-            const group = Store.state.groups.find(g => g.id === id);
-            if (group) {
-                title = group.name;
-                icon = "fa-users";
-                messages = group.chat || [];
-                headerClickAction = `onclick="App.router('groups'); GroupsView.openGroup(${id})"`;
-                headerCursorClass = "cursor-pointer hover:bg-white/5 rounded-lg pr-4 transition-colors";
-                headerTitleHint = '<span class="text-[9px] md:text-[10px] text-brand-400 font-normal block -mt-0.5 truncate">Zur Gruppe <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i></span>';
-            } else {
-                return `<div class="flex items-center justify-center h-full text-dark-muted">Gruppe nicht gefunden</div>`;
+            const g = Store.state.groups.find(x => x.id === id);
+            if(g) {
+                title = g.name;
+                subTitle = 'Tippen für Gruppeninfo';
+                messages = g.chat || [];
             }
-
         } else if (type === 'private') {
-            const member = Store.state.members.find(m => m.id === id);
-            if (member) {
-                title = `${member.firstName} ${member.lastName}`;
-                icon = "fa-user";
-                if (!member.privateChat) member.privateChat = [];
-                messages = member.privateChat;
-                headerClickAction = `onclick="MessengerView.showUserProfile(${id})"`;
-                headerCursorClass = "cursor-pointer hover:bg-white/5 rounded-lg pr-4 transition-colors";
-                headerTitleHint = '<span class="text-[9px] md:text-[10px] text-brand-400 font-normal block -mt-0.5 truncate">Profil <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i></span>';
-            } else {
-                return `<div class="flex items-center justify-center h-full text-dark-muted">Mitglied nicht gefunden</div>`;
+            const m = Store.state.members.find(x => x.id === id);
+            if(m) {
+                title = `${m.firstName} ${m.lastName}`;
+                subTitle = m.status === 'active' ? 'Online' : 'Zuletzt online heute';
+                messages = m.privateChat || [];
             }
         }
 
+        // --- RENDER HTML ---
         return `
             <!-- Chat Header -->
-            <div class="h-16 border-b border-dark-border flex items-center gap-3 px-4 md:px-6 bg-dark-bg/95 backdrop-blur-md sticky top-0 z-10 shadow-sm">
-                <!-- Mobile Back Button -->
-                <button onclick="MessengerView.closeChat()" class="md:hidden w-8 h-8 flex items-center justify-center rounded-full text-dark-muted hover:text-white hover:bg-white/10 transition-colors mr-1">
-                    <i class="fa-solid fa-arrow-left"></i>
-                </button>
-
-                <div class="flex items-center gap-3 flex-1 min-w-0 ${headerCursorClass}" ${headerClickAction} title="Details">
-                    <div class="w-9 h-9 md:w-10 md:h-10 rounded-full bg-slate-700/50 flex items-center justify-center text-slate-300 border border-slate-600/50 flex-shrink-0">
-                        <i class="fa-solid ${icon} text-sm md:text-base"></i>
+            <div class="h-16 px-4 py-2 ${C.headerBg} flex items-center justify-between shadow-sm z-30 shrink-0 border-l border-[#2a3942]">
+                <div class="flex items-center gap-3 overflow-hidden cursor-pointer" onclick="${type === 'private' ? `MessengerView.showUserProfile(${id})` : ''}">
+                    <!-- Back Button Mobile -->
+                    <button onclick="event.stopPropagation(); MessengerView.closeChat()" class="md:hidden text-[#d1d7db] mr-1">
+                        <i class="fa-solid fa-arrow-left text-xl"></i>
+                    </button>
+                    
+                    <div class="w-10 h-10 rounded-full bg-[#6a7f8a] flex items-center justify-center overflow-hidden">
+                        ${type === 'private' ? `<span class="font-bold text-white text-lg">${title.charAt(0)}</span>` : '<i class="fa-solid fa-users text-white"></i>'}
                     </div>
-                    <div class="min-w-0">
-                        <h3 class="font-bold text-white text-sm md:text-base truncate">${title}</h3>
-                        ${type === 'news' ? '<span class="text-[9px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30">READ ONLY</span>' : headerTitleHint}
+                    
+                    <div class="flex flex-col justify-center overflow-hidden">
+                        <h3 class="text-[#e9edef] font-bold text-base truncate leading-tight">${title}</h3>
+                        <p class="text-[#8696a0] text-xs truncate leading-tight">${subTitle}</p>
                     </div>
+                </div>
+                
+                <div class="flex items-center gap-4 text-[#8696a0]">
+                    <button class="hover:text-white transition"><i class="fa-solid fa-search"></i></button>
+                    <button class="hover:text-white transition"><i class="fa-solid fa-ellipsis-vertical"></i></button>
                 </div>
             </div>
 
             <!-- Messages Area -->
-            <div id="msg-scroll-container" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 md:space-y-4 custom-scrollbar bg-dark-card" 
-                 onclick="if(MessengerView.state.showAttachMenu || MessengerView.state.showEmojiPicker) { MessengerView.state.showAttachMenu = false; MessengerView.state.showEmojiPicker = false; MessengerView.render(document.getElementById('content')); }">
-                ${messages.length === 0 
-                    ? `<div class="flex flex-col items-center justify-center h-full text-dark-muted opacity-40">
-                         <i class="fa-regular fa-comments text-5xl mb-3"></i>
-                         <p class="text-sm">Schreiben Sie die erste Nachricht...</p>
-                       </div>` 
-                    : messages.map(msg => this.renderMessageBubble(msg)).join('')}
+            <div id="msg-scroll-container" class="flex-1 overflow-y-auto p-4 md:px-10 space-y-2 msg-bg-pattern custom-scrollbar relative">
+                ${messages.length === 0 ? `
+                    <div class="flex justify-center mt-10">
+                        <span class="bg-[#1f2c34] text-[#ffd279] text-xs px-3 py-1.5 rounded-lg shadow-sm border border-[#2a3942]">
+                            🔒 Nachrichten sind Ende-zu-Ende verschlüsselt.
+                        </span>
+                    </div>
+                    <div class="text-center mt-20 text-[#8696a0] opacity-60">
+                        <i class="fa-regular fa-comments text-4xl mb-2"></i>
+                        <p>Noch keine Nachrichten.</p>
+                    </div>
+                ` : messages.map(msg => this.renderMessageBubble(msg)).join('')}
+                <div class="h-2"></div>
             </div>
 
             <!-- Input Area -->
-            <div class="border-t border-dark-border bg-dark-bg/50 backdrop-blur-sm relative z-20 pb-safe">
-                ${canWrite ? `
-                    <!-- Attachment Menu (Dropdown) -->
-                    <div id="attach-menu" class="${this.state.showAttachMenu ? 'block' : 'hidden'} absolute bottom-full left-2 md:left-4 mb-2 bg-dark-card border border-dark-border rounded-2xl shadow-2xl p-2 min-w-[200px] animate-in slide-in-from-bottom-2 fade-in duration-200 z-30">
-                        <div class="grid grid-cols-1 gap-1">
-                            <button onclick="MessengerView.sendAttachment('camera'); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-dark-hover text-sm text-white transition-colors text-left">
-                                <div class="w-6 text-center"><i class="fa-solid fa-camera text-blue-400"></i></div> Kamera
-                            </button>
-                            <button onclick="MessengerView.sendAttachment('image'); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-dark-hover text-sm text-white transition-colors text-left">
-                                <div class="w-6 text-center"><i class="fa-regular fa-image text-purple-400"></i></div> Galerie
-                            </button>
-                            <button onclick="MessengerView.sendAttachment('file'); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-dark-hover text-sm text-white transition-colors text-left">
-                                <div class="w-6 text-center"><i class="fa-solid fa-paperclip text-yellow-400"></i></div> Datei
-                            </button>
-                            <button onclick="MessengerView.sendAttachment('location'); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-dark-hover text-sm text-white transition-colors text-left">
-                                <div class="w-6 text-center"><i class="fa-solid fa-location-dot text-red-400"></i></div> Standort
-                            </button>
-                            <button onclick="MessengerView.openContactSelectModal(); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-dark-hover text-sm text-white transition-colors text-left">
-                                <div class="w-6 text-center"><i class="fa-solid fa-address-book text-orange-400"></i></div> Kontakt
-                            </button>
-                            <div class="h-px bg-dark-border my-1"></div>
-                            <button onclick="MessengerView.openPollModal(); MessengerView.toggleAttachMenu()" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-dark-hover text-sm text-white transition-colors text-left">
-                                <div class="w-6 text-center"><i class="fa-solid fa-square-poll-vertical text-emerald-400"></i></div> Umfrage
-                            </button>
-                        </div>
-                    </div>
-
+            ${canWrite ? `
+                <div class="min-h-[62px] ${C.headerBg} px-4 py-2 flex items-end gap-2 z-30 relative shrink-0 border-l border-[#2a3942]">
+                    
+                    <!-- Attach Menu Popup -->
+                    ${this.renderAttachMenu()}
                     <!-- Emoji Picker -->
-                    ${this.state.showEmojiPicker ? `
-                        <div id="emoji-picker" class="absolute bottom-full right-2 md:right-4 mb-2 bg-dark-card border border-dark-border rounded-2xl shadow-2xl p-2 w-[90vw] md:w-80 h-64 overflow-y-auto custom-scrollbar animate-in slide-in-from-bottom-2 fade-in duration-200 z-30 grid grid-cols-8 gap-1">
-                            ${this.getEmojiList().map(e => `
-                                <button onclick="MessengerView.addEmoji('${e}')" class="text-xl hover:bg-white/10 p-1.5 rounded transition-colors text-center">${e}</button>
-                            `).join('')}
-                        </div>
-                    ` : ''}
+                    ${this.renderEmojiPicker()}
 
-                    <!-- Text Input Bar -->
-                    <form onsubmit="MessengerView.sendMessage(event)" class="flex items-end gap-2 px-3 py-3 md:px-4">
-                        <!-- Plus Button -->
-                        <button type="button" onclick="MessengerView.toggleAttachMenu()" class="w-10 h-10 rounded-full bg-dark-bg border border-dark-border hover:border-brand-500/50 text-dark-muted hover:text-brand-400 transition-all flex items-center justify-center shrink-0 shadow-sm mb-px">
-                            <i class="fa-solid fa-plus text-lg"></i>
-                        </button>
-                        
-                        <!-- Textfeld -->
-                        <div class="flex-1 bg-dark-bg border border-dark-border rounded-2xl flex items-center pr-1 focus-within:border-brand-500/50 focus-within:ring-1 focus-within:ring-brand-500/20 transition-all shadow-inner min-h-[44px]">
-                            <input type="text" name="message" id="chat-input" autocomplete="off" placeholder="Nachricht..." 
-                                class="flex-1 bg-transparent border-none px-4 py-3 text-white focus:outline-none text-sm h-full w-full placeholder-dark-muted">
-                            
-                            <button type="button" onclick="MessengerView.toggleEmojiPicker()" class="p-2 text-dark-muted hover:text-yellow-400 transition-colors ${this.state.showEmojiPicker ? 'text-yellow-400' : ''}">
-                                <i class="fa-regular fa-face-smile text-lg"></i>
+                    <button onclick="MessengerView.toggleAttachMenu()" class="mb-3 text-[#8696a0] hover:text-[#d1d7db] transition w-8 text-center text-xl">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+
+                    <form onsubmit="MessengerView.sendMessage(event)" class="flex-1 flex items-end gap-2 mb-1.5">
+                        <div class="flex-1 bg-[#2a3942] rounded-lg flex items-end min-h-[42px] py-2 px-3 relative border border-transparent focus-within:border-transparent transition-all">
+                            <button type="button" onclick="MessengerView.toggleEmojiPicker()" class="text-[#8696a0] hover:text-[#ffde34] transition mr-3 text-lg mb-0.5">
+                                <i class="fa-regular fa-face-smile"></i>
                             </button>
+                            <input type="text" name="message" id="chat-input" autocomplete="off" placeholder="Nachricht eingeben"
+                                class="bg-transparent border-none text-[#d1d7db] text-sm w-full focus:outline-none placeholder-[#8696a0] max-h-32 overflow-y-auto leading-relaxed">
                         </div>
-
-                        <!-- Senden -->
-                        <button type="submit" class="w-10 h-10 rounded-full bg-brand-600 hover:bg-brand-500 text-white flex items-center justify-center transition-all shadow-lg shadow-brand-500/20 hover:scale-105 active:scale-95 shrink-0 mb-px">
-                            <i class="fa-solid fa-paper-plane text-sm"></i>
+                        
+                        <button type="submit" class="w-10 h-10 flex items-center justify-center rounded-full ${C.accentColor} ${C.accentColorHover} text-white shadow-md transition-transform active:scale-95 mb-0.5">
+                            <i class="fa-solid fa-paper-plane text-sm pl-0.5"></i>
                         </button>
                     </form>
-                ` : `
-                    <div class="p-4 text-center text-dark-muted text-xs md:text-sm italic bg-dark-bg/50">
-                        In diesem Kanal können nur Administratoren posten.
-                    </div>
-                `}
-            </div>
+                </div>
+            ` : `
+                <div class="p-4 ${C.headerBg} text-center text-[#8696a0] text-sm border-t ${C.border}">
+                    Nur Administratoren können hier senden.
+                </div>
+            `}
         `;
     },
 
+    /**
+     * Die eigentliche Nachricht (Sprechblase)
+     */
     renderMessageBubble(msg) {
         if (msg.isSystem) {
             return `
-                <div class="flex justify-center my-4 animate-in fade-in zoom-in duration-300">
-                    <div class="bg-dark-bg/80 border border-dark-border rounded-xl p-3 max-w-[85%] text-center shadow-sm backdrop-blur-sm">
-                        <p class="text-[10px] text-brand-400 font-bold uppercase mb-1 flex items-center justify-center gap-1">
-                            <i class="fa-solid fa-bullhorn"></i> ${msg.sender}
-                        </p>
-                        <div class="text-sm text-slate-200 leading-snug">${msg.text}</div>
-                        <span class="text-[9px] text-dark-muted mt-2 block">${new Date(msg.time).toLocaleDateString()}</span>
+                <div class="flex justify-center my-3">
+                    <div class="bg-[#1f2c34] text-[#8696a0] text-xs px-3 py-1.5 rounded-lg shadow uppercase font-bold tracking-wide">
+                        ${msg.sender}: ${msg.text.replace(/\*\*(.*?)\*\*/g, '$1')}
                     </div>
                 </div>
             `;
@@ -386,141 +451,147 @@ const MessengerView = {
 
         const isMe = msg.isMe;
         const isDeleted = msg.isDeleted;
-        
-        const canDelete = (isMe || App.can('delete_content')) && !isDeleted;
-        const canEdit = isMe && !isDeleted;
+        const C = this.config;
+
+        // Bubble Styles
+        const bubbleColor = isMe ? C.myMessageBg : C.otherMessageBg;
+        const align = isMe ? 'items-end' : 'items-start';
+        // Tail Classes (Via injectStyles css)
+        const tailClass = isMe ? 'bubble-tail-out' : 'bubble-tail-in';
         
         let contentHtml = '';
 
         if (isDeleted) {
-            contentHtml = `<span class="italic text-gray-400 flex items-center gap-2"><i class="fa-solid fa-ban text-xs"></i> 🚫 Gelöscht</span>`;
+            contentHtml = `<span class="italic text-[#8696a0] flex items-center gap-1 text-sm"><i class="fa-solid fa-ban text-xs"></i> Gelöscht</span>`;
         } else {
-            // Content Types
+            // Text Formatting (Simple Bold/Linebreak)
+            let formatted = (msg.text || '').replace(/\n/g, '<br>');
+            
+            // Type Handling
             if (msg.type === 'image') {
-                contentHtml = `<img src="${msg.content}" class="rounded-lg max-w-full sm:max-w-[250px] mb-1 border border-white/10 cursor-pointer hover:opacity-90 transition-opacity" onclick="window.open('${msg.content}', '_blank')">`;
-            } else if (msg.type === 'voice') {
                 contentHtml = `
-                    <div class="flex items-center gap-3 min-w-[160px] md:min-w-[200px]">
-                        <button class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors"><i class="fa-solid fa-play text-xs"></i></button>
-                        <div class="flex-1 h-1 bg-white/20 rounded-full relative"><div class="w-1/3 h-full bg-white rounded-full absolute left-0 top-0"></div></div>
-                        <span class="text-[9px] opacity-70 tabular-nums">0:15</span>
-                    </div>`;
+                    <div class="mb-1 rounded-lg overflow-hidden cursor-pointer bg-black/20" onclick="window.open('${msg.content}', '_blank')">
+                        <img src="${msg.content}" class="max-w-full sm:max-w-[300px] max-h-[300px] object-cover hover:opacity-90 transition">
+                    </div>
+                    ${formatted ? `<p class="text-sm">${formatted}</p>` : ''}
+                `;
             } else if (msg.type === 'file') {
                 contentHtml = `
-                    <div class="flex items-center gap-3 bg-black/20 p-2 rounded-lg min-w-[180px]">
-                        <div class="w-8 h-8 rounded bg-white/10 flex items-center justify-center text-lg"><i class="fa-solid fa-file-lines"></i></div>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-xs font-bold truncate">${msg.content}</p>
-                            <p class="text-[9px] opacity-70">Datei</p>
+                    <div class="flex items-center gap-3 bg-black/20 p-3 rounded-lg min-w-[200px] mb-1 cursor-pointer hover:bg-black/30 transition">
+                        <div class="w-8 h-8 bg-[#f83f3f] rounded flex items-center justify-center text-white"><i class="fa-solid fa-file-pdf"></i></div>
+                        <div class="flex-1 overflow-hidden">
+                            <p class="text-sm truncate text-white">${msg.content}</p>
+                            <p class="text-[10px] text-[#8696a0]">PDF • 3 Seiten</p>
                         </div>
-                        <i class="fa-solid fa-download opacity-70 cursor-pointer p-1"></i>
-                    </div>`;
-            } else if (msg.type === 'location') {
-                contentHtml = `
-                    <div class="min-w-[180px]">
-                        <div class="h-28 bg-slate-700 rounded-lg mb-2 flex items-center justify-center relative overflow-hidden group/map cursor-pointer">
-                            <div class="absolute inset-0 bg-gradient-to-br from-slate-600 to-slate-800 opacity-50"></div>
-                            <i class="fa-solid fa-map-location-dot text-white/20 text-6xl absolute"></i>
-                            <i class="fa-solid fa-location-dot text-red-500 text-3xl drop-shadow-md z-10 animate-bounce"></i>
-                        </div>
-                        <p class="text-xs font-bold flex items-center"><i class="fa-solid fa-map-pin mr-1.5"></i> Aktueller Standort</p>
-                    </div>`;
-            } else if (msg.type === 'contact') {
-                const c = msg.content;
-                contentHtml = `
-                    <div class="min-w-[180px] bg-white/5 p-2 rounded-lg border border-white/10 flex items-center gap-3 cursor-pointer hover:bg-white/10 transition-colors" onclick="MessengerView.showUserProfile(${c.id})">
-                        <div class="w-9 h-9 rounded-full bg-slate-600 flex items-center justify-center text-white font-bold text-xs">
-                            ${(c.name || 'U').charAt(0)}
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-xs font-bold truncate">${c.name}</p>
-                            <p class="text-[9px] opacity-70 truncate">${c.role || 'Mitglied'}</p>
-                        </div>
-                        <i class="fa-solid fa-chevron-right text-[10px] opacity-50"></i>
+                        <i class="fa-solid fa-download text-[#8696a0]"></i>
                     </div>
-                    <p class="text-[9px] mt-1 opacity-60 text-center uppercase tracking-wide">Kontakt geteilt</p>
                 `;
             } else if (msg.type === 'poll') {
                 const poll = msg.content;
-                const totalVotes = poll.options.reduce((acc, opt) => acc + (opt.votes ? opt.votes.length : 0), 0);
-                const myId = this.getMyId();
-                
                 contentHtml = `
-                    <div class="min-w-[200px] w-full">
-                        <p class="font-bold text-sm mb-3 border-b border-white/10 pb-2">${poll.question}</p>
+                   <div class="min-w-[220px]">
+                        <p class="font-bold text-[#e9edef] text-base mb-3">${poll.question}</p>
                         <div class="space-y-2">
-                            ${poll.options.map(opt => {
-                                const votesCount = opt.votes ? opt.votes.length : 0;
-                                const percent = totalVotes > 0 ? Math.round((votesCount / totalVotes) * 100) : 0;
-                                const hasVoted = opt.votes && opt.votes.includes(myId);
-                                return `
-                                <div onclick="MessengerView.votePoll(${msg.id}, ${opt.id})" class="cursor-pointer group/poll relative">
-                                    <div class="flex justify-between text-xs mb-1 relative z-10">
-                                        <span class="${hasVoted ? 'font-bold text-white' : ''}">${opt.text} ${hasVoted ? '<i class="fa-solid fa-check-circle ml-1"></i>' : ''}</span>
-                                        <span>${votesCount}</span>
+                             ${poll.options.map(opt => {
+                                 const votes = opt.votes ? opt.votes.length : 0;
+                                 const myId = this.getMyId();
+                                 const hasVoted = opt.votes && opt.votes.includes(myId);
+                                 return `
+                                    <div onclick="MessengerView.votePoll(${msg.id}, ${opt.id})" class="cursor-pointer relative p-2 rounded border ${hasVoted ? 'border-[#00a884] bg-[#00a884]/10' : 'border-[#2a3942] hover:bg-white/5'} transition-all">
+                                        <div class="flex justify-between text-sm mb-1">
+                                            <span class="text-[#e9edef]">${opt.text}</span>
+                                            <span class="text-[#8696a0]">${votes}</span>
+                                        </div>
                                     </div>
-                                    <div class="h-2 bg-black/30 rounded-full overflow-hidden">
-                                        <div class="h-full bg-white/80 group-hover/poll:bg-white transition-all" style="width: ${percent}%"></div>
-                                    </div>
-                                </div>
-                                `;
-                            }).join('')}
+                                 `;
+                             }).join('')}
                         </div>
-                        <p class="text-[9px] mt-2 opacity-60 text-right">${totalVotes} Stimmen • ${poll.multiple ? 'Mehrfach' : 'Single'}</p>
-                    </div>`;
+                        <p class="text-[10px] text-[#8696a0] mt-2 text-center">Tippe zum Abstimmen</p>
+                   </div> 
+                `;
             } else {
-                contentHtml = msg.text;
+                contentHtml = `<span class="text-sm md:text-[15px] leading-relaxed text-[#e9edef]">${formatted}</span>`;
             }
         }
 
-        // Action Menu (3 Punkte)
-        let actionsHtml = '';
-        if (canDelete || canEdit) {
-            const menuId = `msg-menu-${msg.id}`;
-            actionsHtml = `
-                <div class="absolute top-1 right-2 z-20 opacity-0 group-hover/msg:opacity-100 transition-opacity text-start">
-                    <button onclick="event.stopPropagation(); document.getElementById('${menuId}').classList.toggle('hidden')" 
-                        class="text-white/60 hover:text-white p-1 rounded-full hover:bg-black/20 transition-colors w-6 h-6 flex items-center justify-center">
-                        <i class="fa-solid fa-ellipsis-vertical text-[10px]"></i>
-                    </button>
-                    <!-- Dropdown -->
-                    <div id="${menuId}" class="hidden absolute top-6 right-0 bg-dark-card border border-dark-border rounded-lg shadow-xl p-1 min-w-[100px] flex flex-col gap-0.5 z-30">
-                        ${canEdit ? `<button onclick="event.stopPropagation(); document.getElementById('${menuId}').classList.add('hidden'); MessengerView.openEditMessageModal(${msg.id})" class="text-left text-xs text-white px-2 py-2 rounded hover:bg-dark-hover flex items-center gap-2 w-full"><i class="fa-solid fa-pen opacity-70"></i> Bearbeiten</button>` : ''}
-                        ${canDelete ? `<button onclick="event.stopPropagation(); document.getElementById('${menuId}').classList.add('hidden'); MessengerView.deleteMessage(${msg.id})" class="text-left text-xs text-red-400 px-2 py-2 rounded hover:bg-dark-hover flex items-center gap-2 w-full"><i class="fa-solid fa-trash opacity-70"></i> Löschen</button>` : ''}
-                    </div>
-                </div>
-            `;
-        }
-
-        let bubbleClass = isMe 
-            ? 'bg-brand-600 text-white rounded-2xl rounded-br-sm' 
-            : 'bg-slate-800 border border-slate-700/50 text-slate-200 rounded-2xl rounded-bl-sm';
-            
-        if (isDeleted) bubbleClass = 'bg-slate-800/50 border border-slate-700/50 text-slate-400 rounded-2xl';
-
-        // Padding für Menü
-        let paddingClass = 'px-3 py-2 md:px-4 md:py-2.5';
-        if ((canDelete || canEdit) && !isDeleted) {
-            paddingClass = 'pl-3 pr-7 py-2 md:pl-4 md:pr-8 md:py-2.5';
-        }
+        // Time & Status
+        const time = new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const statusIcon = isMe ? `<span class="text-[#53bdeb] ml-1 text-[10px]"><i class="fa-solid fa-check-double"></i></span>` : '';
 
         return `
-            <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-300 group/msg relative mb-1">
-                <div class="flex items-end gap-2 max-w-[85%] relative">
-                    ${!isMe ? `<div class="w-6 h-6 rounded-full bg-slate-700 text-slate-400 text-[9px] flex items-center justify-center font-bold border border-slate-600 shrink-0 mb-1 select-none">${(msg.sender || '?').charAt(0)}</div>` : ''}
-                    
-                    <div class="relative ${paddingClass} shadow-sm text-sm leading-relaxed ${bubbleClass}">
-                        ${actionsHtml}
+            <div class="flex flex-col ${align} mb-1 group max-w-full">
+                <div class="relative max-w-[85%] md:max-w-[65%] shadow-sm ${bubbleColor} ${C.textMain} px-2 pt-2 pb-1 ${tailClass} rounded-lg">
+                    <!-- Dropdown Arrow (Hover only) -->
+                    ${(!isDeleted && (isMe || App.can('admin'))) ? `
+                        <button onclick="MessengerView.showMsgMenu(this, ${msg.id})" class="absolute top-0 right-0 w-8 h-6 bg-gradient-to-b from-black/20 to-transparent rounded-tr-lg opacity-0 group-hover:opacity-100 transition-opacity text-right pr-2 pt-1 text-white/80 hover:text-white z-10">
+                            <i class="fa-solid fa-angle-down text-xs drop-shadow-md"></i>
+                        </button>
+                    ` : ''}
+
+                    <!-- Content -->
+                    <div class="px-1 pb-1 relative z-0 break-words" style="min-width: 80px;">
+                        ${!isMe && this.state.activeType === 'group' ? `<p class="text-xs font-bold text-[#eeb346] mb-1 cursor-pointer hover:underline">${msg.sender}</p>` : ''}
                         ${contentHtml}
                     </div>
-                </div>
-                <div class="text-[9px] text-dark-muted mt-0.5 px-1 select-none flex items-center gap-1 ${isMe ? 'flex-row-reverse' : ''}">
-                    ${!isMe ? `<span class="font-bold">${msg.sender}</span> •` : ''}
-                    <span>${new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                    ${msg.isEdited && !isDeleted ? '<span class="italic text-[8px] opacity-70">(bearbeitet)</span>' : ''}
+                    
+                    <!-- Metadata (Time + Checks) -->
+                    <div class="float-right flex items-end gap-1 ml-2 -mb-0.5 opacity-60 select-none">
+                        <span class="text-[10px] text-[#e9edef]">${time}</span>
+                        ${statusIcon}
+                    </div>
                 </div>
             </div>
         `;
+    },
+
+    // --- MENUS & POPUPS ---
+
+    renderAttachMenu() {
+        if (!this.state.showAttachMenu) return '';
+        const items = [
+            { icon: 'fa-image', color: 'bg-purple-500', text: 'Fotos & Videos', action: "MessengerView.sendAttachment('image')" },
+            { icon: 'fa-camera', color: 'bg-red-500', text: 'Kamera', action: "MessengerView.sendAttachment('camera')" },
+            { icon: 'fa-file', color: 'bg-indigo-500', text: 'Dokument', action: "MessengerView.sendAttachment('file')" },
+            { icon: 'fa-user', color: 'bg-blue-500', text: 'Kontakt', action: "MessengerView.openContactSelectModal()" },
+            { icon: 'fa-square-poll-vertical', color: 'bg-teal-500', text: 'Umfrage', action: "MessengerView.openPollModal()" },
+        ];
+
+        return `
+            <div class="absolute bottom-20 left-4 flex flex-col gap-4 animate-slide-up z-40">
+                ${items.map(i => `
+                    <div onclick="${i.action}; MessengerView.toggleAttachMenu()" class="flex items-center gap-4 group cursor-pointer">
+                        <div class="w-12 h-12 rounded-full ${i.icon === 'fa-image' ? 'bg-gradient-to-b from-purple-500 to-pink-500' : i.color} flex items-center justify-center text-white shadow-lg hover:scale-110 transition-transform">
+                            <i class="fa-solid ${i.icon} text-lg"></i>
+                        </div>
+                        <!-- Tooltip-ish Text -->
+                        <span class="bg-[#233138] text-white px-3 py-1 rounded-full text-sm opacity-0 group-hover:opacity-100 transition-opacity shadow-lg scale-0 group-hover:scale-100 origin-left border border-[#2a3942] whitespace-nowrap hidden md:block">
+                            ${i.text}
+                        </span>
+                    </div>
+                `).reverse().join('')}
+            </div>
+        `;
+    },
+
+    renderEmojiPicker() {
+        if (!this.state.showEmojiPicker) return '';
+        const emojis = ['😀','😂','🥰','😎','😭','👍','👎','👋','🙏','❤️','🔥','🎉','⚽','🍺','🤔','👀','🚀','💯','🔴','⚪'];
+        return `
+            <div class="absolute bottom-20 left-0 md:left-4 bg-[#202c33] border border-[#2a3942] rounded-lg shadow-2xl p-2 w-full md:w-72 h-64 overflow-y-auto animate-slide-up z-40 custom-scrollbar">
+                <div class="grid grid-cols-6 gap-1">
+                    ${emojis.map(e => `<button onclick="MessengerView.addEmoji('${e}')" class="text-2xl p-2 hover:bg-white/5 rounded transition">${e}</button>`).join('')}
+                </div>
+                <div class="p-2 text-center text-xs text-[#8696a0]">Mehr Emojis folgen...</div>
+            </div>
+        `;
+    },
+
+    showMsgMenu(btn, msgId) {
+        // Simples natives Confirm/Prompt Menü oder Custom (hier vereinfacht)
+        event.stopPropagation();
+        if(confirm("Nachricht löschen?")) {
+            this.deleteMessage(msgId);
+        }
     },
 
     // --- ACTIONS ---
@@ -529,30 +600,18 @@ const MessengerView = {
         this.state.showAttachMenu = !this.state.showAttachMenu;
         this.state.showEmojiPicker = false;
         this.render(document.getElementById('content'));
-        setTimeout(() => {
-            const input = document.getElementById('chat-input');
-            if(input) input.focus();
-        }, 50);
     },
 
     toggleEmojiPicker() {
         this.state.showEmojiPicker = !this.state.showEmojiPicker;
         this.state.showAttachMenu = false;
         this.render(document.getElementById('content'));
-        setTimeout(() => {
-            const input = document.getElementById('chat-input');
-            if(input) input.focus();
-        }, 50);
     },
 
-    getEmojiList() {
-        return ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🧐', '🤓', '😎', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '😈', '👿', '👹', '👺', '🤡', '💩', '👻', '💀', '☠️', '👽', '👾', '🤖', '🎃', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾', '👋', '🤚', '🖐', '✋', '🖖', '👌', '🤏', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '💋', '👄', '🦷', '👅', '👂', '🦻', '👃', '👣', '👁', '👀', '🧠', '🫀', '🫁', '🦴', '👶', '👧', '🧒', '👦', '👩', '🧑', '👨', '👵', '🧓', '👴', '👲', '👳‍♀️', '👳', '🧕', '👮‍♀️', '👮', '👷‍♀️', '👷', '💂‍♀️', '💂', '🕵️‍♀️', '🕵️', '👩‍⚕️', '👨‍⚕️', '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '⚽', '🏀', '🏈', '⚾', '🥎', '🏐', '🏉', '🥏', '🎱', '🏓', '🏸', '🏒', '🏑', '🏏', '🥅', '⛳', '🏹', '🎣', '🥊', '🥋', '🛹', '🛼', '⛷', '🏂', '🏋️‍♀️', '🏋️', '🤼‍♀️', '🤸‍♀️', '⛹️‍♀️', '⛹️', '🤺', '🤾‍♀️', '🏌️‍♀️', '🏇', '🧘‍♀️', '🧘', '🏄‍♀️', '🏊‍♀️', '🤽‍♀️', '🚣‍♀️', '🧗‍♀️', '🚵‍♀️', '🚴‍♀️', '🏆', '🥇', '🥈', '🥉', '🏅', '🎖', '🏵', '🎗', '🎫', '🎟', '🎪', '🤹', '🎭', '🎨', '🎬', '🎤', '🎧', '🎼', '🎹', '🥁', '🎷', '🎺', '🎸', '🎻', '🎲', '♟', '🎯', '🎳', '🎮', '🎰', '🧩'];
-    },
-
-    addEmoji(emoji) {
+    addEmoji(char) {
         const input = document.getElementById('chat-input');
         if(input) {
-            input.value += emoji;
+            input.value += char;
             input.focus();
         }
     },
@@ -562,339 +621,20 @@ const MessengerView = {
         const input = e.target.elements.message;
         const text = input.value.trim();
         if (!text) return;
+
         this.addMessageToChat({ text: text, type: 'text' });
         input.value = '';
         input.focus();
     },
 
-    sendAttachment(type, contentData = null) {
+    sendAttachment(type) {
+        // Dummy Simulation
         let content = '';
-        let text = '';
-
-        if (type === 'image') {
-            content = 'https://picsum.photos/300/200'; // Simulation
-            text = 'Foto gesendet';
-        } else if (type === 'camera') {
-            content = 'https://picsum.photos/300/200?random=' + Date.now(); // Simulation
-            text = 'Kamera-Aufnahme gesendet';
-        } else if (type === 'voice') {
-            content = 'audio_dummy.mp3';
-            text = 'Sprachnachricht';
-        } else if (type === 'file') {
-            const name = prompt("Dateiname:");
-            if(!name) return;
-            content = name;
-            text = 'Datei gesendet';
-        } else if (type === 'location') {
-            content = '48.137, 11.576';
-            text = 'Standort geteilt';
-        } else if (type === 'contact') {
-            content = contentData; 
-            text = 'Kontakt geteilt';
-        }
-
-        this.addMessageToChat({ text: text, type: type, content: content });
-    },
-
-    // --- CONTACT SHARING ---
-
-    openContactSelectModal() {
-        const allMembers = Store.state.members || [];
+        if(type === 'image') content = 'https://picsum.photos/400/300';
+        if(type === 'file') content = 'Protokoll_Sitzung.pdf';
         
-        const html = `
-            <div class="p-6 h-[500px] flex flex-col">
-                <div class="flex justify-between items-center mb-4 border-b border-dark-border pb-4">
-                    <h3 class="text-xl font-bold text-white">Kontakt teilen</h3>
-                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2"><i class="fa-solid fa-times text-xl"></i></button>
-                </div>
-                
-                <input type="text" onkeyup="MessengerView.filterContactSelect(this)" placeholder="Mitglied suchen..." 
-                    class="w-full bg-dark-bg border border-dark-border rounded-xl px-4 py-2 text-white focus:outline-none focus:border-brand-500 mb-4">
-
-                <div id="share-contact-list" class="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                    ${allMembers.map(m => `
-                        <div class="share-contact-item flex justify-between items-center p-3 rounded-lg bg-dark-bg border border-dark-border hover:border-brand-500/50 cursor-pointer transition-colors"
-                             onclick="MessengerView.confirmShareContact(${m.id}, '${m.firstName} ${m.lastName}', '${m.role}')">
-                            <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-full bg-slate-700 text-white flex items-center justify-center font-bold">
-                                    ${(m.firstName || 'U').charAt(0)}${(m.lastName || '').charAt(0)}
-                                </div>
-                                <div>
-                                    <p class="text-sm font-bold text-white contact-name">${m.firstName} ${m.lastName}</p>
-                                    <p class="text-xs text-dark-muted">${m.role}</p>
-                                </div>
-                            </div>
-                            <i class="fa-solid fa-share text-brand-500"></i>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-        App.openModal(html);
+        this.addMessageToChat({ text: '', type: type, content: content });
     },
-
-    filterContactSelect(input) {
-        const filter = input.value.toLowerCase();
-        const items = document.querySelectorAll('.share-contact-item');
-        items.forEach(item => {
-            const name = item.querySelector('.contact-name').textContent.toLowerCase();
-            item.style.display = name.includes(filter) ? 'flex' : 'none';
-        });
-    },
-
-    confirmShareContact(id, name, role) {
-        this.sendAttachment('contact', { id, name, role });
-        App.closeModal();
-    },
-
-    showUserProfile(id) {
-        const m = Store.state.members.find(mem => mem.id == id);
-        if(!m) return;
-
-        const html = `
-            <div class="p-8">
-                <div class="flex justify-between items-start mb-8 border-b border-dark-border pb-6">
-                    <div class="flex items-center gap-5">
-                        <div class="w-20 h-20 rounded-full bg-brand-600 flex items-center justify-center text-3xl font-bold text-white shadow-lg">
-                            ${(m.firstName || 'U').charAt(0)}${(m.lastName || '').charAt(0)}
-                        </div>
-                        <div>
-                            <h2 class="text-3xl font-bold text-white leading-tight">${m.firstName} ${m.lastName}</h2>
-                            <p class="text-brand-400 font-medium text-lg mt-1">${m.role}</p>
-                        </div>
-                    </div>
-                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-2xl"></i></button>
-                </div>
-                <div class="space-y-4 mb-8">
-                    <div class="bg-dark-bg p-5 rounded-xl border border-dark-border">
-                        <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-4">Gruppen</h4>
-                        <div class="flex flex-wrap gap-2">
-                            ${Array.isArray(m.groups) ? m.groups.map(g => `<span class="bg-brand-500/10 text-brand-300 px-3 py-1 rounded-full text-sm border border-brand-500/30">${g}</span>`).join('') : '<span class="text-dark-muted">Keine Gruppen</span>'}
-                        </div>
-                    </div>
-                </div>
-                <button onclick="MessengerView.startPrivateChat(${m.id})" class="w-full bg-brand-600 hover:bg-brand-500 text-white py-3 rounded-xl font-bold transition-colors shadow-lg shadow-brand-500/20 text-lg">
-                    <i class="fa-solid fa-comments mr-2"></i> Nachricht senden
-                </button>
-            </div>
-        `;
-        App.openModal(html);
-    },
-
-    startPrivateChat(id) {
-        App.closeModal();
-        this.selectChat('private', id);
-    },
-
-    // --- MESSAGE MANAGEMENT ---
-
-    deleteMessage(msgId) {
-        if(!confirm("Nachricht wirklich löschen?")) return;
-        this.updateMessage(msgId, (msg) => {
-            msg.isDeleted = true;
-            msg.text = '🚫 Nachricht gelöscht';
-            msg.type = 'text';
-        });
-    },
-
-    openEditMessageModal(msgId) {
-        let msg = null;
-        const chat = this.getActiveChatArray();
-        if(chat) msg = chat.find(m => m.id === msgId);
-
-        if(!msg || msg.isDeleted) return;
-
-        const html = `
-            <div class="p-6">
-                <h3 class="text-xl font-bold text-white mb-4">Nachricht bearbeiten</h3>
-                <form onsubmit="MessengerView.handleEditMessage(event, ${msgId})">
-                    <textarea name="text" class="form-input h-32 mb-4" required>${msg.text}</textarea>
-                    <button type="submit" class="btn-primary w-full">Speichern</button>
-                </form>
-            </div>
-        `;
-        App.openModal(html);
-    },
-
-    handleEditMessage(e, msgId) {
-        e.preventDefault();
-        const text = new FormData(e.target).get('text');
-        this.updateMessage(msgId, (msg) => {
-            msg.text = text;
-            msg.isEdited = true;
-        });
-        App.closeModal();
-    },
-
-    updateMessage(msgId, updateFn) {
-        const type = this.state.activeType;
-        const id = this.state.activeId;
-        let chat = null;
-        let parentObj = null;
-        let table = '';
-
-        if (type === 'group') {
-            parentObj = Store.state.groups.find(g => g.id === id);
-            if(parentObj) {
-                chat = parentObj.chat;
-                table = 'groups';
-            }
-        } else if (type === 'private') {
-            parentObj = Store.state.members.find(m => m.id === id);
-            if(parentObj) {
-                chat = parentObj.privateChat;
-                table = 'members';
-            }
-        }
-
-        if(chat && parentObj) {
-            const msg = chat.find(m => m.id === msgId);
-            if(msg) {
-                updateFn(msg);
-                // UPDATE STATT SAVE
-                Store.update(table, parentObj);
-                const chatArea = document.getElementById('messenger-chat-area');
-                if (chatArea) chatArea.innerHTML = this.renderActiveChat();
-            }
-        }
-    },
-
-    getActiveChatArray() {
-        const type = this.state.activeType;
-        const id = this.state.activeId;
-        if (type === 'group') {
-            const group = Store.state.groups.find(g => g.id === id);
-            return group ? group.chat : null;
-        } else if (type === 'private') {
-            const member = Store.state.members.find(m => m.id === id);
-            return member ? member.privateChat : null;
-        }
-        return null;
-    },
-
-    // --- POLL SYSTEM ---
-
-    openPollModal() {
-        const html = `
-            <div class="p-6">
-                <div class="flex justify-between items-center mb-4 border-b border-dark-border pb-4">
-                    <h3 class="text-xl font-bold text-white">Umfrage erstellen</h3>
-                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2"><i class="fa-solid fa-times text-xl"></i></button>
-                </div>
-                <form onsubmit="MessengerView.createPoll(event)">
-                    <div class="mb-4">
-                        <label class="text-muted">Frage / Titel</label>
-                        <input type="text" name="question" required class="form-input" placeholder="Wann ist Training?">
-                    </div>
-                    
-                    <div class="mb-4">
-                        <label class="text-muted">Optionen</label>
-                        <div id="poll-options-container" class="space-y-2">
-                            <input type="text" name="option[]" required class="form-input" placeholder="Option 1">
-                            <input type="text" name="option[]" required class="form-input" placeholder="Option 2">
-                        </div>
-                        <button type="button" onclick="MessengerView.addPollOptionInput()" class="text-xs text-brand-400 mt-2 hover:underline">+ Option hinzufügen</button>
-                    </div>
-
-                    <div class="mb-6 flex items-center">
-                        <input type="checkbox" name="multiple" id="pollMulti" class="w-4 h-4 rounded bg-dark-bg border-dark-border accent-brand-600">
-                        <label for="pollMulti" class="ml-2 text-sm text-dark-muted cursor-pointer">Mehrfachauswahl erlauben</label>
-                    </div>
-
-                    <button type="submit" class="btn-primary w-full">Umfrage senden</button>
-                </form>
-            </div>
-        `;
-        App.openModal(html);
-    },
-
-    addPollOptionInput() {
-        const container = document.getElementById('poll-options-container');
-        const count = container.children.length + 1;
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.name = 'option[]';
-        input.required = true;
-        input.className = 'form-input';
-        input.placeholder = `Option ${count}`;
-        container.appendChild(input);
-    },
-
-    createPoll(e) {
-        e.preventDefault();
-        const fd = new FormData(e.target);
-        const question = fd.get('question');
-        const multiple = fd.get('multiple') === 'on';
-        const options = fd.getAll('option[]').map((opt, idx) => ({
-            id: idx,
-            text: opt,
-            votes: []
-        }));
-
-        const pollData = {
-            question,
-            multiple,
-            options
-        };
-
-        this.addMessageToChat({ text: 'Umfrage: ' + question, type: 'poll', content: pollData });
-        App.closeModal();
-    },
-
-    votePoll(msgId, optionId) {
-        const type = this.state.activeType;
-        const id = this.state.activeId;
-        let messages = null;
-        let parentObj = null;
-        let table = '';
-
-        if (type === 'group') {
-            parentObj = Store.state.groups.find(g => g.id === id);
-            if(parentObj) {
-                messages = parentObj.chat;
-                table = 'groups';
-            }
-        } else if (type === 'private') {
-            parentObj = Store.state.members.find(m => m.id === id);
-            if(parentObj) {
-                messages = parentObj.privateChat;
-                table = 'members';
-            }
-        }
-
-        if(messages && parentObj) {
-            const msg = messages.find(m => m.id === msgId);
-            if(msg && msg.type === 'poll') {
-                const poll = msg.content;
-                const myId = this.getMyId();
-                
-                const option = poll.options.find(o => o.id === optionId);
-                
-                if(option) {
-                    if(!option.votes) option.votes = [];
-                    const hasVoted = option.votes.includes(myId);
-                    
-                    if(hasVoted) {
-                        option.votes = option.votes.filter(v => v !== myId);
-                    } else {
-                        if(!poll.multiple) {
-                            poll.options.forEach(o => {
-                                if(o.votes) o.votes = o.votes.filter(v => v !== myId);
-                            });
-                        }
-                        option.votes.push(myId);
-                    }
-                    
-                    // UPDATE STATT SAVE
-                    Store.update(table, parentObj);
-                    const chatArea = document.getElementById('messenger-chat-area');
-                    if (chatArea) chatArea.innerHTML = this.renderActiveChat();
-                }
-            }
-        }
-    },
-
-    // --- HELPER ---
 
     addMessageToChat(msgData) {
         const myId = this.getMyId();
@@ -907,7 +647,6 @@ const MessengerView = {
             content: msgData.content || null,
             sender: me.firstName, 
             isMe: true,
-            isEdited: false,
             isDeleted: false,
             time: new Date().toISOString()
         };
@@ -919,14 +658,14 @@ const MessengerView = {
 
         if (type === 'group') {
             parentObj = Store.state.groups.find(g => g.id === id);
-            if (parentObj) {
+            if(parentObj) {
                 if(!parentObj.chat) parentObj.chat = [];
                 parentObj.chat.push(newMessage);
                 table = 'groups';
             }
         } else if (type === 'private') {
             parentObj = Store.state.members.find(m => m.id === id);
-            if (parentObj) {
+            if(parentObj) {
                 if(!parentObj.privateChat) parentObj.privateChat = [];
                 parentObj.privateChat.push(newMessage);
                 table = 'members';
@@ -934,25 +673,99 @@ const MessengerView = {
         }
 
         if(parentObj) {
-            // UPDATE STATT SAVE
             Store.update(table, parentObj);
             
+            // Re-Render Chat Area Only
             const chatArea = document.getElementById('messenger-chat-area');
-            if (chatArea) {
+            if(chatArea) {
                 chatArea.innerHTML = this.renderActiveChat();
-                this.scrollToBottom();
+                this.scrollToBottom(true);
             }
-            if (this.state.filterTerm === '') this.renderSidebarList();
+            // Update List (für Preview Text)
+            this.renderSidebarList();
         }
     },
 
-    scrollToBottom() {
+    deleteMessage(msgId) {
+        const type = this.state.activeType;
+        const id = this.state.activeId;
+        let parentObj = null;
+        if(type === 'group') parentObj = Store.state.groups.find(g => g.id === id);
+        if(type === 'private') parentObj = Store.state.members.find(m => m.id === id);
+
+        if(parentObj) {
+            const list = type === 'group' ? parentObj.chat : parentObj.privateChat;
+            const msg = list.find(m => m.id === msgId);
+            if(msg) {
+                msg.isDeleted = true;
+                msg.text = '';
+                Store.update(type === 'group' ? 'groups' : 'members', parentObj);
+                this.render(document.getElementById('content'));
+            }
+        }
+    },
+
+    // Polls & Modals (Basis Funktionalität)
+    openPollModal() {
+        const question = prompt("Frage für Umfrage:");
+        if(!question) return;
+        const opt1 = prompt("Option 1:");
+        const opt2 = prompt("Option 2:");
+        if(opt1 && opt2) {
+            const pollData = {
+                question,
+                options: [
+                    { id: 1, text: opt1, votes: [] },
+                    { id: 2, text: opt2, votes: [] }
+                ]
+            };
+            this.addMessageToChat({ text: '', type: 'poll', content: pollData });
+        }
+    },
+
+    votePoll(msgId, optId) {
+        const type = this.state.activeType;
+        const id = this.state.activeId;
+        const myId = this.getMyId();
+        let parentObj = null;
+        if(type === 'group') parentObj = Store.state.groups.find(g => g.id === id);
+        
+        if(parentObj) {
+            const msg = parentObj.chat.find(m => m.id === msgId);
+            if(msg && msg.type === 'poll') {
+                const opt = msg.content.options.find(o => o.id === optId);
+                if(opt) {
+                    if(!opt.votes) opt.votes = [];
+                    if(opt.votes.includes(myId)) opt.votes = opt.votes.filter(v => v !== myId);
+                    else opt.votes.push(myId);
+                    Store.update('groups', parentObj);
+                    
+                    // UI Update ohne vollen Re-Render für Performance
+                    const chatArea = document.getElementById('messenger-chat-area');
+                    if(chatArea) chatArea.innerHTML = this.renderActiveChat();
+                }
+            }
+        }
+    },
+    
+    showUserProfile(id) {
+        alert("Profil von ID " + id + " anzeigen");
+    },
+
+    openContactSelectModal() {
+        alert("Kontakt teilen (Funktion hier einfügen)");
+    },
+
+    scrollToBottom(smooth = false) {
         const container = document.getElementById('msg-scroll-container');
         if (container) {
-            container.scrollTop = container.scrollHeight;
+            container.scrollTo({
+                top: container.scrollHeight,
+                behavior: smooth ? 'smooth' : 'auto'
+            });
         }
     }
 };
 
-// WICHTIG: Global verfügbar machen für die neue App.js
+// Global verfügbar machen
 window.MessengerView = MessengerView;
