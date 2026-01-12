@@ -97,6 +97,7 @@ const MessengerView = {
             const { mobileChatVisible } = this.state;
             const C = this.config;
 
+            // HINWEIS: Wir nutzen hier h-full, um uns in den normalen App-Container einzupassen
             container.innerHTML = `
                 <div class="flex h-full w-full max-w-[1600px] mx-auto overflow-hidden bg-black shadow-2xl relative rounded-xl border border-[#333]">
                     <!-- LEFT SIDEBAR -->
@@ -129,7 +130,6 @@ const MessengerView = {
             this.renderSidebarList();
             if (mobileChatVisible || window.innerWidth >= 768) this.scrollToBottom(false);
             
-            // Fokus wiederherstellen falls nötig
             const input = document.getElementById('messenger-search-input');
             const chatSearchInput = document.getElementById('chat-filter-input');
             
@@ -185,7 +185,6 @@ const MessengerView = {
             }
         });
 
-        // Deduplicate items just in case
         items = items.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id && t.type===v.type))===i);
         items.sort((a, b) => b.time - a.time);
         
@@ -237,9 +236,9 @@ const MessengerView = {
         this.state.showAttachMenu = false;
         this.state.showEmojiPicker = false;
         
-        if (window.innerWidth < 768 && typeof App !== 'undefined' && App.switchMobileMode) {
+        // Mobile Handling: Wir schalten lokal um, ohne App.switchMobileMode zu nutzen
+        if (window.innerWidth < 768) {
              this.state.mobileChatVisible = true;
-             App.switchMobileMode('chat');
         } else {
              this.state.mobileChatVisible = true;
         }
@@ -252,11 +251,7 @@ const MessengerView = {
 
     closeChat() {
         this.state.mobileChatVisible = false;
-        if (window.innerWidth < 768 && typeof App !== 'undefined' && App.switchMobileMode) {
-             App.switchMobileMode('app');
-        } else {
-             this.render(document.getElementById('content'));
-        }
+        this.render(document.getElementById('content'));
     },
 
     // --- SEARCH & MENUS ---
@@ -310,7 +305,7 @@ const MessengerView = {
         if (this.state.showChatSearch) {
             headerContent = `<div class="flex items-center w-full animate-scale-in"><button onclick="MessengerView.toggleChatSearch()" class="text-[#8696a0] mr-4"><i class="fa-solid fa-arrow-left"></i></button><input type="text" id="chat-filter-input" placeholder="Nachrichten durchsuchen..." value="${this.state.chatFilterTerm}" onkeyup="MessengerView.handleChatFilter(this.value)" class="bg-[#202c33] border-none text-[#d1d7db] text-sm w-full py-2 px-4 rounded-lg focus:outline-none placeholder-[#8696a0]"></div>`;
         } else {
-            headerContent = `<div class="flex items-center gap-3 overflow-hidden cursor-pointer flex-1" ${clickAction}><button onclick="event.stopPropagation(); if(typeof App !== 'undefined') App.switchMobileMode('app'); else MessengerView.closeChat()" class="md:hidden text-[#d1d7db] mr-1"><i class="fa-solid fa-arrow-left text-xl"></i></button><div class="w-10 h-10 rounded-full bg-[#6a7f8a] flex items-center justify-center overflow-hidden text-white font-bold text-lg shrink-0">${type === 'private' ? title.charAt(0) : '<i class="fa-solid fa-users"></i>'}</div><div class="flex flex-col justify-center overflow-hidden"><h3 class="text-[#e9edef] font-bold text-base truncate leading-tight">${title}</h3><p class="text-[#8696a0] text-xs truncate leading-tight">${subTitle}</p></div></div><div class="flex items-center gap-4 text-[#8696a0] shrink-0"><button onclick="MessengerView.toggleChatSearch()" class="hover:text-white transition"><i class="fa-solid fa-search"></i></button><button class="hover:text-white transition"><i class="fa-solid fa-ellipsis-vertical"></i></button></div>`;
+            headerContent = `<div class="flex items-center gap-3 overflow-hidden cursor-pointer flex-1" ${clickAction}><button onclick="event.stopPropagation(); MessengerView.closeChat()" class="md:hidden text-[#d1d7db] mr-1"><i class="fa-solid fa-arrow-left text-xl"></i></button><div class="w-10 h-10 rounded-full bg-[#6a7f8a] flex items-center justify-center overflow-hidden text-white font-bold text-lg shrink-0">${type === 'private' ? title.charAt(0) : '<i class="fa-solid fa-users"></i>'}</div><div class="flex flex-col justify-center overflow-hidden"><h3 class="text-[#e9edef] font-bold text-base truncate leading-tight">${title}</h3><p class="text-[#8696a0] text-xs truncate leading-tight">${subTitle}</p></div></div><div class="flex items-center gap-4 text-[#8696a0] shrink-0"><button onclick="MessengerView.toggleChatSearch()" class="hover:text-white transition"><i class="fa-solid fa-search"></i></button><button class="hover:text-white transition"><i class="fa-solid fa-ellipsis-vertical"></i></button></div>`;
         }
 
         return `<div class="h-16 px-4 py-2 ${C.headerBg} flex items-center justify-between shadow-sm z-30 shrink-0 border-l border-[#2a3942] sticky top-0 w-full">${headerContent}</div><div id="msg-scroll-container" class="flex-1 overflow-y-auto p-4 md:px-10 space-y-2 msg-bg-pattern custom-scrollbar relative">${messages.length === 0 ? (this.state.chatFilterTerm ? `<div class="text-center mt-20 text-[#8696a0] opacity-60"><p>Keine Nachrichten gefunden</p></div>` : `<div class="text-center mt-20 text-[#8696a0] opacity-60"><i class="fa-regular fa-comments text-4xl mb-2"></i><p>Schreib etwas...</p></div>`) : messages.map(msg => this.renderMessageBubble(msg)).join('')}<div class="h-2"></div></div>${canWrite ? this.renderInputArea() : `<div class="p-4 ${C.headerBg} text-center text-[#8696a0] text-sm border-t ${C.border}">Nur Administratoren können hier senden.</div>`}`;
