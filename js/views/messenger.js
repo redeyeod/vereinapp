@@ -139,7 +139,6 @@ const MessengerView = {
         myGroups.forEach(g => {
             if (g.name.toLowerCase().includes(term)) {
                 const lastMsg = g.chat && g.chat.length > 0 ? g.chat[g.chat.length-1] : null;
-                // Sicherstellen, dass ID vorhanden ist
                 if (g.id) {
                     items.push({ type: 'group', id: g.id, name: g.name, icon: 'fa-users', lastMsg, time: lastMsg ? new Date(lastMsg.time) : new Date(0) });
                 }
@@ -168,7 +167,6 @@ const MessengerView = {
             const txt = item.lastMsg.text || (item.lastMsg.type === 'image' ? '📷 Foto' : '📎 Datei');
             
             const myId = this.getMyId();
-            // Verbesserter Check für "Von mir": Nutzt senderId oder Fallback auf isMe Property
             const isMe = item.lastMsg.senderId ? (item.lastMsg.senderId == myId) : item.lastMsg.isMe;
 
             preview = (isMe ? '<span class="text-[#00a884] mr-1"><i class="fa-solid fa-check-double"></i></span>' : '') + txt;
@@ -176,13 +174,13 @@ const MessengerView = {
             dateStr = (d.toDateString() === new Date().toDateString()) ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : d.toLocaleDateString([], {day:'2-digit', month:'2-digit', year:'2-digit'});
         }
 
-        // Anführungszeichen um item.id sind wichtig für UUIDs
+        // FIX: Wir nutzen jetzt data-Attribute und eine generische onClick-Funktion, um Parsing-Fehler zu vermeiden
         return `
-            <div onclick="MessengerView.selectChat('${item.type}', '${item.id}')" class="flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-[#202c33] ${isActive ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]'} group">
-                <div class="relative w-12 h-12 rounded-full bg-[#6a7f8a] flex items-center justify-center shrink-0 overflow-hidden text-white text-lg font-bold">
+            <div onclick="MessengerView.handleChatClick(this)" data-type="${item.type}" data-id="${item.id}" class="flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-[#202c33] ${isActive ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]'} group">
+                <div class="relative w-12 h-12 rounded-full bg-[#6a7f8a] flex items-center justify-center shrink-0 overflow-hidden text-white text-lg font-bold pointer-events-none">
                     ${item.type === 'private' ? item.name.charAt(0) : `<i class="fa-solid ${item.icon}"></i>`}
                 </div>
-                <div class="flex-1 min-w-0 flex flex-col justify-center">
+                <div class="flex-1 min-w-0 flex flex-col justify-center pointer-events-none">
                     <div class="flex justify-between items-baseline">
                         <h3 class="text-[#e9edef] font-normal text-[17px] truncate">${item.name}</h3>
                         <span class="text-xs text-[#8696a0] shrink-0">${dateStr}</span>
@@ -195,12 +193,18 @@ const MessengerView = {
         `;
     },
 
+    // NEU: Sicherer Click-Handler
+    handleChatClick(el) {
+        const type = el.getAttribute('data-type');
+        const id = el.getAttribute('data-id');
+        this.selectChat(type, id);
+    },
+
     selectChat(type, id) {
-        console.log("Selecting Chat:", type, id); // Debugging
-        
-        // VEREINFACHUNG: Keine erzwungene Number-Konvertierung mehr.
-        // Wir verlassen uns auf den lockeren Vergleich (==), der Strings und Zahlen korrekt matcht.
-        // Das verhindert Fehler, wenn IDs nicht rein numerisch sind.
+        // Robustes ID-Parsing, falls es eine Zahl ist
+        if (id && !isNaN(id) && !isNaN(parseFloat(id))) {
+            id = Number(id);
+        }
 
         this.state.activeType = type;
         this.state.activeId = id;
@@ -218,7 +222,6 @@ const MessengerView = {
     renderActiveChat() {
         const C = this.config;
         
-        // Typ-unsicherer Check (==) für activeId, damit "0" == 0 funktioniert
         if (!this.state.mobileChatVisible && this.state.activeId == 0 && this.state.activeType !== 'news') {
             return `<div class="flex flex-col items-center justify-center h-full bg-[#222e35] text-center border-b-[6px] border-[#00a884]"><div class="mb-5"><i class="fa-regular fa-comments text-[#41525d] text-7xl"></i></div><h2 class="text-[#e9edef] text-3xl font-light mb-4">Vereins Messenger</h2><p class="text-[#8696a0] text-sm">Wähle einen Chat aus.</p></div>`;
         }
@@ -232,23 +235,20 @@ const MessengerView = {
             messages = (Store.state.news || []).map(n => ({ id: n.id, sender: 'Vorstand', text: `📢 **${n.title}**\n\n${n.content}`, time: n.date, isMe: false, isSystem: true })).sort((a,b) => new Date(a.time) - new Date(b.time));
             canWrite = false;
         } else if (type === 'group') {
-            // FIX: Loose equality '=='
             const g = Store.state.groups.find(x => x.id == id);
             if(g) { 
                 title = g.name; 
                 subTitle = 'Tippen für Gruppeninfo'; 
                 messages = g.chat || [];
-                // ID in Anführungszeichen für onclick
+                // Auch hier data-attributes nutzen für Modal Klick
                 clickAction = `onclick="MessengerView.showGroupInfo('${id}')"`;
             }
         } else if (type === 'private') {
-            // FIX: Loose equality '=='
             const m = Store.state.members.find(x => x.id == id);
             if(m) { 
                 title = `${m.firstName} ${m.lastName}`; 
                 subTitle = m.status === 'active' ? 'Online' : 'Klicken für Profil'; 
                 messages = this.getMemberChat(m);
-                // ID in Anführungszeichen für onclick
                 clickAction = `onclick="MessengerView.showUserProfile('${id}')"`;
             }
         }
@@ -288,7 +288,6 @@ const MessengerView = {
             <div class="min-h-[62px] ${C.headerBg} px-4 py-2 flex flex-col justify-end z-30 relative shrink-0 border-l border-[#2a3942]">
                 ${this.renderAttachMenu()} ${this.renderEmojiPicker()}
                 
-                <!-- Reply Preview -->
                 ${replyMsg ? `
                     <div class="flex items-center justify-between bg-[#1f2c34] p-2 rounded-t-lg border-l-4 border-[#00a884] mb-1 animate-scale-in">
                         <div class="text-sm text-[#8696a0]">
@@ -316,7 +315,6 @@ const MessengerView = {
     renderMessageBubble(msg) {
         if (msg.isSystem) return `<div class="flex justify-center my-3"><div class="bg-[#1f2c34] text-[#8696a0] text-xs px-3 py-1.5 rounded-lg shadow uppercase font-bold tracking-wide">${msg.sender}: ${msg.text}</div></div>`;
         
-        // FIX: Doppelte Prüfung für Rechts/Links (Sender-ID hat Vorrang, dann isMe, dann Namensvergleich)
         const myId = this.getMyId();
         const me = Store.state.members.find(m => m.id == myId) || {};
         
@@ -324,9 +322,9 @@ const MessengerView = {
         if (msg.senderId) {
             isMe = (msg.senderId == myId);
         } else if (msg.hasOwnProperty('isMe')) {
-            isMe = msg.isMe; // Legacy
+            isMe = msg.isMe; 
         } else {
-            isMe = (msg.sender === me.firstName); // Letzter Fallback Name
+            isMe = (msg.sender === me.firstName);
         }
 
         const isDeleted = msg.isDeleted;
@@ -335,7 +333,6 @@ const MessengerView = {
         const align = isMe ? 'items-end' : 'items-start';
         const tailClass = isMe ? 'bubble-tail-out' : 'bubble-tail-in';
         
-        // Reply Context
         let replyHtml = '';
         if (msg.replyToId) {
             const parent = this.findMessage(msg.replyToId);
@@ -349,7 +346,6 @@ const MessengerView = {
             }
         }
 
-        // Reactions
         let reactionsHtml = '';
         if (msg.reactions && msg.reactions.length > 0) {
             reactionsHtml = `
@@ -362,9 +358,8 @@ const MessengerView = {
 
         let contentHtml = isDeleted ? `<span class="italic text-[#8696a0] flex items-center gap-1 text-sm"><i class="fa-solid fa-ban text-xs"></i> Gelöscht</span>` : `<span class="text-sm md:text-[15px] leading-relaxed text-[#e9edef]">${msg.text.replace(/\n/g, '<br>')}</span>`;
         if (msg.type === 'image') contentHtml = `<img src="${msg.content}" class="rounded-lg max-w-full sm:max-w-[300px] mb-1 cursor-pointer" onclick="window.open('${msg.content}')">`;
-        else if (msg.type === 'poll') { /* Poll Logic shortened for brevity */ contentHtml = `<b>Umfrage:</b> ${msg.content.question}`; }
+        else if (msg.type === 'poll') { contentHtml = `<b>Umfrage:</b> ${msg.content.question}`; }
 
-        // FIX: Quote ID in toggleMsgMenu call
         const contextMenuId = `ctx-${msg.id}`;
 
         return `
@@ -372,19 +367,16 @@ const MessengerView = {
                 <div class="relative max-w-[85%] md:max-w-[65%] shadow-sm ${bubbleColor} ${C.textMain} px-2 pt-2 pb-1 ${tailClass} rounded-lg ${msg.isPinned ? 'border border-yellow-500/30' : ''}">
                     ${msg.isPinned ? '<i class="fa-solid fa-thumbtack text-[10px] text-yellow-500 absolute -top-1.5 -right-1 rotate-45 drop-shadow-md"></i>' : ''}
                     
-                    <!-- Dropdown Trigger -->
                     <button onclick="MessengerView.toggleMsgMenu('${contextMenuId}')" class="absolute top-0 right-0 w-8 h-6 bg-gradient-to-b from-black/20 to-transparent rounded-tr-lg opacity-0 group-hover:opacity-100 transition-opacity text-right pr-2 pt-1 text-white/80 hover:text-white z-10">
                         <i class="fa-solid fa-angle-down text-xs drop-shadow-md"></i>
                     </button>
 
-                    <!-- Content -->
                     <div class="px-1 pb-1 relative z-0 break-words min-w-[80px]">
                         ${replyHtml}
                         ${!isMe && this.state.activeType === 'group' ? `<p class="text-xs font-bold text-[#eeb346] mb-1">${msg.sender}</p>` : ''}
                         ${contentHtml}
                     </div>
                     
-                    <!-- Footer -->
                     <div class="float-right flex items-end gap-1 ml-2 -mb-0.5 opacity-60">
                         <span class="text-[10px] text-[#e9edef]">${new Date(msg.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
                         ${isMe ? '<span class="text-[#53bdeb] text-[10px]"><i class="fa-solid fa-check-double"></i></span>' : ''}
@@ -393,7 +385,6 @@ const MessengerView = {
                     ${reactionsHtml}
                 </div>
 
-                <!-- Context Menu (Dropdown) -->
                 <div id="${contextMenuId}" class="hidden absolute top-8 ${isMe ? 'right-4' : 'left-4'} bg-[#233138] border border-[#2a3942] rounded-lg shadow-2xl z-50 w-48 animate-scale-in py-1">
                     <div class="flex justify-around p-2 border-b border-[#2a3942] bg-[#1f2c34]">
                         ${['👍','❤️','😂','😮','🙏'].map(e => `<button onclick="MessengerView.reactToMessage('${msg.id}', '${e}')" class="hover:scale-125 transition text-lg">${e}</button>`).join('')}
@@ -409,14 +400,11 @@ const MessengerView = {
         `;
     },
 
-    // --- ACTIONS & LOGIC ---
-
     toggleMsgMenu(id) {
         document.querySelectorAll('[id^="ctx-"]').forEach(el => { if(el.id !== id) el.classList.add('hidden'); });
         const menu = document.getElementById(id);
         if(menu) {
             menu.classList.toggle('hidden');
-            // Close on click outside
             const closer = () => { menu.classList.add('hidden'); document.removeEventListener('click', closer); };
             setTimeout(() => document.addEventListener('click', closer), 10);
         }
@@ -426,12 +414,11 @@ const MessengerView = {
         const type = this.state.activeType;
         const id = this.state.activeId;
         if(type === 'group') {
-            // FIX: Use loose equality '=='
             const g = Store.state.groups.find(g => g.id == id);
             return g ? g.chat.find(m => m.id == msgId) : null;
         }
         if(type === 'private') {
-            const m = Store.state.members.find(x => x.id == this.getMyId()); // Suche in MEINEM Chatverlauf
+            const m = Store.state.members.find(x => x.id == this.getMyId()); 
             return m && m.privateChat ? m.privateChat.find(msg => msg.id == msgId) : null;
         }
         return null;
@@ -455,7 +442,7 @@ const MessengerView = {
             if(input) {
                 input.value = msg.text;
                 input.focus();
-                this.state.editingId = msgId; // Merken, dass wir bearbeiten
+                this.state.editingId = msgId;
             }
         }
     },
@@ -469,7 +456,6 @@ const MessengerView = {
         this.updateMsgProperty(msgId, (msg) => {
             if(!msg.reactions) msg.reactions = [];
             const myName = Store.state.currentUser.firstName;
-            // Toggle reaction
             const existing = msg.reactions.find(r => r.u === myName && r.e === emoji);
             if(existing) msg.reactions = msg.reactions.filter(r => r !== existing);
             else msg.reactions.push({ u: myName, e: emoji });
@@ -491,16 +477,13 @@ const MessengerView = {
         const id = this.state.activeId;
         
         if (type === 'group') {
-            // FIX: Use loose equality '=='
             let parentObj = Store.state.groups.find(g => g.id == id);
             if(parentObj) {
                 const msg = parentObj.chat.find(m => m.id == msgId);
                 if(msg) { cb(msg); this.safeUpdate('groups', parentObj); }
             }
         } else if (type === 'private') {
-            // Update bei beiden Teilnehmern
             const myId = this.getMyId();
-            // FIX: Use loose equality '=='
             const me = Store.state.members.find(m => m.id == myId);
             const other = Store.state.members.find(m => m.id == id);
             
@@ -514,9 +497,7 @@ const MessengerView = {
         this.render(document.getElementById('content'));
     },
 
-    // --- GROUP INFO MODAL ---
     showGroupInfo(groupId) {
-        // FIX: Use loose equality '=='
         const g = Store.state.groups.find(x => x.id == groupId);
         if(!g) return;
         const membersList = g.members ? g.members.map(name => `<li class="py-2 border-b border-white/10 flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center text-xs text-white">${name.charAt(0)}</div><span>${name}</span></li>`).join('') : '<li class="text-muted">Keine Mitglieder</li>';
@@ -538,20 +519,16 @@ const MessengerView = {
         App.openModal(html);
     },
 
-    // --- SEND & CORE ---
-
     sendMessage(e) {
         e.preventDefault();
         const input = e.target.elements.message;
         const text = input.value.trim();
         if (!text) return;
 
-        // Editing Mode?
         if (this.state.editingId) {
             this.updateMsgProperty(this.state.editingId, (msg) => { msg.text = text; msg.isEdited = true; });
             this.state.editingId = null;
         } else {
-            // Normal Sending
             this.addMessageToChat({ 
                 text: text, 
                 type: 'text',
@@ -561,13 +538,9 @@ const MessengerView = {
         
         input.value = '';
         this.state.replyingTo = null;
-        this.render(document.getElementById('content')); // Re-render to clear reply preview
-        
-        // Tastatur einklappen durch Entfernen des Fokus
+        this.render(document.getElementById('content')); 
         input.blur();
     },
-
-    // ... (Rest of existing logic: addMessageToChat, deleteMessage, safeUpdate, etc.) -> KEINE ÄNDERUNG NÖTIG ausser addMessageToChat update für replyToId
 
     addMessageToChat(msgData) {
         const myId = this.getMyId();
@@ -593,7 +566,6 @@ const MessengerView = {
         let table = '';
 
         if (type === 'group') {
-            // FIX: Use loose equality '=='
             parentObj = Store.state.groups.find(g => g.id == activeId);
             if(parentObj) {
                 if(!parentObj.chat) parentObj.chat = [];
@@ -607,7 +579,6 @@ const MessengerView = {
                 myUser.privateChat.push(newMessage);
                 this.safeUpdate('members', myUser); 
             }
-            // FIX: Use loose equality '=='
             const partnerUser = Store.state.members.find(m => m.id == activeId);
             if(partnerUser) {
                 if(!partnerUser.privateChat) partnerUser.privateChat = [];
@@ -626,14 +597,12 @@ const MessengerView = {
         let parentObj = null;
         
         if(type === 'group') {
-            // FIX: Use loose equality '=='
             parentObj = Store.state.groups.find(g => g.id == id);
             if(parentObj) {
                 const msg = parentObj.chat.find(m => m.id == msgId);
                 if(msg) { msg.isDeleted = true; msg.text = ''; this.safeUpdate('groups', parentObj); }
             }
         } else if (type === 'private') {
-            // Delete for BOTH
             const myId = this.getMyId();
             const me = Store.state.members.find(m => m.id == myId);
             const other = Store.state.members.find(m => m.id == id);
@@ -647,7 +616,6 @@ const MessengerView = {
         this.render(document.getElementById('content'));
     },
 
-    // ... (helpers remain same)
     safeUpdate(table, item) {
         if (typeof supabase === 'undefined' || typeof CONFIG === 'undefined') return Store.update(table, item);
         try {
