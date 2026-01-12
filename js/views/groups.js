@@ -645,7 +645,6 @@ const GroupsView = {
         const e = Store.state.events.find(ev => ev.id == eventId);
         if(!e) return;
         
-        // Berechtigungen prüfen
         const group = Store.state.groups.find(g => g.name === e.group);
         const canManage = group && App.can('manage_group_content', group.name);
 
@@ -658,18 +657,58 @@ const GroupsView = {
             endStr = ' - ' + endDate.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long' });
         }
 
-        // Abstimmung
         const attendance = e.attendance || {};
-        const yesCount = Object.values(attendance).filter(v => v === 'yes').length;
-        const maybeCount = Object.values(attendance).filter(v => v === 'maybe').length;
-        const noCount = Object.values(attendance).filter(v => v === 'no').length;
+        const members = Store.state.members || [];
+        
+        const getVoters = (status) => {
+            return Object.keys(attendance)
+                .filter(id => attendance[id] === status)
+                .map(id => members.find(m => m.id == id))
+                .filter(m => m);
+        };
+
+        const yesVoters = getVoters('yes');
+        const maybeVoters = getVoters('maybe');
+        const noVoters = getVoters('no');
         
         const currentUser = App.state.currentUser;
         const myStatus = currentUser ? attendance[currentUser.id] : null;
 
-        const btnClass = (active) => active 
-            ? 'bg-brand-600 text-white border-brand-600 shadow-lg scale-105' 
-            : 'bg-dark-bg text-dark-muted border-dark-border hover:border-brand-500/50 hover:text-white';
+        const btnBase = "flex-1 py-3 rounded-xl border text-sm font-bold flex flex-col items-center justify-center gap-1 transition-all";
+        const btnInactive = "bg-dark-bg/50 border-dark-border text-dark-muted hover:text-white hover:bg-dark-hover";
+        
+        const btnYes = myStatus === 'yes' 
+            ? "bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-900/20 scale-105 z-10" 
+            : btnInactive;
+            
+        const btnMaybe = myStatus === 'maybe' 
+            ? "bg-amber-600 border-amber-500 text-white shadow-lg shadow-amber-900/20 scale-105 z-10" 
+            : btnInactive;
+            
+        const btnNo = myStatus === 'no' 
+            ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/20 scale-105 z-10" 
+            : btnInactive;
+
+        const renderVoterList = (title, voters, colorClass, icon) => {
+            if (voters.length === 0) return '';
+            return `
+                <div class="mt-4">
+                    <h5 class="text-xs font-bold ${colorClass} uppercase mb-2 flex items-center gap-2">
+                        <i class="fa-solid ${icon}"></i> ${title} (${voters.length})
+                    </h5>
+                    <div class="flex flex-wrap gap-2">
+                        ${voters.map(m => `
+                            <div class="flex items-center gap-2 bg-dark-bg/50 border border-dark-border rounded-full pr-3 pl-1 py-1">
+                                <div class="w-6 h-6 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center text-[10px] font-bold">
+                                    ${(m.firstName || '?').charAt(0)}${(m.lastName || '?').charAt(0)}
+                                </div>
+                                <span class="text-xs text-white">${m.firstName} ${m.lastName}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        };
 
         const html = `
             <div class="p-6 h-full flex flex-col">
@@ -691,36 +730,28 @@ const GroupsView = {
                         ${e.description}
                     </div>` : ''}
 
-                    <!-- Abstimmung Buttons -->
                     <div>
                         <h4 class="text-xs font-bold text-dark-muted uppercase mb-3">Deine Antwort</h4>
-                        <div class="grid grid-cols-3 gap-3">
-                            <button onclick="GroupsView.setAttendance('${e.id}', 'yes')" class="p-3 rounded-xl border font-bold text-sm transition-all flex flex-col items-center gap-1 ${btnClass(myStatus === 'yes')}">
+                        <div class="flex gap-2">
+                            <button onclick="GroupsView.setAttendance('${e.id}', 'yes')" class="${btnBase} ${btnYes}">
                                 <i class="fa-solid fa-check text-lg"></i> Dabei
                             </button>
-                            <button onclick="GroupsView.setAttendance('${e.id}', 'maybe')" class="p-3 rounded-xl border font-bold text-sm transition-all flex flex-col items-center gap-1 ${btnClass(myStatus === 'maybe')}">
+                            <button onclick="GroupsView.setAttendance('${e.id}', 'maybe')" class="${btnBase} ${btnMaybe}">
                                 <i class="fa-solid fa-question text-lg"></i> Vielleicht
                             </button>
-                            <button onclick="GroupsView.setAttendance('${e.id}', 'no')" class="p-3 rounded-xl border font-bold text-sm transition-all flex flex-col items-center gap-1 ${btnClass(myStatus === 'no')}">
+                            <button onclick="GroupsView.setAttendance('${e.id}', 'no')" class="${btnBase} ${btnNo}">
                                 <i class="fa-solid fa-xmark text-lg"></i> Absage
                             </button>
                         </div>
                     </div>
 
-                    <!-- Statistik -->
-                    <div class="grid grid-cols-3 gap-4 text-center">
-                        <div class="bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
-                            <div class="text-xl font-bold text-emerald-400">${yesCount}</div>
-                            <div class="text-[10px] uppercase text-emerald-500/70 font-bold">Zusagen</div>
-                        </div>
-                        <div class="bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
-                            <div class="text-xl font-bold text-amber-400">${maybeCount}</div>
-                            <div class="text-[10px] uppercase text-amber-500/70 font-bold">Vielleicht</div>
-                        </div>
-                        <div class="bg-red-500/10 p-3 rounded-xl border border-red-500/20">
-                            <div class="text-xl font-bold text-red-400">${noCount}</div>
-                            <div class="text-[10px] uppercase text-red-500/70 font-bold">Absagen</div>
-                        </div>
+                    <div class="space-y-2">
+                        ${renderVoterList('Zusagen', yesVoters, 'text-emerald-400', 'fa-circle-check')}
+                        ${renderVoterList('Vielleicht', maybeVoters, 'text-amber-400', 'fa-circle-question')}
+                        ${renderVoterList('Absagen', noVoters, 'text-red-400', 'fa-circle-xmark')}
+                        
+                        ${(yesVoters.length === 0 && maybeVoters.length === 0 && noVoters.length === 0) ? 
+                            '<p class="text-sm text-dark-muted italic text-center py-4">Noch keine Rückmeldungen.</p>' : ''}
                     </div>
                 </div>
 
