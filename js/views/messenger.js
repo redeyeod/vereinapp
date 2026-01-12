@@ -50,7 +50,7 @@ const MessengerView = {
             /* Chat Hintergrund Muster */
             .msg-bg-pattern {
                 background-color: #0b141a;
-                background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%232a3942' fill-opacity='0.2' fill-rule='evenodd'/%3E%3C/svg%3E");
+                background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%232a3942' fill-opacity='0.2' fill-rule='evenodd'/%3E%3C/svg%3E");
             }
             .custom-scrollbar::-webkit-scrollbar { width: 5px; }
             .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -408,34 +408,27 @@ const MessengerView = {
                 if(!parentObj.chat) parentObj.chat = [];
                 parentObj.chat.push(newMessage);
                 table = 'groups';
-                Store.update(table, parentObj);
+                // Nutzung der SafeUpdate Funktion
+                this.safeUpdate(table, parentObj);
             }
         } else if (type === 'private') {
             // WICHTIG: Damit beide die Nachricht haben, müssen wir BEIDE User updaten.
-            // Das simuliert einen echten Chatserver.
 
             // 1. Update bei MIR (damit ich meine Nachricht sehe)
             const myUser = Store.state.members.find(m => m.id == myId);
             if(myUser) {
                 if(!myUser.privateChat) myUser.privateChat = [];
                 myUser.privateChat.push(newMessage);
-                
-                // Wir speichern das jetzt wirklich in die DB!
-                // ACHTUNG: Wenn die Spalte 'privateChat' in Supabase fehlt, kommt hier ein Fehler Toast.
-                Store.update('members', myUser); 
+                // SAFE UPDATE nutzen, damit die ID nicht zum Fehler führt
+                this.safeUpdate('members', myUser); 
             }
 
             // 2. Update beim PARTNER (damit er die Nachricht empfängt)
             const partnerUser = Store.state.members.find(m => m.id === activeId);
             if(partnerUser) {
-                // Bei ihm ist es "isMe = false", aber da wir das Objekt 1:1 pushen,
-                // prüfen wir beim Rendern auf senderId == myId. Das 'isMe' Feld im Objekt ist hier
-                // zweitrangig geworden, da wir es dynamisch auswerten könnten.
-                // Aber wir lassen es so. Beim Partner wird senderId != partnerId sein, also alles gut.
-                
                 if(!partnerUser.privateChat) partnerUser.privateChat = [];
                 partnerUser.privateChat.push(newMessage);
-                Store.update('members', partnerUser);
+                this.safeUpdate('members', partnerUser);
             }
 
             // UI Refresh für mich sofort
@@ -464,7 +457,7 @@ const MessengerView = {
                 msg.isDeleted = true;
                 msg.text = '';
                 
-                Store.update(type === 'group' ? 'groups' : 'members', parentObj);
+                this.safeUpdate(type === 'group' ? 'groups' : 'members', parentObj);
                 this.render(document.getElementById('content'));
             }
         }
@@ -496,7 +489,9 @@ const MessengerView = {
                     if(!opt.votes) opt.votes = [];
                     if(opt.votes.includes(myId)) opt.votes = opt.votes.filter(v => v !== myId);
                     else opt.votes.push(myId);
-                    Store.update('groups', parentObj);
+                    
+                    this.safeUpdate('groups', parentObj);
+                    
                     const chatArea = document.getElementById('messenger-chat-area');
                     if(chatArea) chatArea.innerHTML = this.renderActiveChat();
                 }
@@ -504,6 +499,49 @@ const MessengerView = {
         }
     },
     
+    // --- SAFE UPDATE HELPER ---
+    
+    async safeUpdate(table, item) {
+        // Workaround für "column id can only be updated to DEFAULT" Fehler
+        // Wir nutzen eine temporäre Supabase-Instanz, um die ID aus dem Payload zu entfernen
+        
+        // Wenn kein globaler Client da ist, versuchen wir Store Fallback
+        if (typeof supabase === 'undefined' || typeof CONFIG === 'undefined') {
+            console.warn("Global supabase/CONFIG missing. Fallback to Store.update");
+            return Store.update(table, item);
+        }
+
+        try {
+            const sessionStr = localStorage.getItem('vm_supabase_session');
+            const headers = {};
+            if(sessionStr) {
+                 const session = JSON.parse(sessionStr);
+                 if(session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+            }
+
+            const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, { global: { headers } });
+            
+            // Payload OHNE ID
+            const payload = { ...item };
+            delete payload.id;
+            
+            // Wir senden privateChat jetzt mit, damit der Sync klappt.
+            // Falls SQL Fehler kommen, muss der User die Spalte "privateChat" anlegen.
+            
+            const { error } = await sb.from(table).update(payload).eq('id', item.id);
+
+            if(error) {
+                console.error("SafeUpdate Error:", error);
+                if(window.App) window.App.showToast(error.message, 'error');
+            } else {
+                // Trigger Refresh im Store, damit Realtime / UI aktuell bleiben
+                if(window.Store && window.Store.fetchTable) window.Store.fetchTable(table);
+            }
+        } catch(e) {
+            console.error("SafeUpdate Exception:", e);
+        }
+    },
+
     showUserProfile(id) { alert("Profil von ID " + id + " anzeigen"); },
     openContactSelectModal() { alert("Kontakt teilen (Funktion hier einfügen)"); },
     scrollToBottom(smooth = false) { const container = document.getElementById('msg-scroll-container'); if (container) { container.scrollTo({ top: container.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }); } }
