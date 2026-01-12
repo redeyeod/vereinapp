@@ -139,7 +139,10 @@ const MessengerView = {
         myGroups.forEach(g => {
             if (g.name.toLowerCase().includes(term)) {
                 const lastMsg = g.chat && g.chat.length > 0 ? g.chat[g.chat.length-1] : null;
-                items.push({ type: 'group', id: g.id, name: g.name, icon: 'fa-users', lastMsg, time: lastMsg ? new Date(lastMsg.time) : new Date(0) });
+                // Sicherstellen, dass ID vorhanden ist
+                if (g.id) {
+                    items.push({ type: 'group', id: g.id, name: g.name, icon: 'fa-users', lastMsg, time: lastMsg ? new Date(lastMsg.time) : new Date(0) });
+                }
             }
         });
 
@@ -156,7 +159,7 @@ const MessengerView = {
     },
 
     renderListItem(item) {
-        // FIX: Loose comparison '==' used for ID check to handle string vs number types
+        // Robuster ID-Check (Typ-unsicher mit ==)
         const isActive = this.state.activeType === item.type && (item.type === 'news' || this.state.activeId == item.id);
         let preview = "Klicken um zu starten";
         let dateStr = "";
@@ -165,6 +168,7 @@ const MessengerView = {
             const txt = item.lastMsg.text || (item.lastMsg.type === 'image' ? '📷 Foto' : '📎 Datei');
             
             const myId = this.getMyId();
+            // Verbesserter Check für "Von mir": Nutzt senderId oder Fallback auf isMe Property
             const isMe = item.lastMsg.senderId ? (item.lastMsg.senderId == myId) : item.lastMsg.isMe;
 
             preview = (isMe ? '<span class="text-[#00a884] mr-1"><i class="fa-solid fa-check-double"></i></span>' : '') + txt;
@@ -172,7 +176,7 @@ const MessengerView = {
             dateStr = (d.toDateString() === new Date().toDateString()) ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : d.toLocaleDateString([], {day:'2-digit', month:'2-digit', year:'2-digit'});
         }
 
-        // FIX: Added quotes around item.id in onclick to support UUID strings
+        // Anführungszeichen um item.id sind wichtig für UUIDs
         return `
             <div onclick="MessengerView.selectChat('${item.type}', '${item.id}')" class="flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-[#202c33] ${isActive ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]'} group">
                 <div class="relative w-12 h-12 rounded-full bg-[#6a7f8a] flex items-center justify-center shrink-0 overflow-hidden text-white text-lg font-bold">
@@ -192,6 +196,14 @@ const MessengerView = {
     },
 
     selectChat(type, id) {
+        console.log("Selecting Chat:", type, id); // Debugging
+        
+        // Auto-Convert: Wenn ID nur aus Zahlen besteht (z.B. "12"), machen wir eine Zahl (12) daraus.
+        // Das passt besser zu den meisten Datenbank-IDs. UUIDs bleiben Strings.
+        if (id !== undefined && id !== null && !isNaN(id) && !isNaN(parseFloat(id))) {
+            id = Number(id);
+        }
+
         this.state.activeType = type;
         this.state.activeId = id;
         this.state.showAttachMenu = false;
@@ -207,6 +219,8 @@ const MessengerView = {
 
     renderActiveChat() {
         const C = this.config;
+        
+        // Typ-unsicherer Check (==) für activeId, damit "0" == 0 funktioniert
         if (!this.state.mobileChatVisible && this.state.activeId == 0 && this.state.activeType !== 'news') {
             return `<div class="flex flex-col items-center justify-center h-full bg-[#222e35] text-center border-b-[6px] border-[#00a884]"><div class="mb-5"><i class="fa-regular fa-comments text-[#41525d] text-7xl"></i></div><h2 class="text-[#e9edef] text-3xl font-light mb-4">Vereins Messenger</h2><p class="text-[#8696a0] text-sm">Wähle einen Chat aus.</p></div>`;
         }
@@ -220,23 +234,23 @@ const MessengerView = {
             messages = (Store.state.news || []).map(n => ({ id: n.id, sender: 'Vorstand', text: `📢 **${n.title}**\n\n${n.content}`, time: n.date, isMe: false, isSystem: true })).sort((a,b) => new Date(a.time) - new Date(b.time));
             canWrite = false;
         } else if (type === 'group') {
-            // FIX: Use loose equality '==' for ID lookup
+            // FIX: Loose equality '=='
             const g = Store.state.groups.find(x => x.id == id);
             if(g) { 
                 title = g.name; 
                 subTitle = 'Tippen für Gruppeninfo'; 
                 messages = g.chat || [];
-                // FIX: Quote ID in function call
+                // ID in Anführungszeichen für onclick
                 clickAction = `onclick="MessengerView.showGroupInfo('${id}')"`;
             }
         } else if (type === 'private') {
-            // FIX: Use loose equality '==' for ID lookup
+            // FIX: Loose equality '=='
             const m = Store.state.members.find(x => x.id == id);
             if(m) { 
                 title = `${m.firstName} ${m.lastName}`; 
                 subTitle = m.status === 'active' ? 'Online' : 'Klicken für Profil'; 
                 messages = this.getMemberChat(m);
-                // FIX: Quote ID in function call
+                // ID in Anführungszeichen für onclick
                 clickAction = `onclick="MessengerView.showUserProfile('${id}')"`;
             }
         }
@@ -304,9 +318,18 @@ const MessengerView = {
     renderMessageBubble(msg) {
         if (msg.isSystem) return `<div class="flex justify-center my-3"><div class="bg-[#1f2c34] text-[#8696a0] text-xs px-3 py-1.5 rounded-lg shadow uppercase font-bold tracking-wide">${msg.sender}: ${msg.text}</div></div>`;
         
-        // FIX: Dynamische Prüfung für Rechts/Links Ausrichtung basierend auf Sender-ID
+        // FIX: Doppelte Prüfung für Rechts/Links (Sender-ID hat Vorrang, dann isMe, dann Namensvergleich)
         const myId = this.getMyId();
-        const isMe = msg.senderId ? (msg.senderId == myId) : msg.isMe;
+        const me = Store.state.members.find(m => m.id == myId) || {};
+        
+        let isMe = false;
+        if (msg.senderId) {
+            isMe = (msg.senderId == myId);
+        } else if (msg.hasOwnProperty('isMe')) {
+            isMe = msg.isMe; // Legacy
+        } else {
+            isMe = (msg.sender === me.firstName); // Letzter Fallback Name
+        }
 
         const isDeleted = msg.isDeleted;
         const C = this.config;
