@@ -6,6 +6,7 @@
  */
 
 const MessengerView = {
+    // Lokaler State
     state: {
         activeType: 'news',
         activeId: 0,
@@ -20,6 +21,7 @@ const MessengerView = {
         scrollPositions: {}
     },
 
+    // Farben und Styles
     config: {
         accentColor: 'bg-[#00a884]', 
         accentColorHover: 'hover:bg-[#008f6f]',
@@ -48,23 +50,32 @@ const MessengerView = {
         if (document.getElementById('messenger-custom-styles')) return;
         const style = document.createElement('style');
         style.id = 'messenger-custom-styles';
-        // Aufgeteilt für sichereres Copy-Paste
-        const p1 = "data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E";
-        const p2 = "%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%232a3942' fill-opacity='0.2' fill-rule='evenodd'/%3E%3C/svg%3E";
         
+        // SVG in Teile zerlegt um Copy-Paste Fehler zu vermeiden
+        const svgStart = "data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E";
+        const svgPath = "%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%232a3942' fill-opacity='0.2' fill-rule='evenodd'/%3E%3C/svg%3E";
+
         style.innerHTML = `
-            .msg-bg-pattern { background-color: #0b141a; background-image: url("${p1}${p2}"); }
+            .msg-bg-pattern {
+                background-color: #0b141a;
+                background-image: url("${svgStart}${svgPath}");
+            }
             .custom-scrollbar::-webkit-scrollbar { width: 5px; }
             .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
             .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(134, 150, 160, 0.3); border-radius: 4px; }
+            
             .bubble-tail-in { border-top-left-radius: 0 !important; }
             .bubble-tail-out { border-top-right-radius: 0 !important; }
+            
             @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
             .animate-scale-in { animation: scaleIn 0.1s ease-out forwards; }
+            
             .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
         `;
         document.head.appendChild(style);
     },
+
+    // --- DATA HANDLING ---
 
     getMemberChat(partner) {
          if (!partner) return [];
@@ -73,9 +84,12 @@ const MessengerView = {
          const me = members.find(m => m.id == myId);
          const allMessages = (me && me.privateChat) ? me.privateChat : [];
          return allMessages.filter(msg => {
-             return (msg.senderId == myId && msg.recipientId == partner.id) || (msg.senderId == partner.id && msg.recipientId == myId);
+             return (msg.senderId == myId && msg.recipientId == partner.id) ||
+                    (msg.senderId == partner.id && msg.recipientId == myId);
          });
     },
+
+    // --- RENDER MAIN ---
 
     render(container) {
         try {
@@ -115,10 +129,19 @@ const MessengerView = {
             this.renderSidebarList();
             if (mobileChatVisible || window.innerWidth >= 768) this.scrollToBottom(false);
             
+            // Fokus wiederherstellen falls nötig
             const input = document.getElementById('messenger-search-input');
             const chatSearchInput = document.getElementById('chat-filter-input');
-            if(input && this.state.filterTerm) { input.focus(); input.value = ''; input.value = this.state.filterTerm; }
-            if(chatSearchInput && this.state.chatFilterTerm) { chatSearchInput.focus(); }
+            
+            if(input && this.state.filterTerm) {
+                input.focus();
+                const val = input.value;
+                input.value = '';
+                input.value = val;
+            }
+            if(chatSearchInput && this.state.chatFilterTerm) {
+                chatSearchInput.focus();
+            }
 
         } catch (e) {
             console.error("Messenger Render Error:", e);
@@ -131,7 +154,11 @@ const MessengerView = {
     renderSidebarList() {
         const container = document.getElementById('messenger-list');
         if(!container) return;
-        if (typeof Store === 'undefined' || !Store.state) { container.innerHTML = `<div class="p-4 text-center text-muted">Lade Daten...</div>`; return; }
+        
+        if (typeof Store === 'undefined' || !Store.state) {
+            container.innerHTML = `<div class="p-4 text-center text-muted">Lade Daten...</div>`;
+            return;
+        }
 
         const term = this.state.filterTerm;
         const myId = this.getMyId();
@@ -158,6 +185,7 @@ const MessengerView = {
             }
         });
 
+        // Deduplicate items just in case
         items = items.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id && t.type===v.type))===i);
         items.sort((a, b) => b.time - a.time);
         
@@ -218,12 +246,12 @@ const MessengerView = {
 
         this.state.showChatSearch = false; 
         this.state.chatFilterTerm = '';
+        
         this.render(document.getElementById('content'));
     },
 
     closeChat() {
         this.state.mobileChatVisible = false;
-        // Wenn wir am Handy sind, wechseln wir zurück zum "App"-Modus (Liste + Header)
         if (window.innerWidth < 768 && typeof App !== 'undefined' && App.switchMobileMode) {
              App.switchMobileMode('app');
         } else {
