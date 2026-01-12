@@ -33,9 +33,12 @@ const MessengerView = {
         textMuted: 'text-[#8696a0]'
     },
 
-    // Helper: Current User ID
+    // Helper: Current User ID (Safe Access)
     getMyId() {
-        return (App.state.currentUser && App.state.currentUser.id) || localStorage.getItem('vm_current_user_id') || 1;
+        if (typeof App !== 'undefined' && App.state && App.state.currentUser) {
+            return App.state.currentUser.id;
+        }
+        return localStorage.getItem('vm_current_user_id') || 1;
     },
 
     init() {
@@ -71,8 +74,10 @@ const MessengerView = {
     // --- DATA HANDLING ---
 
     getMemberChat(partner) {
+         if (!partner) return [];
          const myId = this.getMyId();
-         const me = Store.state.members.find(m => m.id == myId);
+         const members = (window.Store && Store.state && Store.state.members) ? Store.state.members : [];
+         const me = members.find(m => m.id == myId);
          const allMessages = (me && me.privateChat) ? me.privateChat : [];
          return allMessages.filter(msg => {
              return (msg.senderId == myId && msg.recipientId == partner.id) ||
@@ -83,41 +88,55 @@ const MessengerView = {
     // --- RENDER MAIN ---
 
     render(container) {
-        this.init();
-        const { mobileChatVisible } = this.state;
-        const C = this.config;
+        try {
+            this.init();
+            const { mobileChatVisible } = this.state;
+            const C = this.config;
 
-        container.innerHTML = `
-            <div class="flex h-[calc(100vh-80px)] md:h-[calc(100vh-100px)] max-w-[1600px] mx-auto overflow-hidden bg-black shadow-2xl relative rounded-xl border border-[#333]">
-                <!-- LEFT SIDEBAR -->
-                <div class="${mobileChatVisible ? 'hidden md:flex' : 'flex'} w-full md:w-[400px] lg:w-[450px] flex-col ${C.sidebarBg} border-r ${C.border} z-20">
-                    <div class="h-16 px-4 ${C.headerBg} flex items-center justify-between shrink-0 border-b ${C.border}">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-slate-600 flex items-center justify-center cursor-pointer hover:opacity-80 transition"><i class="fa-solid fa-user text-slate-300"></i></div>
-                            <h2 class="font-bold text-white tracking-wide">Chats</h2>
+            container.innerHTML = `
+                <div class="flex h-[calc(100vh-80px)] md:h-[calc(100vh-100px)] max-w-[1600px] mx-auto overflow-hidden bg-black shadow-2xl relative rounded-xl border border-[#333]">
+                    <!-- LEFT SIDEBAR -->
+                    <div class="${mobileChatVisible ? 'hidden md:flex' : 'flex'} w-full md:w-[400px] lg:w-[450px] flex-col ${C.sidebarBg} border-r ${C.border} z-20">
+                        <div class="h-16 px-4 ${C.headerBg} flex items-center justify-between shrink-0 border-b ${C.border}">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-slate-600 flex items-center justify-center cursor-pointer hover:opacity-80 transition"><i class="fa-solid fa-user text-slate-300"></i></div>
+                                <h2 class="font-bold text-white tracking-wide">Chats</h2>
+                            </div>
+                            <div class="flex gap-4 text-slate-400">
+                                 <button class="hover:text-white"><i class="fa-solid fa-message"></i></button>
+                                 <button class="hover:text-white"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                            </div>
                         </div>
-                        <div class="flex gap-4 text-slate-400">
-                             <button class="hover:text-white"><i class="fa-solid fa-message"></i></button>
-                             <button class="hover:text-white"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                        <div class="p-3 ${C.sidebarBg} border-b ${C.border}">
+                            <div class="relative bg-[#202c33] rounded-lg flex items-center px-3 h-9">
+                                <i class="fa-solid fa-magnifying-glass text-[#8696a0] text-sm ${this.state.filterTerm ? 'hidden' : 'block'}"></i>
+                                <button class="${this.state.filterTerm ? 'block' : 'hidden'} text-[#00a884]" onclick="MessengerView.handleSearch('')"><i class="fa-solid fa-arrow-left"></i></button>
+                                <input type="text" placeholder="Suchen..." value="${this.state.filterTerm}" onkeyup="MessengerView.handleSearch(this.value)" id="messenger-search-input" class="bg-transparent border-none text-[#d1d7db] text-sm w-full ml-3 focus:outline-none placeholder-[#8696a0] h-full">
+                            </div>
                         </div>
+                        <div id="messenger-list" class="flex-1 overflow-y-auto custom-scrollbar"></div>
                     </div>
-                    <div class="p-3 ${C.sidebarBg} border-b ${C.border}">
-                        <div class="relative bg-[#202c33] rounded-lg flex items-center px-3 h-9">
-                            <i class="fa-solid fa-magnifying-glass text-[#8696a0] text-sm ${this.state.filterTerm ? 'hidden' : 'block'}"></i>
-                            <button class="${this.state.filterTerm ? 'block' : 'hidden'} text-[#00a884]" onclick="MessengerView.handleSearch('')"><i class="fa-solid fa-arrow-left"></i></button>
-                            <input type="text" placeholder="Suchen..." value="${this.state.filterTerm}" onkeyup="MessengerView.handleSearch(this.value)" id="messenger-search-input" class="bg-transparent border-none text-[#d1d7db] text-sm w-full ml-3 focus:outline-none placeholder-[#8696a0] h-full">
-                        </div>
+                    <!-- RIGHT MAIN -->
+                    <div id="messenger-chat-area" class="${mobileChatVisible ? 'flex fixed inset-0 z-50 md:static' : 'hidden md:flex'} flex-col flex-1 bg-[#0b141a] relative w-full h-full">
+                        ${this.renderActiveChat()}
                     </div>
-                    <div id="messenger-list" class="flex-1 overflow-y-auto custom-scrollbar"></div>
                 </div>
-                <!-- RIGHT MAIN -->
-                <div id="messenger-chat-area" class="${mobileChatVisible ? 'flex fixed inset-0 z-50 md:static' : 'hidden md:flex'} flex-col flex-1 bg-[#0b141a] relative w-full h-full">
-                    ${this.renderActiveChat()}
-                </div>
-            </div>
-        `;
-        this.renderSidebarList();
-        if (mobileChatVisible || window.innerWidth >= 768) this.scrollToBottom(false);
+            `;
+            this.renderSidebarList();
+            if (mobileChatVisible || window.innerWidth >= 768) this.scrollToBottom(false);
+            
+            // Fokus wiederherstellen falls nötig
+            const input = document.getElementById('messenger-search-input');
+            if(input && this.state.filterTerm) {
+                input.focus();
+                const val = input.value;
+                input.value = '';
+                input.value = val;
+            }
+        } catch (e) {
+            console.error("Messenger Render Error:", e);
+            container.innerHTML = `<div class="p-10 text-center text-red-400">Fehler beim Laden des Messengers.<br><small>${e.message}</small></div>`;
+        }
     },
 
     handleSearch(val) { this.state.filterTerm = val.toLowerCase(); this.renderSidebarList(); },
@@ -125,6 +144,13 @@ const MessengerView = {
     renderSidebarList() {
         const container = document.getElementById('messenger-list');
         if(!container) return;
+        
+        // Defensive Checks
+        if (typeof Store === 'undefined' || !Store.state) {
+            container.innerHTML = `<div class="p-4 text-center text-muted">Lade Daten...</div>`;
+            return;
+        }
+
         const term = this.state.filterTerm;
         const myId = this.getMyId();
         const members = Store.state.members || [];
@@ -139,6 +165,7 @@ const MessengerView = {
         myGroups.forEach(g => {
             if (g.name.toLowerCase().includes(term)) {
                 const lastMsg = g.chat && g.chat.length > 0 ? g.chat[g.chat.length-1] : null;
+                // Sicherstellen, dass ID vorhanden ist
                 if (g.id) {
                     items.push({ type: 'group', id: g.id, name: g.name, icon: 'fa-users', lastMsg, time: lastMsg ? new Date(lastMsg.time) : new Date(0) });
                 }
@@ -158,7 +185,6 @@ const MessengerView = {
     },
 
     renderListItem(item) {
-        // Robuster ID-Check (Typ-unsicher mit ==)
         const isActive = this.state.activeType === item.type && (item.type === 'news' || this.state.activeId == item.id);
         let preview = "Klicken um zu starten";
         let dateStr = "";
@@ -222,6 +248,11 @@ const MessengerView = {
     renderActiveChat() {
         const C = this.config;
         
+        // Defensive Checks für Store
+        const news = (window.Store && Store.state && Store.state.news) ? Store.state.news : [];
+        const groups = (window.Store && Store.state && Store.state.groups) ? Store.state.groups : [];
+        const members = (window.Store && Store.state && Store.state.members) ? Store.state.members : [];
+
         if (!this.state.mobileChatVisible && this.state.activeId == 0 && this.state.activeType !== 'news') {
             return `<div class="flex flex-col items-center justify-center h-full bg-[#222e35] text-center border-b-[6px] border-[#00a884]"><div class="mb-5"><i class="fa-regular fa-comments text-[#41525d] text-7xl"></i></div><h2 class="text-[#e9edef] text-3xl font-light mb-4">Vereins Messenger</h2><p class="text-[#8696a0] text-sm">Wähle einen Chat aus.</p></div>`;
         }
@@ -232,10 +263,10 @@ const MessengerView = {
 
         if (type === 'news') {
             title = "Ankündigungen"; subTitle = "Nur Administratoren";
-            messages = (Store.state.news || []).map(n => ({ id: n.id, sender: 'Vorstand', text: `📢 **${n.title}**\n\n${n.content}`, time: n.date, isMe: false, isSystem: true })).sort((a,b) => new Date(a.time) - new Date(b.time));
+            messages = news.map(n => ({ id: n.id, sender: 'Vorstand', text: `📢 **${n.title}**\n\n${n.content}`, time: n.date, isMe: false, isSystem: true })).sort((a,b) => new Date(a.time) - new Date(b.time));
             canWrite = false;
         } else if (type === 'group') {
-            const g = Store.state.groups.find(x => x.id == id);
+            const g = groups.find(x => x.id == id);
             if(g) { 
                 title = g.name; 
                 subTitle = 'Tippen für Gruppeninfo'; 
@@ -244,7 +275,7 @@ const MessengerView = {
                 clickAction = `onclick="MessengerView.showGroupInfo('${id}')"`;
             }
         } else if (type === 'private') {
-            const m = Store.state.members.find(x => x.id == id);
+            const m = members.find(x => x.id == id);
             if(m) { 
                 title = `${m.firstName} ${m.lastName}`; 
                 subTitle = m.status === 'active' ? 'Online' : 'Klicken für Profil'; 
@@ -316,7 +347,7 @@ const MessengerView = {
         if (msg.isSystem) return `<div class="flex justify-center my-3"><div class="bg-[#1f2c34] text-[#8696a0] text-xs px-3 py-1.5 rounded-lg shadow uppercase font-bold tracking-wide">${msg.sender}: ${msg.text}</div></div>`;
         
         const myId = this.getMyId();
-        const me = Store.state.members.find(m => m.id == myId) || {};
+        const me = (window.Store && Store.state && Store.state.members) ? Store.state.members.find(m => m.id == myId) : {};
         
         let isMe = false;
         if (msg.senderId) {
@@ -324,7 +355,7 @@ const MessengerView = {
         } else if (msg.hasOwnProperty('isMe')) {
             isMe = msg.isMe; 
         } else {
-            isMe = (msg.sender === me.firstName);
+            isMe = (me && msg.sender === me.firstName);
         }
 
         const isDeleted = msg.isDeleted;
@@ -399,6 +430,8 @@ const MessengerView = {
             </div>
         `;
     },
+
+    // --- ACTIONS & LOGIC ---
 
     toggleMsgMenu(id) {
         document.querySelectorAll('[id^="ctx-"]').forEach(el => { if(el.id !== id) el.classList.add('hidden'); });
@@ -483,6 +516,7 @@ const MessengerView = {
                 if(msg) { cb(msg); this.safeUpdate('groups', parentObj); }
             }
         } else if (type === 'private') {
+            // Update bei beiden Teilnehmern
             const myId = this.getMyId();
             const me = Store.state.members.find(m => m.id == myId);
             const other = Store.state.members.find(m => m.id == id);
@@ -603,6 +637,7 @@ const MessengerView = {
                 if(msg) { msg.isDeleted = true; msg.text = ''; this.safeUpdate('groups', parentObj); }
             }
         } else if (type === 'private') {
+            // Delete for BOTH
             const myId = this.getMyId();
             const me = Store.state.members.find(m => m.id == myId);
             const other = Store.state.members.find(m => m.id == id);
