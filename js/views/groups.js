@@ -579,7 +579,7 @@ const GroupsView = {
     // --- EVENT MODALS (mit Ganztägig, Enddatum, Abbruch) ---
     openEventAddModal(groupId) {
         const html = `
-            <div class="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div class="p-4 md:p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
                 <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4">
                     <h3 class="text-xl font-bold text-white">Neuer Termin</h3>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2"><i class="fa-solid fa-times text-xl"></i></button>
@@ -647,7 +647,7 @@ const GroupsView = {
         }
 
         const html = `
-            <div class="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <div class="p-4 md:p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
                 <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4">
                     <h3 class="text-xl font-bold text-white">Termin bearbeiten</h3>
                     <button onclick="GroupsView.openEventDetailModal('${eventId}')" class="text-dark-muted hover:text-white text-sm flex items-center gap-1"><i class="fa-solid fa-arrow-left"></i> Zurück</button>
@@ -840,7 +840,7 @@ const GroupsView = {
         };
 
         const html = `
-            <div class="p-6 md:p-8 h-full flex flex-col">
+            <div class="p-4 md:p-8 h-full flex flex-col">
                 <!-- Header Image/Gradient -->
                 <div class="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-brand-900/20 to-transparent pointer-events-none"></div>
 
