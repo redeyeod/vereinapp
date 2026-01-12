@@ -98,8 +98,9 @@ const MessengerView = {
             const { mobileChatVisible } = this.state;
             const C = this.config;
 
+            // ÄNDERUNG: Nutze h-full statt fester calc-Höhe, damit es flexibel in das neue Layout passt.
             container.innerHTML = `
-                <div class="flex h-[calc(100vh-80px)] md:h-[calc(100vh-100px)] max-w-[1600px] mx-auto overflow-hidden bg-black shadow-2xl relative rounded-xl border border-[#333]">
+                <div class="flex h-full w-full max-w-[1600px] mx-auto overflow-hidden bg-black shadow-2xl relative rounded-xl border border-[#333]">
                     <!-- LEFT SIDEBAR -->
                     <div class="${mobileChatVisible ? 'hidden md:flex' : 'flex'} w-full md:w-[400px] lg:w-[450px] flex-col ${C.sidebarBg} border-r ${C.border} z-20">
                         <div class="h-16 px-4 ${C.headerBg} flex items-center justify-between shrink-0 border-b ${C.border}">
@@ -482,6 +483,46 @@ const MessengerView = {
                     ${isMe ? `<button onclick="MessengerView.editMessage('${msg.id}')" class="w-full text-left px-4 py-2.5 text-sm text-[#e9edef] hover:bg-[#111b21] flex gap-3 items-center"><i class="fa-solid fa-pen w-4"></i> Bearbeiten</button>` : ''}
                     ${isMe || App.can('admin') ? `<button onclick="MessengerView.deleteMessage('${msg.id}')" class="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-[#111b21] flex gap-3 items-center"><i class="fa-solid fa-trash w-4"></i> Löschen</button>` : ''}
                 </div>
+            </div>
+        `;
+    },
+
+    // --- MENUS & POPUPS (NEU) ---
+
+    renderAttachMenu() {
+        if (!this.state.showAttachMenu) return '';
+        const items = [
+            { icon: 'fa-image', color: 'bg-purple-500', text: 'Fotos & Videos', action: "MessengerView.sendAttachment('image')" },
+            { icon: 'fa-camera', color: 'bg-red-500', text: 'Kamera', action: "MessengerView.sendAttachment('camera')" },
+            { icon: 'fa-file', color: 'bg-indigo-500', text: 'Dokument', action: "MessengerView.sendAttachment('file')" },
+            { icon: 'fa-user', color: 'bg-blue-500', text: 'Kontakt', action: "MessengerView.openContactSelectModal()" },
+            { icon: 'fa-square-poll-vertical', color: 'bg-teal-500', text: 'Umfrage', action: "MessengerView.openPollModal()" }
+        ];
+        return `
+            <div class="absolute bottom-20 left-4 flex flex-col gap-4 animate-slide-up z-40">
+                ${items.map(i => `
+                    <div onclick="${i.action}; MessengerView.toggleAttachMenu()" class="flex items-center gap-4 group cursor-pointer">
+                        <div class="w-12 h-12 rounded-full ${i.icon === 'fa-image' ? 'bg-gradient-to-b from-purple-500 to-pink-500' : i.color} flex items-center justify-center text-white shadow-lg hover:scale-110 transition-transform">
+                            <i class="fa-solid ${i.icon} text-lg"></i>
+                        </div>
+                        <span class="bg-[#233138] text-white px-3 py-1 rounded-full text-sm opacity-0 group-hover:opacity-100 transition-opacity shadow-lg scale-0 group-hover:scale-100 origin-left border border-[#2a3942] whitespace-nowrap hidden md:block">
+                            ${i.text}
+                        </span>
+                    </div>
+                `).reverse().join('')}
+            </div>
+        `;
+    },
+
+    renderEmojiPicker() {
+        if (!this.state.showEmojiPicker) return '';
+        const emojis = ['😀','😂','🥰','😎','😭','👍','👎','👋','🙏','❤️','🔥','🎉','⚽','🍺','🤔','👀','🚀','💯','🔴','⚪'];
+        return `
+            <div class="absolute bottom-20 left-0 md:left-4 bg-[#202c33] border border-[#2a3942] rounded-lg shadow-2xl p-2 w-full md:w-72 h-64 overflow-y-auto animate-slide-up z-40 custom-scrollbar">
+                <div class="grid grid-cols-6 gap-1">
+                    ${emojis.map(e => `<button onclick="MessengerView.addEmoji('${e}')" class="text-2xl p-2 hover:bg-white/5 rounded transition">${e}</button>`).join('')}
+                </div>
+                <div class="p-2 text-center text-xs text-[#8696a0]">Mehr Emojis folgen...</div>
             </div>
         `;
     },
