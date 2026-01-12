@@ -35,6 +35,7 @@ const App = {
 
         try {
             await Store.init();
+            // Daten vorladen, wenn möglich
             if (Store.fetchTable) {
                 await Store.fetchTable('roles');
                 await Store.fetchTable('groups');
@@ -45,6 +46,7 @@ const App = {
         // Globaler Listener für Daten-Updates
         Store.onUpdate = () => {
             if (!this.state.currentUser) return;
+            // Nur refreshen wenn keine Eingabe aktiv ist, um Tippen nicht zu unterbrechen
             const activeTag = document.activeElement ? document.activeElement.tagName : '';
             if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
                 this.router(Store.state.currentView || localStorage.getItem('vm_last_view') || 'dashboard');
@@ -59,6 +61,7 @@ const App = {
     },
 
     // --- MOBILE MODES (CHAT vs APP) ---
+    // WICHTIG: KEIN router() hier aufrufen, um Loop zu vermeiden!
     switchMobileMode(mode) {
         this.state.mobileMode = mode;
         const btnApp = document.getElementById('btn-mode-app');
@@ -67,8 +70,7 @@ const App = {
         const content = document.getElementById('content');
 
         if (mode === 'chat') {
-            // Chat Mode: Header weg, Router auf Messenger
-            this.router('messenger');
+            // NUR UI Updates, Navigation wird vom Router erledigt oder vom Button direkt
             if(header) header.classList.add('-translate-y-full'); // Header verstecken
             if(content) content.classList.remove('p-4', 'md:p-8'); // Fullscreen Padding
             if(content) content.classList.add('p-0');
@@ -76,11 +78,7 @@ const App = {
             if(btnApp) btnApp.className = "flex flex-col items-center justify-center w-1/2 h-full text-dark-muted hover:text-white transition-colors";
             if(btnChat) btnChat.className = "flex flex-col items-center justify-center w-1/2 h-full text-brand-500 transition-colors";
         } else {
-            // App Mode: Header da, Router auf Dashboard (oder last view)
-            let target = localStorage.getItem('vm_last_app_view') || 'dashboard';
-            if (target === 'messenger') target = 'dashboard'; // Prevent loop
-            this.router(target);
-            
+            // App Mode UI
             if(header) header.classList.remove('-translate-y-full');
             if(content) content.classList.add('p-4', 'md:p-8');
             if(content) content.classList.remove('p-0');
@@ -98,10 +96,12 @@ const App = {
         const drawer = document.getElementById('mobile-menu-drawer');
         
         if (this.state.mobileMenuOpen) {
+            // Öffnen
             menu.classList.remove('pointer-events-none');
             backdrop.classList.remove('opacity-0');
             drawer.classList.remove('translate-x-full');
         } else {
+            // Schließen
             menu.classList.add('pointer-events-none');
             backdrop.classList.add('opacity-0');
             drawer.classList.add('translate-x-full');
@@ -127,6 +127,7 @@ const App = {
             const { data, error } = await _sb.auth.signInWithPassword({ email, password });
 
             if (error) {
+                // Notfall-Admin Login (Hardcoded)
                 if(email === 'admin@gmail.com' && password === 'admin') {
                     this.loginSuccess({ id: '999', firstName: 'System', lastName: 'Admin', email: email, roles: ['Vorstand'] });
                     return;
@@ -136,6 +137,8 @@ const App = {
 
             if (data.session) {
                 localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
+                
+                // Versuch, User-Daten zu laden
                 try {
                     if (Store.fetchTable) {
                         await Store.fetchTable('members');
@@ -148,6 +151,7 @@ const App = {
                 if (Store.state && Store.state.members) {
                     user = Store.state.members.find(m => m.email.toLowerCase() === email);
                 }
+                // Fallback User, falls DB noch nicht geladen
                 if (!user) user = { id: data.user.id, email: email, firstName: 'User', roles: ['Mitglied'] };
 
                 this.loginSuccess(user);
@@ -166,6 +170,8 @@ const App = {
 
     loginSuccess(user) {
         if (!user) return;
+        
+        // Admin Force
         if (user.email.toLowerCase() === 'admin@gmail.com') {
             const currentRoles = this.getUserRoles(user);
             if(!currentRoles.includes('Vorstand')) {
@@ -173,11 +179,14 @@ const App = {
                  else user.roles = ['Vorstand'];
             }
         }
+        
         localStorage.setItem('vm_current_user_id', user.id);
         this.state.currentUser = user;
+        
         document.getElementById('auth-view').classList.add('hidden');
         document.getElementById('app-view').classList.remove('hidden');
         this.updateHeaderUI();
+        
         localStorage.removeItem('vm_last_view');
         this.router('dashboard');
         this.showToast(`Hallo ${user.firstName}!`, "success");
@@ -200,11 +209,14 @@ const App = {
             const session = JSON.parse(sessionStr);
             if (!session || !session.user) return;
             const email = session.user.email.toLowerCase();
+            
             let user = { id: session.user.id, email: email, firstName: 'User', roles: ['Mitglied'] };
+            
             if(Store && Store.state && Store.state.members && Store.state.members.length > 0) {
                 const found = Store.state.members.find(m => m.email.toLowerCase() === email);
                 if(found) user = found;
             }
+            
             if (email === 'admin@gmail.com') {
                  const r = this.getUserRoles(user);
                  if(!r.includes('Vorstand')) {
@@ -212,36 +224,44 @@ const App = {
                       else user.roles = ['Vorstand'];
                  }
             }
+
             this.state.currentUser = user;
             this.updateHeaderUI();
+            
             document.getElementById('auth-view').classList.add('hidden');
             document.getElementById('app-view').classList.remove('hidden');
         } catch(e) { console.error("Session Parse Error:", e); }
     },
 
+    // Helper: Gibt immer ein Array zurück
     getUserRoles(user) {
         if (!user) return [];
         if (Array.isArray(user.roles)) return user.roles;
-        if (user.role) return [user.role];
+        if (user.role) return [user.role]; // Legacy Support
         return ['Mitglied'];
     },
 
     updateHeaderUI() {
         const user = this.state.currentUser;
         if(!user) return;
+        
         const roles = this.getUserRoles(user);
         const roleStr = roles.length > 1 ? `${roles[0]} +${roles.length-1}` : (roles[0] || 'Mitglied');
+        
         const nameEl = document.getElementById('current-user-name');
         const roleEl = document.getElementById('current-user-role');
         if(nameEl) nameEl.textContent = user.firstName;
         if(roleEl) roleEl.textContent = roleStr;
+
         const mobName = document.getElementById('mobile-user-name');
         const mobRole = document.getElementById('mobile-user-role');
         if(mobName) mobName.textContent = user.firstName + ' ' + (user.lastName || '');
         if(mobRole) mobRole.textContent = roleStr;
+
         const isAdmin = this.can('admin_global');
         const adminBtn = document.getElementById('nav-btn-roles');
         const mobileAdmin = document.getElementById('mobile-admin-section');
+        
         if(adminBtn) {
             if(isAdmin) adminBtn.classList.remove('hidden');
             else adminBtn.classList.add('hidden');
@@ -254,18 +274,20 @@ const App = {
 
     // --- ROUTER ---
     router(viewName) {
+        // Handy-Menü schließen
         if(this.state.mobileMenuOpen) this.toggleMobileMenu();
+
         if(!viewName) viewName = 'dashboard';
         
-        // Mobile Mode Sync
+        // --- MOBILE MODE LOGIC ---
+        // Wenn wir zum Messenger gehen -> Chat Mode
         if(viewName === 'messenger') {
             this.switchMobileMode('chat');
         } else {
-            // Nur speichern wenn KEIN Messenger
+            // Wenn wir woanders hingehen -> App Mode
+            this.switchMobileMode('app');
+            // Merken, wo wir in der App zuletzt waren (für Footer Klick "App")
             localStorage.setItem('vm_last_app_view', viewName);
-            // Wir updaten den Mode nur, wenn wir nicht explizit schon im Chat sind
-            // (Dies verhindert Rekursion, switchMobileMode ruft router auf)
-            if(this.state.mobileMode === 'chat') this.switchMobileMode('app');
         }
 
         localStorage.setItem('vm_last_view', viewName);
@@ -300,7 +322,7 @@ const App = {
 
             if (viewObj && typeof viewObj.render === 'function') {
                 container.classList.remove('fade-in');
-                void container.offsetWidth; 
+                void container.offsetWidth; // Trigger Reflow
                 viewObj.render(container);
                 container.classList.add('fade-in');
             } else {
@@ -361,8 +383,10 @@ const App = {
             content.innerHTML = htmlContent;
             overlay.classList.remove('hidden');
             overlay.classList.add('flex');
+            
             content.classList.remove('opacity-100', 'scale-100');
             content.classList.add('opacity-0', 'scale-95');
+            
             setTimeout(() => {
                 content.classList.remove('opacity-0', 'scale-95');
                 content.classList.add('opacity-100', 'scale-100');
@@ -389,9 +413,11 @@ const App = {
         const toast = document.getElementById("toast"); 
         if (!toast) return;
         toast.className = "show";
+        
         if (type === "error") { toast.style.borderColor = "#ef4444"; toast.style.color = "#fca5a5"; }
         else if (type === "success") { toast.style.borderColor = "#10b981"; toast.style.color = "#6ee7b7"; }
         else { toast.style.borderColor = "#3b82f6"; toast.style.color = "#fff"; }
+        
         let icon = type === 'error' ? 'fa-circle-xmark' : (type === 'success' ? 'fa-circle-check' : 'fa-circle-info');
         toast.innerHTML = `<div class="flex items-center gap-3"><i class="fa-solid ${icon}"></i><span>${message}</span></div>`;
         setTimeout(() => { toast.className = ""; }, 3500); 
@@ -402,7 +428,7 @@ const App = {
         const style = document.createElement('style');
         style.id = 'app-dynamic-styles';
         style.textContent = `
-            /* Fix für Mobile Viewports (Safari Adressleiste) */
+            /* Fix für Mobile Viewports */
             #app-view { height: 100dvh; }
             @supports (-webkit-touch-callout: none) { #app-view { height: -webkit-fill-available; } }
             header { padding-top: env(safe-area-inset-top); height: auto !important; min-height: 4rem; }
