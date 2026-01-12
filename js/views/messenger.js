@@ -2,26 +2,30 @@
  * =============================================================================
  * MODERN MESSENGER VIEW (WhatsApp/Signal Style)
  * Optimiert für Mobile & Desktop
+ * Features: Chat-Suche, Profil-Modal, Gruppen-Redirect
  * =============================================================================
  */
 
 const MessengerView = {
     // Lokaler State
     state: {
-        activeType: 'news',
-        activeId: 0,
-        filterTerm: '',
+        activeType: 'news', // 'news', 'group', 'private'
+        activeId: 0,        // 0 = kein Chat
+        filterTerm: '',     // Suche in der Chat-Liste (Sidebar)
+        
+        // NEU: Chat-Interne Suche
         showChatSearch: false,
         chatFilterTerm: '',
+
         showAttachMenu: false,
         showEmojiPicker: false,
         mobileChatVisible: false,
-        replyingTo: null,
-        editingId: null,
+        replyingTo: null,   // ID der Nachricht, auf die geantwortet wird
+        editingId: null,    // ID der Nachricht, die bearbeitet wird
         scrollPositions: {}
     },
 
-    // Farben und Styles
+    // Farben und Styles Konfiguration
     config: {
         accentColor: 'bg-[#00a884]', 
         accentColorHover: 'hover:bg-[#008f6f]',
@@ -35,6 +39,7 @@ const MessengerView = {
         textMuted: 'text-[#8696a0]'
     },
 
+    // Helper: Current User ID
     getMyId() {
         if (typeof App !== 'undefined' && App.state && App.state.currentUser) {
             return App.state.currentUser.id;
@@ -51,7 +56,7 @@ const MessengerView = {
         const style = document.createElement('style');
         style.id = 'messenger-custom-styles';
         
-        // SVG in Teile zerlegt um Copy-Paste Fehler zu vermeiden
+        // SVG Pattern für den Hintergrund
         const svgStart = "data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E";
         const svgPath = "%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%232a3942' fill-opacity='0.2' fill-rule='evenodd'/%3E%3C/svg%3E";
 
@@ -97,7 +102,6 @@ const MessengerView = {
             const { mobileChatVisible } = this.state;
             const C = this.config;
 
-            // HINWEIS: Wir nutzen hier h-full, um uns in den normalen App-Container einzupassen
             container.innerHTML = `
                 <div class="flex h-full w-full max-w-[1600px] mx-auto overflow-hidden bg-black shadow-2xl relative rounded-xl border border-[#333]">
                     <!-- LEFT SIDEBAR -->
@@ -130,6 +134,7 @@ const MessengerView = {
             this.renderSidebarList();
             if (mobileChatVisible || window.innerWidth >= 768) this.scrollToBottom(false);
             
+            // Fokus wiederherstellen
             const input = document.getElementById('messenger-search-input');
             const chatSearchInput = document.getElementById('chat-filter-input');
             
@@ -236,9 +241,10 @@ const MessengerView = {
         this.state.showAttachMenu = false;
         this.state.showEmojiPicker = false;
         
-        // Mobile Handling: Wir schalten lokal um, ohne App.switchMobileMode zu nutzen
-        if (window.innerWidth < 768) {
+        // Mobile Handling
+        if (window.innerWidth < 768 && typeof App !== 'undefined' && App.switchMobileMode) {
              this.state.mobileChatVisible = true;
+             App.switchMobileMode('chat');
         } else {
              this.state.mobileChatVisible = true;
         }
@@ -251,7 +257,11 @@ const MessengerView = {
 
     closeChat() {
         this.state.mobileChatVisible = false;
-        this.render(document.getElementById('content'));
+        if (window.innerWidth < 768 && typeof App !== 'undefined' && App.switchMobileMode) {
+             App.switchMobileMode('app');
+        } else {
+             this.render(document.getElementById('content'));
+        }
     },
 
     // --- SEARCH & MENUS ---
@@ -288,6 +298,7 @@ const MessengerView = {
             const g = groups.find(x => x.id == id);
             if(g) { 
                 title = g.name; subTitle = 'Tippen für Gruppeninfo'; messages = g.chat || [];
+                // NEU: Gruppen-Redirect
                 clickAction = `onclick="MessengerView.showGroupInfo('${id}')"`;
             }
         } else if (type === 'private') {
@@ -295,20 +306,22 @@ const MessengerView = {
             if(m) { 
                 title = `${m.firstName} ${m.lastName}`; subTitle = m.status === 'active' ? 'Online' : 'Klicken für Profil'; 
                 messages = this.getMemberChat(m);
+                // NEU: Profil Modal
                 clickAction = `onclick="MessengerView.showUserProfile('${id}')"`;
             }
         }
 
+        // FILTER LOGIC
         if (this.state.chatFilterTerm) messages = messages.filter(m => m.text && m.text.toLowerCase().includes(this.state.chatFilterTerm));
 
         let headerContent = '';
         if (this.state.showChatSearch) {
             headerContent = `<div class="flex items-center w-full animate-scale-in"><button onclick="MessengerView.toggleChatSearch()" class="text-[#8696a0] mr-4"><i class="fa-solid fa-arrow-left"></i></button><input type="text" id="chat-filter-input" placeholder="Nachrichten durchsuchen..." value="${this.state.chatFilterTerm}" onkeyup="MessengerView.handleChatFilter(this.value)" class="bg-[#202c33] border-none text-[#d1d7db] text-sm w-full py-2 px-4 rounded-lg focus:outline-none placeholder-[#8696a0]"></div>`;
         } else {
-            headerContent = `<div class="flex items-center gap-3 overflow-hidden cursor-pointer flex-1" ${clickAction}><button onclick="event.stopPropagation(); MessengerView.closeChat()" class="md:hidden text-[#d1d7db] mr-1"><i class="fa-solid fa-arrow-left text-xl"></i></button><div class="w-10 h-10 rounded-full bg-[#6a7f8a] flex items-center justify-center overflow-hidden text-white font-bold text-lg shrink-0">${type === 'private' ? title.charAt(0) : '<i class="fa-solid fa-users"></i>'}</div><div class="flex flex-col justify-center overflow-hidden"><h3 class="text-[#e9edef] font-bold text-base truncate leading-tight">${title}</h3><p class="text-[#8696a0] text-xs truncate leading-tight">${subTitle}</p></div></div><div class="flex items-center gap-4 text-[#8696a0] shrink-0"><button onclick="MessengerView.toggleChatSearch()" class="hover:text-white transition"><i class="fa-solid fa-search"></i></button><button class="hover:text-white transition"><i class="fa-solid fa-ellipsis-vertical"></i></button></div>`;
+            headerContent = `<div class="flex items-center gap-3 overflow-hidden cursor-pointer flex-1" ${clickAction}><button onclick="event.stopPropagation(); if(typeof App !== 'undefined') App.switchMobileMode('app'); else MessengerView.closeChat()" class="md:hidden text-[#d1d7db] mr-1"><i class="fa-solid fa-arrow-left text-xl"></i></button><div class="w-10 h-10 rounded-full bg-[#6a7f8a] flex items-center justify-center overflow-hidden text-white font-bold text-lg shrink-0">${type === 'private' ? title.charAt(0) : '<i class="fa-solid fa-users"></i>'}</div><div class="flex flex-col justify-center overflow-hidden"><h3 class="text-[#e9edef] font-bold text-base truncate leading-tight">${title}</h3><p class="text-[#8696a0] text-xs truncate leading-tight">${subTitle}</p></div></div><div class="flex items-center gap-4 text-[#8696a0] shrink-0"><button onclick="MessengerView.toggleChatSearch()" class="hover:text-white transition"><i class="fa-solid fa-search"></i></button><button class="hover:text-white transition"><i class="fa-solid fa-ellipsis-vertical"></i></button></div>`;
         }
 
-        return `<div class="h-16 px-4 py-2 ${C.headerBg} flex items-center justify-between shadow-sm z-30 shrink-0 border-l border-[#2a3942] sticky top-0 w-full">${headerContent}</div><div id="msg-scroll-container" class="flex-1 overflow-y-auto p-4 md:px-10 space-y-2 msg-bg-pattern custom-scrollbar relative">${messages.length === 0 ? (this.state.chatFilterTerm ? `<div class="text-center mt-20 text-[#8696a0] opacity-60"><p>Keine Nachrichten gefunden</p></div>` : `<div class="text-center mt-20 text-[#8696a0] opacity-60"><i class="fa-regular fa-comments text-4xl mb-2"></i><p>Schreib etwas...</p></div>`) : messages.map(msg => this.renderMessageBubble(msg)).join('')}<div class="h-2"></div></div>${canWrite ? this.renderInputArea() : `<div class="p-4 ${C.headerBg} text-center text-[#8696a0] text-sm border-t ${C.border}">Nur Administratoren können hier senden.</div>`}`;
+        return `<div class="h-16 px-4 py-2 ${C.headerBg} flex items-center justify-between shadow-sm z-30 shrink-0 border-l border-[#2a3942] sticky top-0 w-full">${headerContent}</div><div id="msg-scroll-container" class="flex-1 overflow-y-auto p-4 md:px-10 space-y-2 msg-bg-pattern custom-scrollbar relative">${messages.length === 0 ? (this.state.chatFilterTerm ? `<div class="text-center mt-20 text-[#8696a0] opacity-60"><p>Keine Nachrichten gefunden für "${this.state.chatFilterTerm}"</p></div>` : `<div class="text-center mt-20 text-[#8696a0] opacity-60"><i class="fa-regular fa-comments text-4xl mb-2"></i><p>Schreib etwas...</p></div>`) : messages.map(msg => this.renderMessageBubble(msg)).join('')}<div class="h-2"></div></div>${canWrite ? this.renderInputArea() : `<div class="p-4 ${C.headerBg} text-center text-[#8696a0] text-sm border-t ${C.border}">Nur Administratoren können hier senden.</div>`}`;
     },
 
     renderAttachMenu() {
@@ -419,6 +432,7 @@ const MessengerView = {
         this.render(document.getElementById('content'));
     },
 
+    // NEU: PROFIL MODAL
     showUserProfile(id) {
         if (id && !isNaN(id) && !isNaN(parseFloat(id))) id = Number(id);
         const m = Store.state.members.find(m => m.id == id);
@@ -428,6 +442,7 @@ const MessengerView = {
         App.openModal(html);
     },
 
+    // NEU: GRUPPEN REDIRECT
     showGroupInfo(groupId) {
         if (typeof App !== 'undefined' && App.router) {
             localStorage.setItem('vm_open_group_id', groupId);
