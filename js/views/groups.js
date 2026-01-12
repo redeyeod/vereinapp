@@ -262,7 +262,10 @@ const GroupsView = {
             
             // Teilnahme-Logik für Preview
             const attendance = e.attendance || {};
-            const yesIds = Object.keys(attendance).filter(id => attendance[id] === 'yes');
+            const yesCount = Object.values(attendance).filter(v => v === 'yes').length;
+            const maybeCount = Object.values(attendance).filter(v => v === 'maybe').length;
+            const noCount = Object.values(attendance).filter(v => v === 'no').length;
+
             const userStatus = App.state.currentUser ? attendance[App.state.currentUser.id] : null;
 
             let borderClass = 'border-dark-border';
@@ -287,19 +290,11 @@ const GroupsView = {
                             </div>
                             
                             <div class="mt-2 flex gap-3 text-[10px] text-dark-muted">
-                                <span class="flex items-center"><i class="fa-solid fa-check text-emerald-500 mr-1"></i> ${yesIds.length}</span>
+                                <span class="flex items-center ${yesCount > 0 ? 'text-emerald-400 font-bold' : ''}"><i class="fa-solid fa-check mr-1"></i> ${yesCount}</span>
+                                <span class="flex items-center ${maybeCount > 0 ? 'text-amber-400 font-bold' : ''}"><i class="fa-solid fa-question mr-1"></i> ${maybeCount}</span>
+                                <span class="flex items-center ${noCount > 0 ? 'text-red-400 font-bold' : ''}"><i class="fa-solid fa-xmark mr-1"></i> ${noCount}</span>
                             </div>
                         </div>
-
-                        ${yesIds.length > 0 ? `
-                        <div class="hidden sm:flex -space-x-2 shrink-0">
-                            ${yesIds.slice(0, 3).map(id => {
-                                const m = Store.state.members.find(mem => mem.id == id);
-                                if (!m) return '';
-                                return `<div class="w-6 h-6 rounded-full bg-slate-700 border border-dark-bg flex items-center justify-center text-[8px] text-white font-bold" title="${m.firstName}">${m.firstName.charAt(0)}</div>`;
-                            }).join('')}
-                            ${yesIds.length > 3 ? `<div class="w-6 h-6 rounded-full bg-dark-card border border-dark-bg flex items-center justify-center text-[8px] text-dark-muted font-bold">+${yesIds.length - 3}</div>` : ''}
-                        </div>` : ''}
                     </div>
                 </div>
             `;
@@ -643,7 +638,7 @@ const GroupsView = {
         
         // Berechtigungs-Check
         const group = Store.state.groups.find(g => g.name === e.group);
-        if (!group || !App.can('manage_group_content', group.name)) {
+        if (!group || !(App.can('manage_group_content', group.name) || App.can('admin_global'))) {
              App.showToast("Keine Berechtigung", "error");
              return;
         }
@@ -822,20 +817,21 @@ const GroupsView = {
             ? "bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/20 ring-2 ring-red-500/50" 
             : btnInactive;
 
-        const renderParticipantList = (title, voters, colorClass) => {
-            if (voters.length === 0) return '';
+        const renderParticipantList = (title, voters, colorClass, icon) => {
             return `
                 <div class="mb-4">
-                    <h5 class="text-xs font-bold text-dark-muted uppercase mb-2 pl-1">${title} <span class="${colorClass} ml-1">${voters.length}</span></h5>
+                    <h5 class="text-xs font-bold text-dark-muted uppercase mb-2 pl-1 flex items-center gap-2">
+                        <i class="fa-solid ${icon}"></i> ${title} <span class="${colorClass} ml-auto">${voters.length}</span>
+                    </h5>
                     <div class="flex flex-col gap-2">
-                        ${voters.map(m => `
+                        ${voters.length > 0 ? voters.map(m => `
                             <div class="flex items-center gap-3 p-2 rounded-lg bg-dark-bg/30 border border-dark-border/50 min-w-0">
                                 <div class="w-8 h-8 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold border border-white/5 flex-shrink-0">
                                     ${(m.firstName || '?').charAt(0)}${(m.lastName || '?').charAt(0)}
                                 </div>
                                 <span class="text-sm text-white font-medium truncate min-w-0 flex-1">${m.firstName} ${m.lastName}</span>
                             </div>
-                        `).join('')}
+                        `).join('') : '<p class="text-xs text-dark-muted italic px-2 py-2">Keine.</p>'}
                     </div>
                 </div>
             `;
@@ -862,7 +858,7 @@ const GroupsView = {
                     <button onclick="App.closeModal()" class="w-8 h-8 rounded-full bg-dark-bg text-dark-muted hover:text-white flex items-center justify-center transition-colors shadow-sm border border-dark-border"><i class="fa-solid fa-times text-lg"></i></button>
                 </div>
 
-                <div class="flex-1 overflow-y-auto custom-scrollbar space-y-8 relative z-10">
+                <div class="flex-1 overflow-y-auto custom-scrollbar space-y-8 relative z-10 pb-4">
                     
                     <!-- Abstimmung -->
                     <div>
@@ -891,28 +887,23 @@ const GroupsView = {
                         </div>
                     </div>` : ''}
 
-                    <!-- Teilnehmer Listen -->
+                    <!-- Teilnehmer Listen (Grid Layout: Mobile 1 Spalte, Desktop 3 Spalten) -->
                     <div>
                         <div class="flex items-center justify-between mb-4 border-b border-dark-border pb-2">
                             <h4 class="text-xs font-bold text-white uppercase tracking-wider">Teilnehmer</h4>
                             <span class="text-xs text-dark-muted bg-dark-bg px-2 py-1 rounded-md border border-dark-border">${yesVoters.length + maybeVoters.length + noVoters.length} Rückmeldungen</span>
                         </div>
-                        
-                        ${(yesVoters.length === 0 && maybeVoters.length === 0 && noVoters.length === 0) ? 
-                            '<p class="text-sm text-dark-muted italic text-center py-8 bg-dark-bg/20 rounded-xl border border-dashed border-dark-border">Noch keine Rückmeldungen.</p>' : ''}
                             
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            <div>${renderParticipantList('Zusagen', yesVoters, 'text-emerald-400')}</div>
-                            <div>
-                                ${renderParticipantList('Vielleicht', maybeVoters, 'text-amber-400')}
-                                ${renderParticipantList('Absagen', noVoters, 'text-red-400')}
-                            </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div>${renderParticipantList('Zusagen', yesVoters, 'text-emerald-400', 'fa-circle-check')}</div>
+                            <div>${renderParticipantList('Vielleicht', maybeVoters, 'text-amber-400', 'fa-circle-question')}</div>
+                            <div>${renderParticipantList('Absagen', noVoters, 'text-red-400', 'fa-circle-xmark')}</div>
                         </div>
                     </div>
                 </div>
 
                 ${canManage ? `
-                <div class="mt-6 pt-4 border-t border-dark-border flex gap-3 flex-shrink-0 mb-safe">
+                <div class="mt-auto pt-4 border-t border-dark-border flex gap-3 flex-shrink-0 mb-safe bg-dark-card z-20">
                     <button onclick="GroupsView.openEventEditModal('${e.id}')" class="flex-1 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-xl font-bold border border-dark-border transition-all flex items-center justify-center gap-2">
                         <i class="fa-solid fa-pen"></i> Bearbeiten
                     </button>
@@ -929,12 +920,12 @@ const GroupsView = {
         const modalContainer = document.getElementById('modal-content');
         if(modalContainer) {
             modalContainer.classList.remove('max-w-md');
-            modalContainer.classList.add('max-w-3xl', 'w-full', 'max-h-[90vh]');
+            modalContainer.classList.add('max-w-4xl', 'w-full', 'max-h-[90vh]');
             
             // WICHTIG: Flex und Overflow Handling für den Footer-Fix
             modalContainer.classList.add('flex', 'flex-col', 'overflow-hidden');
             // Für mobile: height auf auto setzen, max-height greift
-            modalContainer.style.height = 'auto';
+            modalContainer.style.height = '85vh';
         }
     },
 
