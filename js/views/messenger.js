@@ -162,7 +162,12 @@ const MessengerView = {
         
         if (item.lastMsg) {
             const txt = item.lastMsg.text || (item.lastMsg.type === 'image' ? '📷 Foto' : '📎 Datei');
-            preview = (item.lastMsg.isMe ? '<span class="text-[#00a884] mr-1"><i class="fa-solid fa-check-double"></i></span>' : '') + txt;
+            
+            // FIX: Dynamische Prüfung, ob die Nachricht von mir ist (für Checkmarks)
+            const myId = this.getMyId();
+            const isMe = item.lastMsg.senderId ? (item.lastMsg.senderId == myId) : item.lastMsg.isMe;
+
+            preview = (isMe ? '<span class="text-[#00a884] mr-1"><i class="fa-solid fa-check-double"></i></span>' : '') + txt;
             const d = new Date(item.lastMsg.time);
             dateStr = (d.toDateString() === new Date().toDateString()) ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : d.toLocaleDateString([], {day:'2-digit', month:'2-digit', year:'2-digit'});
         }
@@ -298,7 +303,10 @@ const MessengerView = {
     renderMessageBubble(msg) {
         if (msg.isSystem) return `<div class="flex justify-center my-3"><div class="bg-[#1f2c34] text-[#8696a0] text-xs px-3 py-1.5 rounded-lg shadow uppercase font-bold tracking-wide">${msg.sender}: ${msg.text}</div></div>`;
         
-        const isMe = msg.isMe;
+        // FIX: Dynamische Prüfung für Rechts/Links Ausrichtung basierend auf Sender-ID
+        const myId = this.getMyId();
+        const isMe = msg.senderId ? (msg.senderId == myId) : msg.isMe;
+
         const isDeleted = msg.isDeleted;
         const C = this.config;
         const bubbleColor = isMe ? C.myMessageBg : C.otherMessageBg;
