@@ -68,25 +68,25 @@ const MessengerView = {
         document.head.appendChild(style);
     },
 
-    // --- LOCAL STORAGE HELPERS (FALLBACK) ---
-    // Dies verhindert den Absturz, wenn die DB-Spalte 'privateChat' fehlt
-    getLocalChats() {
-        try {
-            return JSON.parse(localStorage.getItem('vm_private_chats') || '{}');
-        } catch(e) { return {}; }
-    },
+    // --- CHAT LOGIC ---
 
-    saveLocalChat(memberId, chat) {
-        const all = this.getLocalChats();
-        all[memberId] = chat;
-        localStorage.setItem('vm_private_chats', JSON.stringify(all));
-    },
-
-    // Holt Chat entweder aus DB (wenn vorhanden) oder LocalStorage
-    getMemberChat(member) {
-         const local = this.getLocalChats()[member.id] || [];
-         if (member.privateChat && member.privateChat.length > 0) return member.privateChat;
-         return local;
+    // Holt Chat-Daten aus dem User-Objekt und FILTERT sie für den aktuellen Partner
+    getMemberChat(partner) {
+         const myId = this.getMyId();
+         
+         // 1. Wir schauen in MEINEM User-Objekt nach Nachrichten (Single Source of Truth für meine Ansicht)
+         const me = Store.state.members.find(m => m.id == myId);
+         
+         // Fallback: Falls noch nichts da ist
+         const allMessages = (me && me.privateChat) ? me.privateChat : [];
+         
+         // 2. Filter: Zeige nur Nachrichten, die zwischen MIR und dem PARTNER ausgetauscht wurden
+         // Dazu prüfen wir senderId und recipientId
+         return allMessages.filter(msg => {
+             // Nachricht von Mir an Partner ODER von Partner an Mich
+             return (msg.senderId == myId && msg.recipientId == partner.id) ||
+                    (msg.senderId == partner.id && msg.recipientId == myId);
+         });
     },
 
     /**
@@ -173,7 +173,7 @@ const MessengerView = {
         const allMembers = members.filter(m => m.id != myId);
         allMembers.forEach(m => {
             const name = `${m.firstName} ${m.lastName}`;
-            const chat = this.getMemberChat(m); // Nutze Helper für lokalen Chat
+            const chat = this.getMemberChat(m); // Nutze neuen Filter-Helper
             const hasChat = chat.length > 0;
             if (term && name.toLowerCase().includes(term)) {
                 items.push({ type: 'private', id: m.id, name: name, icon: 'fa-user', color: 'text-slate-400', lastMsg: hasChat ? chat[chat.length-1] : null, time: hasChat ? new Date(chat[chat.length-1].time) : new Date(0), status: m.status });
@@ -267,7 +267,7 @@ const MessengerView = {
             if(m) { 
                 title = `${m.firstName} ${m.lastName}`; 
                 subTitle = m.status === 'active' ? 'Online' : 'Zuletzt online heute'; 
-                // LOAD CHAT from Helper
+                // LOAD CHAT from Helper (gefiltert)
                 messages = this.getMemberChat(m);
             }
         }
@@ -381,64 +381,67 @@ const MessengerView = {
     addMessageToChat(msgData) {
         const myId = this.getMyId();
         const me = Store.state.members.find(m => m.id == myId) || { firstName: 'Ich' };
+        const activeId = this.state.activeId;
         
         const newMessage = {
             id: Date.now(),
             text: msgData.text,
             type: msgData.type || 'text',
             content: msgData.content || null,
-            sender: me.firstName, 
+            sender: me.firstName,
+            // NEU: IDs für Filterung
+            senderId: myId,
+            recipientId: activeId,
+            
             isMe: true,
             isDeleted: false,
             time: new Date().toISOString()
         };
 
         const type = this.state.activeType;
-        const id = this.state.activeId;
         let parentObj = null;
         let table = '';
 
         if (type === 'group') {
-            parentObj = Store.state.groups.find(g => g.id === id);
+            parentObj = Store.state.groups.find(g => g.id === activeId);
             if(parentObj) {
                 if(!parentObj.chat) parentObj.chat = [];
                 parentObj.chat.push(newMessage);
                 table = 'groups';
+                Store.update(table, parentObj);
             }
         } else if (type === 'private') {
-            parentObj = Store.state.members.find(m => m.id === id);
-            if(parentObj) {
-                // 1. Array initialisieren wenn nötig (für Reactivity)
-                if(!parentObj.privateChat) parentObj.privateChat = [];
-                parentObj.privateChat.push(newMessage);
+            // WICHTIG: Damit beide die Nachricht haben, müssen wir BEIDE User updaten.
+            // Das simuliert einen echten Chatserver.
 
-                // 2. WICHTIG: Fallback Save in LocalStorage, weil DB-Spalte fehlt!
-                const currentChat = this.getMemberChat(parentObj);
-                // Check ob schon drin (wenn oben via ref gepusht, ist es drin, aber falls getMemberChat local returnt hat, müssen wir mergen)
-                if(!currentChat.find(m => m.id === newMessage.id)) currentChat.push(newMessage);
-                this.saveLocalChat(parentObj.id, currentChat);
-
-                table = 'members';
+            // 1. Update bei MIR (damit ich meine Nachricht sehe)
+            const myUser = Store.state.members.find(m => m.id == myId);
+            if(myUser) {
+                if(!myUser.privateChat) myUser.privateChat = [];
+                myUser.privateChat.push(newMessage);
+                
+                // Wir speichern das jetzt wirklich in die DB!
+                // ACHTUNG: Wenn die Spalte 'privateChat' in Supabase fehlt, kommt hier ein Fehler Toast.
+                Store.update('members', myUser); 
             }
-        }
 
-        if(parentObj) {
-            // UI Update sofort
+            // 2. Update beim PARTNER (damit er die Nachricht empfängt)
+            const partnerUser = Store.state.members.find(m => m.id === activeId);
+            if(partnerUser) {
+                // Bei ihm ist es "isMe = false", aber da wir das Objekt 1:1 pushen,
+                // prüfen wir beim Rendern auf senderId == myId. Das 'isMe' Feld im Objekt ist hier
+                // zweitrangig geworden, da wir es dynamisch auswerten könnten.
+                // Aber wir lassen es so. Beim Partner wird senderId != partnerId sein, also alles gut.
+                
+                if(!partnerUser.privateChat) partnerUser.privateChat = [];
+                partnerUser.privateChat.push(newMessage);
+                Store.update('members', partnerUser);
+            }
+
+            // UI Refresh für mich sofort
             const chatArea = document.getElementById('messenger-chat-area');
             if(chatArea) { chatArea.innerHTML = this.renderActiveChat(); this.scrollToBottom(true); }
             this.renderSidebarList();
-
-            // 3. SAFE DB UPDATE
-            // Wir klonen das Objekt, um es zu manipulieren, ohne den State kaputt zu machen
-            const payload = { ...parentObj };
-            
-            // FIX für den Fehler "Could not find column privateChat":
-            // Wir löschen das Feld aus dem Payload, bevor wir es an Supabase senden.
-            if (table === 'members') {
-                delete payload.privateChat;
-            }
-
-            Store.update(table, payload);
         }
     },
 
@@ -447,25 +450,21 @@ const MessengerView = {
         const id = this.state.activeId;
         let parentObj = null;
         if(type === 'group') parentObj = Store.state.groups.find(g => g.id === id);
-        if(type === 'private') parentObj = Store.state.members.find(m => m.id === id);
+        
+        // Bei Private müssen wir jetzt aufpassen. Löschen wir es nur bei uns?
+        // Einfachheitshalber: Ja, nur bei uns.
+        if(type === 'private') parentObj = Store.state.members.find(m => m.id == this.getMyId());
 
         if(parentObj) {
             // Helper um korrekte Liste zu finden (DB oder Local)
-            let list = type === 'group' ? parentObj.chat : this.getMemberChat(parentObj);
+            let list = (type === 'group') ? parentObj.chat : parentObj.privateChat;
             
             const msg = list.find(m => m.id === msgId);
             if(msg) {
                 msg.isDeleted = true;
                 msg.text = '';
                 
-                // Save Logic
-                if(type === 'private') this.saveLocalChat(parentObj.id, list);
-                
-                // DB Update (ohne privateChat bei Members)
-                const payload = { ...parentObj };
-                if(type === 'private') delete payload.privateChat;
-                
-                Store.update(type === 'group' ? 'groups' : 'members', payload);
+                Store.update(type === 'group' ? 'groups' : 'members', parentObj);
                 this.render(document.getElementById('content'));
             }
         }
