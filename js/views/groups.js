@@ -263,7 +263,10 @@ const GroupsView = {
             
             // Teilnahme-Logik für Preview
             const attendance = e.attendance || {};
-            const yesIds = Object.keys(attendance).filter(id => attendance[id] === 'yes');
+            const yesCount = Object.values(attendance).filter(v => v === 'yes').length;
+            const noCount = Object.values(attendance).filter(v => v === 'no').length;
+            const maybeCount = Object.values(attendance).filter(v => v === 'maybe').length;
+
             const userStatus = App.state.currentUser ? attendance[App.state.currentUser.id] : null;
 
             // Border Farbe je nach Status des Users
@@ -290,18 +293,14 @@ const GroupsView = {
                                 <span class="flex items-center"><i class="fa-regular fa-clock mr-1.5 text-brand-400"></i> ${e.allDay ? 'Ganztägig' : e.time}</span>
                                 ${e.location ? `<span class="flex items-center truncate max-w-[150px]"><i class="fa-solid fa-location-dot mr-1.5 text-brand-400"></i> ${e.location}</span>` : ''}
                             </div>
+                            
+                            <!-- Abstimmungs-Übersicht -->
+                            <div class="mt-2 flex gap-3 text-[10px] text-dark-muted">
+                                <span class="flex items-center"><i class="fa-solid fa-check text-emerald-500 mr-1"></i> ${yesCount}</span>
+                                <span class="flex items-center"><i class="fa-solid fa-question text-amber-500 mr-1"></i> ${maybeCount}</span>
+                                <span class="flex items-center"><i class="fa-solid fa-xmark text-red-500 mr-1"></i> ${noCount}</span>
+                            </div>
                         </div>
-
-                        <!-- Mini Avatars (Participants) -->
-                        ${yesIds.length > 0 ? `
-                        <div class="hidden sm:flex -space-x-2 shrink-0">
-                            ${yesIds.slice(0, 3).map(id => {
-                                const m = Store.state.members.find(mem => mem.id == id);
-                                if (!m) return '';
-                                return `<div class="w-6 h-6 rounded-full bg-slate-700 border border-dark-bg flex items-center justify-center text-[8px] text-white font-bold" title="${m.firstName}">${m.firstName.charAt(0)}</div>`;
-                            }).join('')}
-                            ${yesIds.length > 3 ? `<div class="w-6 h-6 rounded-full bg-dark-card border border-dark-bg flex items-center justify-center text-[8px] text-dark-muted font-bold">+${yesIds.length - 3}</div>` : ''}
-                        </div>` : ''}
                     </div>
                 </div>
             `;
@@ -751,7 +750,7 @@ const GroupsView = {
 
                 <div class="flex-1 overflow-y-auto custom-scrollbar space-y-6">
                     ${e.description ? `
-                    <div class="bg-dark-bg/50 p-4 rounded-xl border border-dark-border text-sm leading-relaxed text-white whitespace-pre-wrap text-left">
+                    <div class="bg-dark-bg/50 p-4 rounded-xl border border-dark-border text-sm leading-relaxed text-white whitespace-pre-wrap text-left break-words w-full">
                         ${e.description}
                     </div>` : ''}
 
@@ -789,6 +788,12 @@ const GroupsView = {
             </div>
         `;
         App.openModal(html);
+        
+        const modalContainer = document.getElementById('modal-content');
+        if(modalContainer) {
+            modalContainer.classList.remove('max-w-md');
+            modalContainer.classList.add('max-w-3xl', 'w-full', 'max-h-[90vh]');
+        }
     },
 
     // Attendance Logik (wie im CalendarView)
