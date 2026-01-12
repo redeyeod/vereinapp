@@ -1,232 +1,234 @@
 <!DOCTYPE html>
 <html lang="de" class="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>VereinsManager</title>
-    
-    <!-- 1. Externe Bibliotheken -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    
-    <!-- Tailwind Konfiguration -->
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] },
-                    colors: {
-                        dark: { 
-                            bg: '#0f172a', 
-                            card: '#1e293b', 
-                            hover: '#334155', 
-                            border: '#334155', 
-                            text: '#f8fafc', 
-                            muted: '#94a3b8' 
-                        },
-                        brand: {
-                            500: '#3b82f6',
-                            600: '#2563eb',
-                            glow: 'rgba(59, 130, 246, 0.5)'
-                        }
-                    },
-                    borderRadius: { 'xl': '1rem', '2xl': '1.5rem' },
-                    boxShadow: {
-                        'glow': '0 0 20px rgba(59, 130, 246, 0.15)'
-                    }
-                }
-            }
-        }
-    </script>
-    
-    <style>
-        body { font-family: 'Plus Jakarta Sans', sans-serif; -webkit-tap-highlight-color: transparent; }
-        
-        /* Modern Scrollbar */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
-        
-        /* Utilities */
-        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
-        .fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
-        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
-        
-        /* Toast */
-        #toast { visibility: hidden; min-width: 280px; background-color: #1e293b; color: #fff; border: 1px solid #334155; border-radius: 99px; padding: 12px 24px; position: fixed; z-index: 100; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(20px); transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); opacity: 0; box-shadow: 0 10px 30px -5px rgba(0,0,0,0.3); }
-        #toast.show { visibility: visible; opacity: 1; transform: translateX(-50%) translateY(0); }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VereinsManager</title>
+    
+    <!-- 1. Externe Bibliotheken -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind Konfiguration -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] },
+                    colors: {
+                        dark: { 
+                            bg: '#0f172a', 
+                            card: '#1e293b', 
+                            hover: '#334155', 
+                            border: '#334155', 
+                            text: '#f8fafc', 
+                            muted: '#94a3b8' 
+                        },
+                        brand: {
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            glow: 'rgba(59, 130, 246, 0.5)'
+                        }
+                    },
+                    borderRadius: { 'xl': '1rem', '2xl': '1.5rem' },
+                    boxShadow: {
+                        'glow': '0 0 20px rgba(59, 130, 246, 0.15)'
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; -webkit-tap-highlight-color: transparent; }
+        
+        /* Modern Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        
+        /* Utilities */
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Toast */
+        #toast { visibility: hidden; min-width: 280px; background-color: #1e293b; color: #fff; border: 1px solid #334155; border-radius: 99px; padding: 12px 24px; position: fixed; z-index: 100; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(20px); transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); opacity: 0; box-shadow: 0 10px 30px -5px rgba(0,0,0,0.3); }
+        #toast.show { visibility: visible; opacity: 1; transform: translateX(-50%) translateY(0); }
+    </style>
 </head>
 <body class="bg-dark-bg text-dark-text antialiased selection:bg-brand-500/30 selection:text-brand-500 overflow-hidden">
 
-    <!-- AUTH VIEW (LOGIN) -->
-    <div id="auth-view" class="h-screen w-full flex items-center justify-center p-4 relative overflow-hidden">
-        <!-- Background Elements -->
-        <div class="absolute inset-0 z-0">
-            <div class="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-dark-bg to-dark-bg"></div>
-            <div class="absolute top-[-10%] right-[-5%] w-96 h-96 bg-brand-500/10 rounded-full blur-3xl"></div>
-            <div class="absolute bottom-[-10%] left-[-5%] w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl"></div>
-        </div>
+    <!-- AUTH VIEW (LOGIN) -->
+    <div id="auth-view" class="h-screen w-full flex items-center justify-center p-4 relative overflow-hidden">
+        <!-- Background Elements -->
+        <div class="absolute inset-0 z-0">
+            <div class="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-dark-bg to-dark-bg"></div>
+            <div class="absolute top-[-10%] right-[-5%] w-96 h-96 bg-brand-500/10 rounded-full blur-3xl"></div>
+            <div class="absolute bottom-[-10%] left-[-5%] w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl"></div>
+        </div>
 
-        <div class="relative z-10 w-full max-w-sm glass p-8 rounded-2xl shadow-2xl fade-in border border-white/5">
-            <div class="text-center mb-8">
-                <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center text-3xl text-white shadow-glow mx-auto mb-5 rotate-3 transform hover:rotate-6 transition-transform">
-                    <i class="fa-solid fa-users-rectangle"></i>
-                </div>
-                <h1 class="text-2xl font-bold text-white tracking-tight">Willkommen zurück</h1>
-                <p class="text-dark-muted text-sm mt-2">Melde dich an, um fortzufahren.</p>
-            </div>
-            
-            <form id="login-form" onsubmit="event.preventDefault(); if(typeof App !== 'undefined') { App.handleLogin(event); } else { alert('App lädt noch...'); } return false;" class="space-y-4">
-                <div class="space-y-1.5">
-                    <label class="text-xs font-bold text-dark-muted uppercase tracking-wider ml-1">E-Mail</label>
-                    <div class="relative">
-                        <i class="fa-solid fa-envelope absolute left-4 top-1/2 -translate-y-1/2 text-dark-muted/50"></i>
-                        <input type="email" name="email" required placeholder="name@verein.de" class="w-full bg-dark-bg/50 border border-dark-border rounded-xl pl-11 pr-4 py-3 text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all placeholder-dark-muted/30">
-                    </div>
-                </div>
-                <div class="space-y-1.5">
-                    <label class="text-xs font-bold text-dark-muted uppercase tracking-wider ml-1">Passwort</label>
-                    <div class="relative">
-                        <i class="fa-solid fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-dark-muted/50"></i>
-                        <input type="password" name="password" required placeholder="••••••••" class="w-full bg-dark-bg/50 border border-dark-border rounded-xl pl-11 pr-4 py-3 text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all placeholder-dark-muted/30">
-                    </div>
-                </div>
-                
-                <button type="submit" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-bold py-3.5 rounded-xl transition-all shadow-glow mt-4 flex items-center justify-center gap-2 group">
-                    <span>Anmelden</span>
-                    <i class="fa-solid fa-arrow-right text-sm opacity-70 group-hover:translate-x-1 transition-transform"></i>
-                </button>
-            </form>
-            <div id="login-error" class="text-red-400 text-xs text-center mt-4 hidden bg-red-500/10 py-2 rounded-lg border border-red-500/20"></div>
-        </div>
-    </div>
+        <div class="relative z-10 w-full max-w-sm glass p-8 rounded-2xl shadow-2xl fade-in border border-white/5">
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center text-3xl text-white shadow-glow mx-auto mb-5 rotate-3 transform hover:rotate-6 transition-transform">
+                    <i class="fa-solid fa-users-rectangle"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-white tracking-tight">Willkommen zurück</h1>
+                <p class="text-dark-muted text-sm mt-2">Melde dich an, um fortzufahren.</p>
+            </div>
+            
+            <form id="login-form" onsubmit="event.preventDefault(); if(typeof App !== 'undefined') { App.handleLogin(event); } else { alert('App lädt noch...'); } return false;" class="space-y-4">
+                <div class="space-y-1.5">
+                    <label class="text-xs font-bold text-dark-muted uppercase tracking-wider ml-1">E-Mail</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-envelope absolute left-4 top-1/2 -translate-y-1/2 text-dark-muted/50"></i>
+                        <input type="email" name="email" required placeholder="name@verein.de" class="w-full bg-dark-bg/50 border border-dark-border rounded-xl pl-11 pr-4 py-3 text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all placeholder-dark-muted/30">
+                    </div>
+                </div>
+                <div class="space-y-1.5">
+                    <label class="text-xs font-bold text-dark-muted uppercase tracking-wider ml-1">Passwort</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-dark-muted/50"></i>
+                        <input type="password" name="password" required placeholder="••••••••" class="w-full bg-dark-bg/50 border border-dark-border rounded-xl pl-11 pr-4 py-3 text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all placeholder-dark-muted/30">
+                    </div>
+                </div>
+                
+                <button type="submit" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-bold py-3.5 rounded-xl transition-all shadow-glow mt-4 flex items-center justify-center gap-2 group">
+                    <span>Anmelden</span>
+                    <i class="fa-solid fa-arrow-right text-sm opacity-70 group-hover:translate-x-1 transition-transform"></i>
+                </button>
+            </form>
+            <div id="login-error" class="text-red-400 text-xs text-center mt-4 hidden bg-red-500/10 py-2 rounded-lg border border-red-500/20"></div>
+        </div>
+    </div>
 
-    <!-- APP VIEW -->
-    <div id="app-view" class="h-screen flex flex-col overflow-hidden hidden bg-dark-bg">
-        <!-- Header (Wird im Chat-Modus auf Mobile ausgeblendet) -->
-        <header id="main-header" class="h-16 md:h-20 bg-dark-card/80 backdrop-blur-md border-b border-dark-border flex items-center justify-between px-4 md:px-8 z-30 sticky top-0 transition-transform duration-300">
-            <!-- Logo -->
-            <button onclick="if(typeof App !== 'undefined') App.router('dashboard')" class="flex items-center gap-3 group">
-                <div class="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform">
-                    <i class="fa-solid fa-users-rectangle text-sm md:text-base"></i>
-                </div>
-                <div class="text-left leading-tight">
-                    <h1 class="text-base md:text-lg font-bold text-white tracking-tight">VereinApp</h1>
-                    <p id="page-subtitle" class="text-[10px] md:text-xs text-brand-500 font-bold uppercase tracking-wider">Dashboard</p>
-                </div>
-            </button>
+    <!-- APP VIEW -->
+    <div id="app-view" class="h-screen flex flex-col overflow-hidden hidden bg-dark-bg">
+        <!-- Header -->
+        <header class="h-16 md:h-20 bg-dark-card/80 backdrop-blur-md border-b border-dark-border flex items-center justify-between px-4 md:px-8 z-30 sticky top-0">
+            <!-- Logo -->
+            <button onclick="if(typeof App !== 'undefined') App.router('dashboard')" class="flex items-center gap-3 group">
+                <div class="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform">
+                    <i class="fa-solid fa-users-rectangle text-sm md:text-base"></i>
+                </div>
+                <div class="text-left leading-tight">
+                    <h1 class="text-base md:text-lg font-bold text-white tracking-tight">VereinApp</h1>
+                    <p id="page-subtitle" class="text-[10px] md:text-xs text-brand-500 font-bold uppercase tracking-wider">Dashboard</p>
+                </div>
+            </button>
 
-            <!-- Desktop Nav (Hidden on Mobile) -->
-            <nav class="hidden md:flex items-center gap-2 bg-dark-bg/50 p-1.5 rounded-2xl border border-dark-border/50">
-                <button onclick="App.router('dashboard')" class="w-10 h-10 rounded-xl flex items-center justify-center text-dark-muted hover:text-white hover:bg-dark-card transition-all" title="Dashboard"><i class="fa-solid fa-house"></i></button>
-                <div class="w-px h-4 bg-dark-border mx-1"></div>
-                <button id="nav-btn-roles" onclick="App.router('admin_roles')" class="w-10 h-10 rounded-xl flex items-center justify-center text-dark-muted hover:text-brand-500 hover:bg-dark-card transition-all hidden" title="Rechte"><i class="fa-solid fa-shield-halved"></i></button>
-                <button onclick="App.router('members')" class="w-10 h-10 rounded-xl flex items-center justify-center text-dark-muted hover:text-white hover:bg-dark-card transition-all" title="Mitglieder"><i class="fa-solid fa-users"></i></button>
-                <button onclick="App.router('calendar')" class="w-10 h-10 rounded-xl flex items-center justify-center text-dark-muted hover:text-white hover:bg-dark-card transition-all" title="Kalender"><i class="fa-solid fa-calendar"></i></button>
-                <button onclick="App.router('messenger')" class="w-10 h-10 rounded-xl flex items-center justify-center text-dark-muted hover:text-white hover:bg-dark-card transition-all" title="Messenger"><i class="fa-solid fa-comments"></i></button>
-            </nav>
+            <!-- Desktop Nav (Hidden on Mobile) -->
+            <nav class="hidden md:flex items-center gap-2 bg-dark-bg/50 p-1.5 rounded-2xl border border-dark-border/50">
+                <button onclick="App.router('dashboard')" class="w-10 h-10 rounded-xl flex items-center justify-center text-dark-muted hover:text-white hover:bg-dark-card transition-all" title="Dashboard"><i class="fa-solid fa-house"></i></button>
+                <div class="w-px h-4 bg-dark-border mx-1"></div>
+                <button id="nav-btn-roles" onclick="App.router('admin_roles')" class="w-10 h-10 rounded-xl flex items-center justify-center text-dark-muted hover:text-brand-500 hover:bg-dark-card transition-all hidden" title="Rechte"><i class="fa-solid fa-shield-halved"></i></button>
+                <button onclick="App.router('members')" class="w-10 h-10 rounded-xl flex items-center justify-center text-dark-muted hover:text-white hover:bg-dark-card transition-all" title="Mitglieder"><i class="fa-solid fa-users"></i></button>
+                <button onclick="App.router('calendar')" class="w-10 h-10 rounded-xl flex items-center justify-center text-dark-muted hover:text-white hover:bg-dark-card transition-all" title="Kalender"><i class="fa-solid fa-calendar"></i></button>
+                <button onclick="App.router('messenger')" class="w-10 h-10 rounded-xl flex items-center justify-center text-dark-muted hover:text-white hover:bg-dark-card transition-all" title="Messenger"><i class="fa-solid fa-comments"></i></button>
+            </nav>
 
-            <!-- Right Area (Desktop Profile / Mobile Menu Toggle) -->
-            <div class="flex items-center gap-4">
-                <!-- Desktop Profile -->
-                <button onclick="App.router('profile')" class="hidden md:flex items-center gap-3 pl-4 border-l border-dark-border group">
-                    <div class="text-right">
-                        <p id="current-user-name" class="text-sm font-bold text-white group-hover:text-brand-500 transition-colors">User</p>
-                        <p id="current-user-role" class="text-[10px] text-dark-muted uppercase font-bold tracking-wider">Rolle</p>
-                    </div>
-                    <div class="w-10 h-10 rounded-full bg-dark-hover flex items-center justify-center border-2 border-transparent group-hover:border-brand-500 transition-all text-dark-muted">
-                        <i class="fa-solid fa-user"></i>
-                    </div>
-                </button>
+            <!-- Right Area (Desktop Profile / Mobile Menu Toggle) -->
+            <div class="flex items-center gap-4">
+                <!-- Desktop Profile -->
+                <button onclick="App.router('profile')" class="hidden md:flex items-center gap-3 pl-4 border-l border-dark-border group">
+                    <div class="text-right">
+                        <p id="current-user-name" class="text-sm font-bold text-white group-hover:text-brand-500 transition-colors">User</p>
+                        <p id="current-user-role" class="text-[10px] text-dark-muted uppercase font-bold tracking-wider">Rolle</p>
+                    </div>
+                    <div class="w-10 h-10 rounded-full bg-dark-hover flex items-center justify-center border-2 border-transparent group-hover:border-brand-500 transition-all text-dark-muted">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                </button>
 
-                <!-- Mobile Menu Button -->
-                <button onclick="App.toggleMobileMenu()" class="md:hidden w-10 h-10 rounded-xl bg-dark-hover/50 text-white flex items-center justify-center active:scale-95 transition-transform">
-                    <i class="fa-solid fa-bars-staggered"></i>
-                </button>
-            </div>
-        </header>
+                <!-- Mobile Menu Button -->
+                <button onclick="App.toggleMobileMenu()" class="md:hidden w-10 h-10 rounded-xl bg-dark-hover/50 text-white flex items-center justify-center active:scale-95 transition-transform">
+                    <i class="fa-solid fa-bars-staggered"></i>
+                </button>
+            </div>
+        </header>
 
-        <!-- Mobile Menu Overlay -->
-        <div id="mobile-menu" class="fixed inset-0 z-50 pointer-events-none">
-            <div id="mobile-menu-backdrop" onclick="App.toggleMobileMenu()" class="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 transition-opacity duration-300"></div>
-            <div id="mobile-menu-drawer" class="absolute right-0 top-0 h-full w-[80%] max-w-xs bg-dark-card border-l border-dark-border shadow-2xl transform translate-x-full transition-transform duration-300 flex flex-col pointer-events-auto">
-                <div class="p-6 border-b border-dark-border flex items-center justify-between">
-                    <span class="text-lg font-bold text-white">Menü</span>
-                    <button onclick="App.toggleMobileMenu()" class="w-8 h-8 rounded-full bg-dark-bg flex items-center justify-center text-dark-muted hover:text-white"><i class="fa-solid fa-times"></i></button>
-                </div>
-                <div class="flex-1 overflow-y-auto p-4 space-y-2">
-                    <div onclick="App.router('profile')" class="bg-dark-bg/50 p-4 rounded-xl border border-dark-border flex items-center gap-3 mb-6 cursor-pointer active:scale-95 transition-transform">
-                        <div class="w-10 h-10 rounded-full bg-brand-600 flex items-center justify-center text-white font-bold shadow-lg"><i class="fa-solid fa-user"></i></div>
-                        <div><p class="text-sm font-bold text-white" id="mobile-user-name">User</p><p class="text-xs text-brand-500" id="mobile-user-role">Rolle</p></div>
-                    </div>
-                    <p class="text-xs font-bold text-dark-muted uppercase tracking-wider px-2 mb-2">Apps</p>
-                    <button onclick="App.router('dashboard')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-house w-6 text-center"></i> Dashboard</button>
-                    <button onclick="App.router('members')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-users w-6 text-center"></i> Mitglieder</button>
-                    <button onclick="App.router('groups')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-layer-group w-6 text-center"></i> Gruppen</button>
-                    <button onclick="App.router('calendar')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-calendar w-6 text-center"></i> Kalender</button>
-                    <button onclick="App.router('news')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-newspaper w-6 text-center"></i> News</button>
-                    <button onclick="App.router('workhours')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-briefcase w-6 text-center"></i> Arbeitsstunden</button>
-                    <div id="mobile-admin-section" class="hidden">
-                        <div class="h-px bg-dark-border my-2"></div>
-                        <p class="text-xs font-bold text-dark-muted uppercase tracking-wider px-2 mb-2 mt-4">Verwaltung</p>
-                        <button onclick="App.router('admin_roles')" class="w-full text-left p-3 rounded-xl text-brand-500 bg-brand-500/10 hover:bg-brand-500/20 flex items-center gap-3 transition-colors"><i class="fa-solid fa-shield-halved w-6 text-center"></i> Rollen & Rechte</button>
-                    </div>
-                </div>
-                <div class="p-4 border-t border-dark-border">
-                    <button onclick="App.logout()" class="w-full py-3 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 font-bold transition-colors flex items-center justify-center gap-2"><i class="fa-solid fa-right-from-bracket"></i> Abmelden</button>
-                </div>
-            </div>
-        </div>
+        <!-- Mobile Menu Overlay -->
+        <div id="mobile-menu" class="fixed inset-0 z-50 pointer-events-none">
+            <!-- Backdrop -->
+            <div id="mobile-menu-backdrop" onclick="App.toggleMobileMenu()" class="absolute inset-0 bg-black/60 backdrop-blur-sm opacity-0 transition-opacity duration-300"></div>
+            
+            <!-- Drawer -->
+            <div id="mobile-menu-drawer" class="absolute right-0 top-0 h-full w-[80%] max-w-xs bg-dark-card border-l border-dark-border shadow-2xl transform translate-x-full transition-transform duration-300 flex flex-col pointer-events-auto">
+                <div class="p-6 border-b border-dark-border flex items-center justify-between">
+                    <span class="text-lg font-bold text-white">Menü</span>
+                    <button onclick="App.toggleMobileMenu()" class="w-8 h-8 rounded-full bg-dark-bg flex items-center justify-center text-dark-muted hover:text-white"><i class="fa-solid fa-times"></i></button>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto p-4 space-y-2">
+                    <!-- User Info Mobile -->
+                    <div onclick="App.router('profile')" class="bg-dark-bg/50 p-4 rounded-xl border border-dark-border flex items-center gap-3 mb-6 cursor-pointer active:scale-95 transition-transform">
+                        <div class="w-10 h-10 rounded-full bg-brand-600 flex items-center justify-center text-white font-bold shadow-lg">
+                            <i class="fa-solid fa-user"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold text-white" id="mobile-user-name">User</p>
+                            <p class="text-xs text-brand-500" id="mobile-user-role">Rolle</p>
+                        </div>
+                    </div>
 
-        <!-- Content Area -->
-        <main id="content" class="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 pb-20 md:pb-8 scroll-smooth max-w-7xl mx-auto w-full relative">
-            <!-- Views werden hier geladen -->
-        </main>
+                    <p class="text-xs font-bold text-dark-muted uppercase tracking-wider px-2 mb-2">Apps</p>
+                    <button onclick="App.router('dashboard')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-house w-6 text-center"></i> Dashboard</button>
+                    <button onclick="App.router('members')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-users w-6 text-center"></i> Mitglieder</button>
+                    <button onclick="App.router('groups')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-layer-group w-6 text-center"></i> Gruppen</button>
+                    <button onclick="App.router('calendar')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-calendar w-6 text-center"></i> Kalender</button>
+                    <button onclick="App.router('news')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-newspaper w-6 text-center"></i> News</button>
+                    <button onclick="App.router('workhours')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-briefcase w-6 text-center"></i> Arbeitsstunden</button>
+                    <button onclick="App.router('messenger')" class="w-full text-left p-3 rounded-xl text-dark-muted hover:text-white hover:bg-dark-bg flex items-center gap-3 transition-colors"><i class="fa-solid fa-comments w-6 text-center"></i> Messenger</button>
+                    
+                    <div id="mobile-admin-section" class="hidden">
+                        <div class="h-px bg-dark-border my-2"></div>
+                        <p class="text-xs font-bold text-dark-muted uppercase tracking-wider px-2 mb-2 mt-4">Verwaltung</p>
+                        <button onclick="App.router('admin_roles')" class="w-full text-left p-3 rounded-xl text-brand-500 bg-brand-500/10 hover:bg-brand-500/20 flex items-center gap-3 transition-colors"><i class="fa-solid fa-shield-halved w-6 text-center"></i> Rollen & Rechte</button>
+                    </div>
+                </div>
 
-        <!-- NEW: Mobile Bottom Navigation -->
-        <div id="mobile-bottom-nav" class="md:hidden fixed bottom-0 left-0 w-full h-16 bg-dark-card border-t border-dark-border flex items-center justify-around z-40 pb-safe">
-            <button onclick="App.router('dashboard')" class="flex flex-col items-center justify-center w-1/2 h-full text-brand-500 transition-colors" id="btn-mode-app">
-                <i class="fa-solid fa-layer-group text-xl mb-1"></i>
-                <span class="text-[10px] font-bold uppercase tracking-wider">App</span>
-            </button>
-            <button onclick="App.router('messenger')" class="flex flex-col items-center justify-center w-1/2 h-full text-dark-muted hover:text-white transition-colors" id="btn-mode-chat">
-                <i class="fa-solid fa-comments text-xl mb-1"></i>
-                <span class="text-[10px] font-bold uppercase tracking-wider">Chat</span>
-            </button>
-        </div>
-    </div>
+                <div class="p-4 border-t border-dark-border">
+                    <button onclick="App.logout()" class="w-full py-3 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 font-bold transition-colors flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-right-from-bracket"></i> Abmelden
+                    </button>
+                </div>
+            </div>
+        </div>
 
-    <!-- Global Modals & Toasts -->
-    <div id="modal-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] hidden flex items-center justify-center p-4 transition-all duration-300">
-        <div class="glass border border-white/10 rounded-2xl shadow-2xl w-full max-w-md transform transition-all scale-95 opacity-0 text-dark-text max-h-[90vh] flex flex-col" id="modal-content"></div>
-    </div>
-    
-    <div id="toast">Nachricht gesendet</div>
+        <!-- Content Area -->
+        <main id="content" class="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 scroll-smooth max-w-7xl mx-auto w-full relative">
+            <!-- Views werden hier geladen -->
+        </main>
+    </div>
 
-    <!-- SCRIPTS -->
-    <script src="js/config.js"></script>
-    <script src="js/store.js"></script>
-    
-    <!-- Views -->
-    <script src="js/views/dashboard.js"></script>
-    <script src="js/views/members.js"></script>
-    <script src="js/views/groups.js"></script>
-    <script src="js/views/calendar.js"></script>
-    <script src="js/views/news.js"></script>
-    <script src="js/views/documents.js"></script>
-    <script src="js/views/messenger.js"></script>
-    <script src="js/views/profile.js"></script>
-    <script src="js/views/workhours.js"></script>
-    <script src="js/views/admin_roles.js"></script>
+    <!-- Global Modals & Toasts -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] hidden flex items-center justify-center p-4 transition-all duration-300">
+        <div class="glass border border-white/10 rounded-2xl shadow-2xl w-full max-w-md transform transition-all scale-95 opacity-0 text-dark-text max-h-[90vh] flex flex-col" id="modal-content"></div>
+    </div>
+    
+    <div id="toast">Nachricht gesendet</div>
 
-    <!-- App Logic -->
-    <script src="js/app.js"></script>
+    <!-- SCRIPTS -->
+    <script src="js/config.js"></script>
+    <script src="js/store.js"></script>
+    
+    <!-- Views -->
+    <script src="js/views/dashboard.js"></script>
+    <script src="js/views/members.js"></script>
+    <script src="js/views/groups.js"></script>
+    <script src="js/views/calendar.js"></script>
+    <script src="js/views/news.js"></script>
+    <script src="js/views/documents.js"></script>
+    <script src="js/views/messenger.js"></script>
+    <script src="js/views/profile.js"></script>
+    <script src="js/views/workhours.js"></script>
+    <script src="js/views/admin_roles.js"></script>
+
+    <!-- App Logic -->
+    <script src="js/app.js"></script>
 </body>
 </html>
