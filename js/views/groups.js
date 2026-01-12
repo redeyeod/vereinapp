@@ -246,6 +246,7 @@ const GroupsView = {
 
         const canManage = App.can('manage_group_content', group.name);
 
+        // Gruppierung nach Monaten für bessere Übersicht
         const groupedEvents = {};
         groupEvents.forEach(e => {
             const date = new Date(e.date);
@@ -259,8 +260,12 @@ const GroupsView = {
             const dayName = startDate.toLocaleDateString('de-DE', { weekday: 'short' });
             const dayNum = startDate.getDate();
             
+            // Teilnahme-Logik für Preview
             const attendance = e.attendance || {};
-            const yesIds = Object.keys(attendance).filter(id => attendance[id] === 'yes');
+            const yesCount = Object.values(attendance).filter(v => v === 'yes').length;
+            const maybeCount = Object.values(attendance).filter(v => v === 'maybe').length;
+            const noCount = Object.values(attendance).filter(v => v === 'no').length;
+
             const userStatus = App.state.currentUser ? attendance[App.state.currentUser.id] : null;
 
             let borderClass = 'border-dark-border';
@@ -285,19 +290,11 @@ const GroupsView = {
                             </div>
                             
                             <div class="mt-2 flex gap-3 text-[10px] text-dark-muted">
-                                <span class="flex items-center"><i class="fa-solid fa-check text-emerald-500 mr-1"></i> ${yesIds.length}</span>
+                                <span class="flex items-center"><i class="fa-solid fa-check text-emerald-500 mr-1"></i> ${yesCount}</span>
+                                <span class="flex items-center"><i class="fa-solid fa-question text-amber-500 mr-1"></i> ${maybeCount}</span>
+                                <span class="flex items-center"><i class="fa-solid fa-xmark text-red-500 mr-1"></i> ${noCount}</span>
                             </div>
                         </div>
-
-                        ${yesIds.length > 0 ? `
-                        <div class="hidden sm:flex -space-x-2 shrink-0">
-                            ${yesIds.slice(0, 3).map(id => {
-                                const m = Store.state.members.find(mem => mem.id == id);
-                                if (!m) return '';
-                                return `<div class="w-6 h-6 rounded-full bg-slate-700 border border-dark-bg flex items-center justify-center text-[8px] text-white font-bold" title="${m.firstName}">${m.firstName.charAt(0)}</div>`;
-                            }).join('')}
-                            ${yesIds.length > 3 ? `<div class="w-6 h-6 rounded-full bg-dark-card border border-dark-bg flex items-center justify-center text-[8px] text-dark-muted font-bold">+${yesIds.length - 3}</div>` : ''}
-                        </div>` : ''}
                     </div>
                 </div>
             `;
@@ -804,7 +801,6 @@ const GroupsView = {
         const currentUser = App.state.currentUser;
         const myStatus = currentUser ? attendance[currentUser.id] : null;
 
-        // Große Buttons für Abstimmung
         const btnBase = "flex-1 py-4 rounded-xl border text-sm font-bold flex flex-col items-center justify-center gap-2 transition-all active:scale-95";
         const btnInactive = "bg-dark-bg/50 border-dark-border text-dark-muted hover:text-white hover:bg-dark-hover";
         
@@ -928,6 +924,9 @@ const GroupsView = {
         if(modalContainer) {
             modalContainer.classList.remove('max-w-md');
             modalContainer.classList.add('max-w-3xl', 'w-full', 'max-h-[90vh]');
+            
+            // WICHTIG: Flex und Overflow Handling für den Footer-Fix
+            modalContainer.classList.add('flex', 'flex-col', 'overflow-hidden');
         }
     },
 
