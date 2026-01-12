@@ -262,10 +262,7 @@ const GroupsView = {
             
             // Teilnahme-Logik für Preview
             const attendance = e.attendance || {};
-            const yesCount = Object.values(attendance).filter(v => v === 'yes').length;
-            const maybeCount = Object.values(attendance).filter(v => v === 'maybe').length;
-            const noCount = Object.values(attendance).filter(v => v === 'no').length;
-
+            const yesIds = Object.keys(attendance).filter(id => attendance[id] === 'yes');
             const userStatus = App.state.currentUser ? attendance[App.state.currentUser.id] : null;
 
             let borderClass = 'border-dark-border';
@@ -290,11 +287,19 @@ const GroupsView = {
                             </div>
                             
                             <div class="mt-2 flex gap-3 text-[10px] text-dark-muted">
-                                <span class="flex items-center"><i class="fa-solid fa-check text-emerald-500 mr-1"></i> ${yesCount}</span>
-                                <span class="flex items-center"><i class="fa-solid fa-question text-amber-500 mr-1"></i> ${maybeCount}</span>
-                                <span class="flex items-center"><i class="fa-solid fa-xmark text-red-500 mr-1"></i> ${noCount}</span>
+                                <span class="flex items-center"><i class="fa-solid fa-check text-emerald-500 mr-1"></i> ${yesIds.length}</span>
                             </div>
                         </div>
+
+                        ${yesIds.length > 0 ? `
+                        <div class="hidden sm:flex -space-x-2 shrink-0">
+                            ${yesIds.slice(0, 3).map(id => {
+                                const m = Store.state.members.find(mem => mem.id == id);
+                                if (!m) return '';
+                                return `<div class="w-6 h-6 rounded-full bg-slate-700 border border-dark-bg flex items-center justify-center text-[8px] text-white font-bold" title="${m.firstName}">${m.firstName.charAt(0)}</div>`;
+                            }).join('')}
+                            ${yesIds.length > 3 ? `<div class="w-6 h-6 rounded-full bg-dark-card border border-dark-bg flex items-center justify-center text-[8px] text-dark-muted font-bold">+${yesIds.length - 3}</div>` : ''}
+                        </div>` : ''}
                     </div>
                 </div>
             `;
@@ -772,8 +777,9 @@ const GroupsView = {
         const e = Store.state.events.find(ev => ev.id == eventId);
         if(!e) return;
         
+        // Berechtigungs-Check
         const group = Store.state.groups.find(g => g.name === e.group);
-        const canManage = group && App.can('manage_group_content', group.name);
+        const canManage = (group && App.can('manage_group_content', group.name)) || App.can('admin_global');
 
         const startDate = new Date(e.date);
         const endDate = e.endDate ? new Date(e.endDate) : null;
@@ -823,11 +829,11 @@ const GroupsView = {
                     <h5 class="text-xs font-bold text-dark-muted uppercase mb-2 pl-1">${title} <span class="${colorClass} ml-1">${voters.length}</span></h5>
                     <div class="flex flex-col gap-2">
                         ${voters.map(m => `
-                            <div class="flex items-center gap-3 p-2 rounded-lg bg-dark-bg/30 border border-dark-border/50">
-                                <div class="w-8 h-8 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold border border-white/5">
+                            <div class="flex items-center gap-3 p-2 rounded-lg bg-dark-bg/30 border border-dark-border/50 min-w-0">
+                                <div class="w-8 h-8 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold border border-white/5 flex-shrink-0">
                                     ${(m.firstName || '?').charAt(0)}${(m.lastName || '?').charAt(0)}
                                 </div>
-                                <span class="text-sm text-white font-medium">${m.firstName} ${m.lastName}</span>
+                                <span class="text-sm text-white font-medium truncate min-w-0 flex-1">${m.firstName} ${m.lastName}</span>
                             </div>
                         `).join('')}
                     </div>
@@ -840,7 +846,7 @@ const GroupsView = {
                 <!-- Header Image/Gradient -->
                 <div class="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-brand-900/20 to-transparent pointer-events-none"></div>
 
-                <div class="flex justify-between items-start mb-6 relative z-10">
+                <div class="flex justify-between items-start mb-6 relative z-10 flex-shrink-0">
                     <div class="flex-1 min-w-0 pr-4">
                         <div class="text-brand-400 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
                             <i class="fa-regular fa-calendar"></i> ${dateStr}${endStr}
@@ -906,7 +912,7 @@ const GroupsView = {
                 </div>
 
                 ${canManage ? `
-                <div class="mt-6 pt-4 border-t border-dark-border flex gap-3">
+                <div class="mt-6 pt-4 border-t border-dark-border flex gap-3 flex-shrink-0 mb-safe">
                     <button onclick="GroupsView.openEventEditModal('${e.id}')" class="flex-1 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-xl font-bold border border-dark-border transition-all flex items-center justify-center gap-2">
                         <i class="fa-solid fa-pen"></i> Bearbeiten
                     </button>
@@ -927,6 +933,8 @@ const GroupsView = {
             
             // WICHTIG: Flex und Overflow Handling für den Footer-Fix
             modalContainer.classList.add('flex', 'flex-col', 'overflow-hidden');
+            // Für mobile: height auf auto setzen, max-height greift
+            modalContainer.style.height = 'auto';
         }
     },
 
