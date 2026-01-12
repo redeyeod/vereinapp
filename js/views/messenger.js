@@ -198,11 +198,9 @@ const MessengerView = {
     selectChat(type, id) {
         console.log("Selecting Chat:", type, id); // Debugging
         
-        // Auto-Convert: Wenn ID nur aus Zahlen besteht (z.B. "12"), machen wir eine Zahl (12) daraus.
-        // Das passt besser zu den meisten Datenbank-IDs. UUIDs bleiben Strings.
-        if (id !== undefined && id !== null && !isNaN(id) && !isNaN(parseFloat(id))) {
-            id = Number(id);
-        }
+        // VEREINFACHUNG: Keine erzwungene Number-Konvertierung mehr.
+        // Wir verlassen uns auf den lockeren Vergleich (==), der Strings und Zahlen korrekt matcht.
+        // Das verhindert Fehler, wenn IDs nicht rein numerisch sind.
 
         this.state.activeType = type;
         this.state.activeId = id;
