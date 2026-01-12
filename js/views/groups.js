@@ -303,14 +303,6 @@ const GroupsView = {
                             ${yesIds.length > 3 ? `<div class="w-6 h-6 rounded-full bg-dark-card border border-dark-bg flex items-center justify-center text-[8px] text-dark-muted font-bold">+${yesIds.length - 3}</div>` : ''}
                         </div>` : ''}
                     </div>
-
-                    <!-- Status Icon absolute right -->
-                    <div class="absolute top-4 right-4 text-dark-muted">
-                         ${userStatus === 'yes' ? '<i class="fa-solid fa-circle-check text-emerald-500"></i>' : 
-                           userStatus === 'maybe' ? '<i class="fa-solid fa-circle-question text-amber-500"></i>' : 
-                           userStatus === 'no' ? '<i class="fa-solid fa-circle-xmark text-red-500"></i>' : 
-                           '<i class="fa-regular fa-circle"></i>'}
-                    </div>
                 </div>
             `;
         };
@@ -603,7 +595,7 @@ const GroupsView = {
                         <input name="title" class="form-input" placeholder="Titel" required>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label class="text-muted text-xs uppercase font-bold">Start</label>
                             <input type="date" name="date" id="startDateInput" class="form-input dark-date" required onchange="document.getElementById('endDateInput').min = this.value; if(!document.getElementById('endDateInput').value) document.getElementById('endDateInput').value = this.value;">
@@ -614,7 +606,7 @@ const GroupsView = {
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4 items-end">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                         <div>
                             <label class="text-muted text-xs uppercase font-bold">Uhrzeit</label>
                             <input type="time" name="time" id="eventTimeInput" class="form-input dark-date" required>
@@ -759,7 +751,7 @@ const GroupsView = {
 
                 <div class="flex-1 overflow-y-auto custom-scrollbar space-y-6">
                     ${e.description ? `
-                    <div class="bg-dark-bg/50 p-4 rounded-xl border border-dark-border text-sm leading-relaxed text-white whitespace-pre-wrap">
+                    <div class="bg-dark-bg/50 p-4 rounded-xl border border-dark-border text-sm leading-relaxed text-white whitespace-pre-wrap text-left">
                         ${e.description}
                     </div>` : ''}
 
