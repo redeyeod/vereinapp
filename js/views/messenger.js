@@ -431,6 +431,46 @@ const MessengerView = {
         `;
     },
 
+    // --- MENUS & POPUPS (NEU) ---
+
+    renderAttachMenu() {
+        if (!this.state.showAttachMenu) return '';
+        const items = [
+            { icon: 'fa-image', color: 'bg-purple-500', text: 'Fotos & Videos', action: "MessengerView.sendAttachment('image')" },
+            { icon: 'fa-camera', color: 'bg-red-500', text: 'Kamera', action: "MessengerView.sendAttachment('camera')" },
+            { icon: 'fa-file', color: 'bg-indigo-500', text: 'Dokument', action: "MessengerView.sendAttachment('file')" },
+            { icon: 'fa-user', color: 'bg-blue-500', text: 'Kontakt', action: "MessengerView.openContactSelectModal()" },
+            { icon: 'fa-square-poll-vertical', color: 'bg-teal-500', text: 'Umfrage', action: "MessengerView.openPollModal()" }
+        ];
+        return `
+            <div class="absolute bottom-20 left-4 flex flex-col gap-4 animate-slide-up z-40">
+                ${items.map(i => `
+                    <div onclick="${i.action}; MessengerView.toggleAttachMenu()" class="flex items-center gap-4 group cursor-pointer">
+                        <div class="w-12 h-12 rounded-full ${i.icon === 'fa-image' ? 'bg-gradient-to-b from-purple-500 to-pink-500' : i.color} flex items-center justify-center text-white shadow-lg hover:scale-110 transition-transform">
+                            <i class="fa-solid ${i.icon} text-lg"></i>
+                        </div>
+                        <span class="bg-[#233138] text-white px-3 py-1 rounded-full text-sm opacity-0 group-hover:opacity-100 transition-opacity shadow-lg scale-0 group-hover:scale-100 origin-left border border-[#2a3942] whitespace-nowrap hidden md:block">
+                            ${i.text}
+                        </span>
+                    </div>
+                `).reverse().join('')}
+            </div>
+        `;
+    },
+
+    renderEmojiPicker() {
+        if (!this.state.showEmojiPicker) return '';
+        const emojis = ['😀','😂','🥰','😎','😭','👍','👎','👋','🙏','❤️','🔥','🎉','⚽','🍺','🤔','👀','🚀','💯','🔴','⚪'];
+        return `
+            <div class="absolute bottom-20 left-0 md:left-4 bg-[#202c33] border border-[#2a3942] rounded-lg shadow-2xl p-2 w-full md:w-72 h-64 overflow-y-auto animate-slide-up z-40 custom-scrollbar">
+                <div class="grid grid-cols-6 gap-1">
+                    ${emojis.map(e => `<button onclick="MessengerView.addEmoji('${e}')" class="text-2xl p-2 hover:bg-white/5 rounded transition">${e}</button>`).join('')}
+                </div>
+                <div class="p-2 text-center text-xs text-[#8696a0]">Mehr Emojis folgen...</div>
+            </div>
+        `;
+    },
+
     // --- ACTIONS & LOGIC ---
 
     toggleMsgMenu(id) {
