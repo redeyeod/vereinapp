@@ -18,7 +18,7 @@ const MessengerView = {
 
         showAttachMenu: false,
         showEmojiPicker: false,
-        mobileChatVisible: false,
+        mobileChatVisible: false, // Wird durch App.js gesteuert, hier als Fallback
         replyingTo: null,   // ID der Nachricht, auf die geantwortet wird
         editingId: null,    // ID der Nachricht, die bearbeitet wird
         scrollPositions: {}
@@ -66,12 +66,28 @@ const MessengerView = {
             .bubble-tail-in { border-top-left-radius: 0 !important; }
             .bubble-tail-out { border-top-right-radius: 0 !important; }
             
+            /* Context Menu Animation */
             @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
             .animate-scale-in { animation: scaleIn 0.1s ease-out forwards; }
             
+            /* Input Area Fix for Mobile */
             .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
         `;
         document.head.appendChild(style);
+    },
+
+    // --- DATA HANDLING ---
+
+    getMemberChat(partner) {
+         if (!partner) return [];
+         const myId = this.getMyId();
+         const members = (window.Store && Store.state && Store.state.members) ? Store.state.members : [];
+         const me = members.find(m => m.id == myId);
+         const allMessages = (me && me.privateChat) ? me.privateChat : [];
+         return allMessages.filter(msg => {
+             return (msg.senderId == myId && msg.recipientId == partner.id) ||
+                    (msg.senderId == partner.id && msg.recipientId == myId);
+         });
     },
 
     // --- RENDER MAIN ---
@@ -114,10 +130,19 @@ const MessengerView = {
             this.renderSidebarList();
             if (mobileChatVisible || window.innerWidth >= 768) this.scrollToBottom(false);
             
+            // Fokus wiederherstellen falls nötig
             const input = document.getElementById('messenger-search-input');
             const chatSearchInput = document.getElementById('chat-filter-input');
-            if(input && this.state.filterTerm) { input.focus(); input.value = ''; input.value = this.state.filterTerm; }
-            if(chatSearchInput && this.state.chatFilterTerm) { chatSearchInput.focus(); }
+            
+            if(input && this.state.filterTerm) {
+                input.focus();
+                const val = input.value;
+                input.value = '';
+                input.value = val;
+            }
+            if(chatSearchInput && this.state.chatFilterTerm) {
+                chatSearchInput.focus();
+            }
 
         } catch (e) {
             console.error("Messenger Render Error:", e);
@@ -125,88 +150,16 @@ const MessengerView = {
         }
     },
 
-    // --- MENUS & POPUPS (Hier waren die fehlenden Funktionen) ---
-
-    renderAttachMenu() {
-        if (!this.state.showAttachMenu) return '';
-        const items = [
-            { icon: 'fa-image', color: 'bg-purple-500', text: 'Fotos & Videos', action: "MessengerView.sendAttachment('image')" },
-            { icon: 'fa-camera', color: 'bg-red-500', text: 'Kamera', action: "MessengerView.sendAttachment('camera')" },
-            { icon: 'fa-file', color: 'bg-indigo-500', text: 'Dokument', action: "MessengerView.sendAttachment('file')" },
-            { icon: 'fa-user', color: 'bg-blue-500', text: 'Kontakt', action: "MessengerView.openContactSelectModal()" },
-            { icon: 'fa-square-poll-vertical', color: 'bg-teal-500', text: 'Umfrage', action: "MessengerView.openPollModal()" }
-        ];
-        return `
-            <div class="absolute bottom-20 left-4 flex flex-col gap-4 animate-slide-up z-40">
-                ${items.map(i => `
-                    <div onclick="${i.action}; MessengerView.toggleAttachMenu()" class="flex items-center gap-4 group cursor-pointer">
-                        <div class="w-12 h-12 rounded-full ${i.icon === 'fa-image' ? 'bg-gradient-to-b from-purple-500 to-pink-500' : i.color} flex items-center justify-center text-white shadow-lg hover:scale-110 transition-transform">
-                            <i class="fa-solid ${i.icon} text-lg"></i>
-                        </div>
-                        <span class="bg-[#233138] text-white px-3 py-1 rounded-full text-sm opacity-0 group-hover:opacity-100 transition-opacity shadow-lg scale-0 group-hover:scale-100 origin-left border border-[#2a3942] whitespace-nowrap hidden md:block">
-                            ${i.text}
-                        </span>
-                    </div>
-                `).reverse().join('')}
-            </div>
-        `;
-    },
-
-    renderEmojiPicker() {
-        if (!this.state.showEmojiPicker) return '';
-        const emojis = ['😀','😂','🥰','😎','😭','👍','👎','👋','🙏','❤️','🔥','🎉','⚽','🍺','🤔','👀','🚀','💯','🔴','⚪'];
-        return `
-            <div class="absolute bottom-20 left-0 md:left-4 bg-[#202c33] border border-[#2a3942] rounded-lg shadow-2xl p-2 w-full md:w-72 h-64 overflow-y-auto animate-slide-up z-40 custom-scrollbar">
-                <div class="grid grid-cols-6 gap-1">
-                    ${emojis.map(e => `<button onclick="MessengerView.addEmoji('${e}')" class="text-2xl p-2 hover:bg-white/5 rounded transition">${e}</button>`).join('')}
-                </div>
-                <div class="p-2 text-center text-xs text-[#8696a0]">Mehr Emojis folgen...</div>
-            </div>
-        `;
-    },
-
-    // --- INPUT AREA (Benutzt oben definierte Funktionen) ---
-
-    renderInputArea() {
-        const C = this.config;
-        const replyMsg = this.state.replyingTo ? this.findMessage(this.state.replyingTo) : null;
-        
-        return `
-            <div class="min-h-[62px] ${C.headerBg} px-4 py-2 flex flex-col justify-end z-30 relative shrink-0 border-l border-[#2a3942]">
-                ${this.renderAttachMenu()} ${this.renderEmojiPicker()}
-                
-                ${replyMsg ? `
-                    <div class="flex items-center justify-between bg-[#1f2c34] p-2 rounded-t-lg border-l-4 border-[#00a884] mb-1 animate-scale-in">
-                        <div class="text-sm text-[#8696a0]">
-                            <p class="text-[#00a884] font-bold text-xs mb-0.5">${replyMsg.sender}</p>
-                            <p class="truncate max-w-[200px]">${replyMsg.text}</p>
-                        </div>
-                        <button onclick="MessengerView.cancelReply()" class="text-[#8696a0] hover:text-white p-2"><i class="fa-solid fa-times"></i></button>
-                    </div>
-                ` : ''}
-
-                <div class="flex items-end gap-2 w-full">
-                    <button onclick="MessengerView.toggleAttachMenu()" class="mb-3 text-[#8696a0] hover:text-[#d1d7db] transition w-8 text-center text-xl"><i class="fa-solid fa-plus"></i></button>
-                    <form onsubmit="MessengerView.sendMessage(event)" class="flex-1 flex items-end gap-2 mb-1.5">
-                        <div class="flex-1 bg-[#2a3942] rounded-lg flex items-end min-h-[42px] py-2 px-3 relative">
-                            <button type="button" onclick="MessengerView.toggleEmojiPicker()" class="text-[#8696a0] hover:text-[#ffde34] transition mr-3 text-lg mb-0.5"><i class="fa-regular fa-face-smile"></i></button>
-                            <input type="text" name="message" id="chat-input" autocomplete="off" placeholder="Nachricht eingeben" class="bg-transparent border-none text-[#d1d7db] text-sm w-full focus:outline-none placeholder-[#8696a0] max-h-32 overflow-y-auto leading-relaxed">
-                        </div>
-                        <button type="submit" class="w-10 h-10 flex items-center justify-center rounded-full ${C.accentColor} ${C.accentColorHover} text-white shadow-md transition-transform active:scale-95 mb-0.5"><i class="fa-solid fa-paper-plane text-sm pl-0.5"></i></button>
-                    </form>
-                </div>
-            </div>
-        `;
-    },
-
-    // --- OTHER HELPERS ---
-
     handleSearch(val) { this.state.filterTerm = val.toLowerCase(); this.renderSidebarList(); },
 
     renderSidebarList() {
         const container = document.getElementById('messenger-list');
         if(!container) return;
-        if (typeof Store === 'undefined' || !Store.state) { container.innerHTML = `<div class="p-4 text-center text-muted">Lade Daten...</div>`; return; }
+        
+        if (typeof Store === 'undefined' || !Store.state) {
+            container.innerHTML = `<div class="p-4 text-center text-muted">Lade Daten...</div>`;
+            return;
+        }
 
         const term = this.state.filterTerm;
         const myId = this.getMyId();
@@ -218,10 +171,12 @@ const MessengerView = {
         if ('ankündigungen'.includes(term) || !term) items.push({ type: 'news', id: 0, name: 'Ankündigungen', icon: 'fa-bullhorn', time: new Date() });
 
         const myGroups = groups.filter(g => {
+            // Check based on Group Name stored in user profile
             const isMember = g.members && Array.isArray(g.members) && Array.isArray(me.groups) && me.groups.includes(g.name); 
             return isMember;
         });
         
+        // Add all groups user is part of
         groups.forEach(g => {
              const inGroup = Array.isArray(me.groups) && me.groups.includes(g.name);
              if(inGroup && g.name.toLowerCase().includes(term)) {
@@ -238,6 +193,7 @@ const MessengerView = {
             }
         });
 
+        // Deduplicate items just in case
         items = items.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id && t.type===v.type))===i);
         items.sort((a, b) => b.time - a.time);
         
@@ -248,6 +204,7 @@ const MessengerView = {
         const isActive = this.state.activeType === item.type && (item.type === 'news' || this.state.activeId == item.id);
         let preview = "Klicken um zu starten";
         let dateStr = "";
+        
         if (item.lastMsg) {
             const txt = item.lastMsg.text || (item.lastMsg.type === 'image' ? '📷 Foto' : '📎 Datei');
             const myId = this.getMyId();
@@ -256,6 +213,7 @@ const MessengerView = {
             const d = new Date(item.lastMsg.time);
             dateStr = (d.toDateString() === new Date().toDateString()) ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : d.toLocaleDateString([], {day:'2-digit', month:'2-digit', year:'2-digit'});
         }
+
         return `
             <div onclick="MessengerView.handleChatClick(this)" data-type="${item.type}" data-id="${item.id}" class="flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-[#202c33] ${isActive ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]'} group">
                 <div class="relative w-12 h-12 rounded-full bg-[#6a7f8a] flex items-center justify-center shrink-0 overflow-hidden text-white text-lg font-bold pointer-events-none">
@@ -286,17 +244,33 @@ const MessengerView = {
         this.state.activeId = id;
         this.state.showAttachMenu = false;
         this.state.showEmojiPicker = false;
-        this.state.mobileChatVisible = true;
+        
+        // Mobile Handling: Wenn am Handy, in den "Chat Mode" wechseln via App.js Logic falls vorhanden
+        if (window.innerWidth < 768 && typeof App !== 'undefined' && App.switchMobileMode) {
+             this.state.mobileChatVisible = true;
+             App.switchMobileMode('chat');
+        } else {
+             this.state.mobileChatVisible = true;
+        }
+
         this.state.showChatSearch = false; 
         this.state.chatFilterTerm = '';
+        
         this.render(document.getElementById('content'));
     },
 
     closeChat() {
         this.state.mobileChatVisible = false;
+        // Mobile: Zurück zur Liste ist eigentlich "App Mode", aber innerhalb des Messengers auf Desktop ist es "Liste sichtbar"
+        if (window.innerWidth < 768 && typeof App !== 'undefined' && App.switchMobileMode) {
+             // Optional: Zurück zum Dashboard oder nur Liste anzeigen? 
+             // Wenn wir in "Chat Mode" sind, ist die Liste weg. Wir bleiben im Chat Mode aber zeigen Liste?
+             // Einfachste Lösung: MessengerView zeigt Liste, wenn activeId 0 ist oder mobileChatVisible false
+        }
         this.render(document.getElementById('content'));
     },
 
+    // --- CHAT SEARCH LOGIC ---
     toggleChatSearch() {
         this.state.showChatSearch = !this.state.showChatSearch;
         if (!this.state.showChatSearch) this.state.chatFilterTerm = '';
@@ -310,6 +284,7 @@ const MessengerView = {
 
     renderActiveChat() {
         const C = this.config;
+        
         const news = (window.Store && Store.state && Store.state.news) ? Store.state.news : [];
         const groups = (window.Store && Store.state && Store.state.groups) ? Store.state.groups : [];
         const members = (window.Store && Store.state && Store.state.members) ? Store.state.members : [];
@@ -351,13 +326,17 @@ const MessengerView = {
             headerContent = `
                 <div class="flex items-center w-full animate-scale-in">
                     <button onclick="MessengerView.toggleChatSearch()" class="text-[#8696a0] mr-4"><i class="fa-solid fa-arrow-left"></i></button>
-                    <input type="text" id="chat-filter-input" placeholder="Nachrichten durchsuchen..." value="${this.state.chatFilterTerm}" onkeyup="MessengerView.handleChatFilter(this.value)" class="bg-[#202c33] border-none text-[#d1d7db] text-sm w-full py-2 px-4 rounded-lg focus:outline-none placeholder-[#8696a0]">
+                    <input type="text" id="chat-filter-input" placeholder="Nachrichten durchsuchen..." 
+                        value="${this.state.chatFilterTerm}" 
+                        onkeyup="MessengerView.handleChatFilter(this.value)"
+                        class="bg-[#202c33] border-none text-[#d1d7db] text-sm w-full py-2 px-4 rounded-lg focus:outline-none placeholder-[#8696a0]">
                 </div>
             `;
         } else {
             headerContent = `
                 <div class="flex items-center gap-3 overflow-hidden cursor-pointer flex-1" ${clickAction}>
-                    <button onclick="event.stopPropagation(); MessengerView.closeChat()" class="md:hidden text-[#d1d7db] mr-1"><i class="fa-solid fa-arrow-left text-xl"></i></button>
+                    <!-- Mobile Back: Schaltet in App Mode um -->
+                    <button onclick="event.stopPropagation(); if(typeof App !== 'undefined') App.switchMobileMode('app'); else MessengerView.closeChat()" class="md:hidden text-[#d1d7db] mr-1"><i class="fa-solid fa-arrow-left text-xl"></i></button>
                     <div class="w-10 h-10 rounded-full bg-[#6a7f8a] flex items-center justify-center overflow-hidden text-white font-bold text-lg shrink-0">
                         ${type === 'private' ? title.charAt(0) : '<i class="fa-solid fa-users"></i>'}
                     </div>
@@ -377,13 +356,93 @@ const MessengerView = {
             <div class="h-16 px-4 py-2 ${C.headerBg} flex items-center justify-between shadow-sm z-30 shrink-0 border-l border-[#2a3942] sticky top-0 w-full">
                 ${headerContent}
             </div>
+
             <div id="msg-scroll-container" class="flex-1 overflow-y-auto p-4 md:px-10 space-y-2 msg-bg-pattern custom-scrollbar relative">
                 ${messages.length === 0 ? 
-                    (this.state.chatFilterTerm ? `<div class="text-center mt-20 text-[#8696a0] opacity-60"><p>Keine Nachrichten gefunden</p></div>` : `<div class="text-center mt-20 text-[#8696a0] opacity-60"><i class="fa-regular fa-comments text-4xl mb-2"></i><p>Schreib etwas...</p></div>`) 
+                    (this.state.chatFilterTerm ? 
+                        `<div class="text-center mt-20 text-[#8696a0] opacity-60"><p>Keine Nachrichten gefunden für "${this.state.chatFilterTerm}"</p></div>` : 
+                        `<div class="text-center mt-20 text-[#8696a0] opacity-60"><i class="fa-regular fa-comments text-4xl mb-2"></i><p>Schreib etwas...</p></div>`
+                    ) 
                     : messages.map(msg => this.renderMessageBubble(msg)).join('')}
                 <div class="h-2"></div>
             </div>
+
             ${canWrite ? this.renderInputArea() : `<div class="p-4 ${C.headerBg} text-center text-[#8696a0] text-sm border-t ${C.border}">Nur Administratoren können hier senden.</div>`}
+        `;
+    },
+
+    // --- RENDER MENUS (FIXED) ---
+
+    renderAttachMenu() {
+        if (!this.state.showAttachMenu) return '';
+        const items = [
+            { icon: 'fa-image', color: 'bg-purple-500', text: 'Fotos & Videos', action: "MessengerView.sendAttachment('image')" },
+            { icon: 'fa-camera', color: 'bg-red-500', text: 'Kamera', action: "MessengerView.sendAttachment('camera')" },
+            { icon: 'fa-file', color: 'bg-indigo-500', text: 'Dokument', action: "MessengerView.sendAttachment('file')" },
+            { icon: 'fa-user', color: 'bg-blue-500', text: 'Kontakt', action: "MessengerView.openContactSelectModal()" },
+            { icon: 'fa-square-poll-vertical', color: 'bg-teal-500', text: 'Umfrage', action: "MessengerView.openPollModal()" }
+        ];
+        return `
+            <div class="absolute bottom-20 left-4 flex flex-col gap-4 animate-slide-up z-40">
+                ${items.map(i => `
+                    <div onclick="${i.action}; MessengerView.toggleAttachMenu()" class="flex items-center gap-4 group cursor-pointer">
+                        <div class="w-12 h-12 rounded-full ${i.icon === 'fa-image' ? 'bg-gradient-to-b from-purple-500 to-pink-500' : i.color} flex items-center justify-center text-white shadow-lg hover:scale-110 transition-transform">
+                            <i class="fa-solid ${i.icon} text-lg"></i>
+                        </div>
+                        <span class="bg-[#233138] text-white px-3 py-1 rounded-full text-sm opacity-0 group-hover:opacity-100 transition-opacity shadow-lg scale-0 group-hover:scale-100 origin-left border border-[#2a3942] whitespace-nowrap hidden md:block">
+                            ${i.text}
+                        </span>
+                    </div>
+                `).reverse().join('')}
+            </div>
+        `;
+    },
+
+    renderEmojiPicker() {
+        if (!this.state.showEmojiPicker) return '';
+        const emojis = ['😀','😂','🥰','😎','😭','👍','👎','👋','🙏','❤️','🔥','🎉','⚽','🍺','🤔','👀','🚀','💯','🔴','⚪'];
+        return `
+            <div class="absolute bottom-20 left-0 md:left-4 bg-[#202c33] border border-[#2a3942] rounded-lg shadow-2xl p-2 w-full md:w-72 h-64 overflow-y-auto animate-slide-up z-40 custom-scrollbar">
+                <div class="grid grid-cols-6 gap-1">
+                    ${emojis.map(e => `<button onclick="MessengerView.addEmoji('${e}')" class="text-2xl p-2 hover:bg-white/5 rounded transition">${e}</button>`).join('')}
+                </div>
+                <div class="p-2 text-center text-xs text-[#8696a0]">Mehr Emojis folgen...</div>
+            </div>
+        `;
+    },
+
+    // --- INPUT AREA ---
+
+    renderInputArea() {
+        const C = this.config;
+        const replyMsg = this.state.replyingTo ? this.findMessage(this.state.replyingTo) : null;
+        
+        return `
+            <div class="min-h-[62px] ${C.headerBg} px-4 py-2 flex flex-col justify-end z-30 relative shrink-0 border-l border-[#2a3942]">
+                ${this.renderAttachMenu()} 
+                ${this.renderEmojiPicker()}
+                
+                ${replyMsg ? `
+                    <div class="flex items-center justify-between bg-[#1f2c34] p-2 rounded-t-lg border-l-4 border-[#00a884] mb-1 animate-scale-in">
+                        <div class="text-sm text-[#8696a0]">
+                            <p class="text-[#00a884] font-bold text-xs mb-0.5">${replyMsg.sender}</p>
+                            <p class="truncate max-w-[200px]">${replyMsg.text}</p>
+                        </div>
+                        <button onclick="MessengerView.cancelReply()" class="text-[#8696a0] hover:text-white p-2"><i class="fa-solid fa-times"></i></button>
+                    </div>
+                ` : ''}
+
+                <div class="flex items-end gap-2 w-full">
+                    <button onclick="MessengerView.toggleAttachMenu()" class="mb-3 text-[#8696a0] hover:text-[#d1d7db] transition w-8 text-center text-xl"><i class="fa-solid fa-plus"></i></button>
+                    <form onsubmit="MessengerView.sendMessage(event)" class="flex-1 flex items-end gap-2 mb-1.5">
+                        <div class="flex-1 bg-[#2a3942] rounded-lg flex items-end min-h-[42px] py-2 px-3 relative">
+                            <button type="button" onclick="MessengerView.toggleEmojiPicker()" class="text-[#8696a0] hover:text-[#ffde34] transition mr-3 text-lg mb-0.5"><i class="fa-regular fa-face-smile"></i></button>
+                            <input type="text" name="message" id="chat-input" autocomplete="off" placeholder="Nachricht eingeben" class="bg-transparent border-none text-[#d1d7db] text-sm w-full focus:outline-none placeholder-[#8696a0] max-h-32 overflow-y-auto leading-relaxed">
+                        </div>
+                        <button type="submit" class="w-10 h-10 flex items-center justify-center rounded-full ${C.accentColor} ${C.accentColorHover} text-white shadow-md transition-transform active:scale-95 mb-0.5"><i class="fa-solid fa-paper-plane text-sm pl-0.5"></i></button>
+                    </form>
+                </div>
+            </div>
         `;
     },
 
@@ -394,9 +453,13 @@ const MessengerView = {
         const me = (window.Store && Store.state && Store.state.members) ? Store.state.members.find(m => m.id == myId) : {};
         
         let isMe = false;
-        if (msg.senderId) isMe = (msg.senderId == myId);
-        else if (msg.hasOwnProperty('isMe')) isMe = msg.isMe; 
-        else isMe = (me && msg.sender === me.firstName);
+        if (msg.senderId) {
+            isMe = (msg.senderId == myId);
+        } else if (msg.hasOwnProperty('isMe')) {
+            isMe = msg.isMe; 
+        } else {
+            isMe = (me && msg.sender === me.firstName);
+        }
 
         const isDeleted = msg.isDeleted;
         const C = this.config;
@@ -471,6 +534,8 @@ const MessengerView = {
         `;
     },
 
+    // --- ACTIONS & LOGIC ---
+
     toggleMsgMenu(id) {
         document.querySelectorAll('[id^="ctx-"]').forEach(el => { if(el.id !== id) el.classList.add('hidden'); });
         const menu = document.getElementById(id);
@@ -510,11 +575,18 @@ const MessengerView = {
         const msg = this.findMessage(msgId);
         if(msg) {
             const input = document.getElementById('chat-input');
-            if(input) { input.value = msg.text; input.focus(); this.state.editingId = msgId; }
+            if(input) {
+                input.value = msg.text;
+                input.focus();
+                this.state.editingId = msgId;
+            }
         }
     },
 
-    copyMessageText(text) { navigator.clipboard.writeText(text); if(window.App) window.App.showToast("Kopiert!"); },
+    copyMessageText(text) {
+        navigator.clipboard.writeText(text);
+        if(window.App) window.App.showToast("Kopiert!");
+    },
 
     reactToMessage(msgId, emoji) {
         this.updateMsgProperty(msgId, (msg) => {
@@ -526,12 +598,20 @@ const MessengerView = {
         });
     },
 
-    pinMessage(msgId) { this.updateMsgProperty(msgId, (msg) => { msg.isPinned = !msg.isPinned; }); },
-    forwardMessage(msgId) { alert("Weiterleiten-Funktion: Hier würde sich eine Kontaktliste öffnen."); },
+    pinMessage(msgId) {
+        this.updateMsgProperty(msgId, (msg) => {
+            msg.isPinned = !msg.isPinned;
+        });
+    },
+
+    forwardMessage(msgId) {
+        alert("Weiterleiten-Funktion: Hier würde sich eine Kontaktliste öffnen.");
+    },
 
     updateMsgProperty(msgId, cb) {
         const type = this.state.activeType;
         const id = this.state.activeId;
+        
         if (type === 'group') {
             let parentObj = Store.state.groups.find(g => g.id == id);
             if(parentObj) {
@@ -542,6 +622,7 @@ const MessengerView = {
             const myId = this.getMyId();
             const me = Store.state.members.find(m => m.id == myId);
             const other = Store.state.members.find(m => m.id == id);
+            
             [me, other].forEach(user => {
                 if(user && user.privateChat) {
                     const msg = user.privateChat.find(m => m.id == msgId);
@@ -556,8 +637,33 @@ const MessengerView = {
         if (id && !isNaN(id) && !isNaN(parseFloat(id))) id = Number(id);
         const m = Store.state.members.find(m => m.id == id);
         if(!m) return;
-        const groupsList = (Array.isArray(m.groups) ? m.groups : []).map(g => `<span class="bg-[#202c33] text-[#d1d7db] px-2 py-1 rounded text-xs border border-[#2a3942]">${g}</span>`).join('');
-        const html = `<div class="p-6 text-center text-[#e9edef] max-w-sm mx-auto"><div class="w-24 h-24 rounded-full bg-[#6a7f8a] flex items-center justify-center text-4xl font-bold mx-auto mb-4 shadow-xl border-4 border-[#202c33]">${m.firstName.charAt(0)}</div><h2 class="text-2xl font-bold mb-1">${m.firstName} ${m.lastName}</h2><p class="text-[#00a884] text-sm font-medium mb-6 uppercase tracking-wider">${m.role || 'Mitglied'}</p><div class="bg-[#111b21] rounded-xl p-4 border border-[#2a3942] text-left space-y-4 mb-6"><div><p class="text-[#8696a0] text-xs uppercase font-bold mb-1">Email</p><p class="text-sm">${m.email || 'Keine Angabe'}</p></div><div><p class="text-[#8696a0] text-xs uppercase font-bold mb-1">Gruppen</p><div class="flex flex-wrap gap-2">${groupsList || '<span class="text-xs italic text-muted">Keine Gruppen</span>'}</div></div></div><button onclick="App.closeModal()" class="w-full py-3 bg-[#202c33] hover:bg-[#2a3942] rounded-lg text-[#00a884] font-bold transition-colors">Schließen</button></div>`;
+
+        const groupsList = (Array.isArray(m.groups) ? m.groups : []).map(g => 
+            `<span class="bg-[#202c33] text-[#d1d7db] px-2 py-1 rounded text-xs border border-[#2a3942]">${g}</span>`
+        ).join('');
+
+        const html = `
+            <div class="p-6 text-center text-[#e9edef] max-w-sm mx-auto">
+                <div class="w-24 h-24 rounded-full bg-[#6a7f8a] flex items-center justify-center text-4xl font-bold mx-auto mb-4 shadow-xl border-4 border-[#202c33]">
+                    ${m.firstName.charAt(0)}
+                </div>
+                <h2 class="text-2xl font-bold mb-1">${m.firstName} ${m.lastName}</h2>
+                <p class="text-[#00a884] text-sm font-medium mb-6 uppercase tracking-wider">${m.role || 'Mitglied'}</p>
+                <div class="bg-[#111b21] rounded-xl p-4 border border-[#2a3942] text-left space-y-4 mb-6">
+                    <div>
+                        <p class="text-[#8696a0] text-xs uppercase font-bold mb-1">Email</p>
+                        <p class="text-sm">${m.email || 'Keine Angabe'}</p>
+                    </div>
+                    <div>
+                        <p class="text-[#8696a0] text-xs uppercase font-bold mb-1">Gruppen</p>
+                        <div class="flex flex-wrap gap-2">${groupsList || '<span class="text-xs italic text-muted">Keine Gruppen</span>'}</div>
+                    </div>
+                </div>
+                <button onclick="App.closeModal()" class="w-full py-3 bg-[#202c33] hover:bg-[#2a3942] rounded-lg text-[#00a884] font-bold transition-colors">
+                    Schließen
+                </button>
+            </div>
+        `;
         App.openModal(html);
     },
 
@@ -565,7 +671,9 @@ const MessengerView = {
         if (typeof App !== 'undefined' && App.router) {
             localStorage.setItem('vm_open_group_id', groupId);
             App.router('groups');
-        } else { console.error("App Router nicht gefunden"); }
+        } else {
+            console.error("App Router nicht gefunden");
+        }
     },
 
     sendMessage(e) {
@@ -573,12 +681,18 @@ const MessengerView = {
         const input = e.target.elements.message;
         const text = input.value.trim();
         if (!text) return;
+
         if (this.state.editingId) {
             this.updateMsgProperty(this.state.editingId, (msg) => { msg.text = text; msg.isEdited = true; });
             this.state.editingId = null;
         } else {
-            this.addMessageToChat({ text: text, type: 'text', replyToId: this.state.replyingTo });
+            this.addMessageToChat({ 
+                text: text, 
+                type: 'text',
+                replyToId: this.state.replyingTo 
+            });
         }
+        
         input.value = '';
         this.state.replyingTo = null;
         this.render(document.getElementById('content')); 
@@ -589,10 +703,27 @@ const MessengerView = {
         const myId = this.getMyId();
         const me = Store.state.members.find(m => m.id == myId) || { firstName: 'Ich' };
         const activeId = this.state.activeId;
-        const newMessage = { id: Date.now(), text: msgData.text, type: msgData.type || 'text', content: msgData.content || null, sender: me.firstName, senderId: myId, recipientId: activeId, isMe: true, isDeleted: false, time: new Date().toISOString(), replyToId: msgData.replyToId || null };
+        
+        const newMessage = {
+            id: Date.now(),
+            text: msgData.text,
+            type: msgData.type || 'text',
+            content: msgData.content || null,
+            sender: me.firstName,
+            senderId: myId,
+            recipientId: activeId,
+            isMe: true,
+            isDeleted: false,
+            time: new Date().toISOString(),
+            replyToId: msgData.replyToId || null
+        };
+
         const type = this.state.activeType;
+        let parentObj = null;
+        let table = '';
+
         if (type === 'group') {
-            let parentObj = Store.state.groups.find(g => g.id == activeId);
+            parentObj = Store.state.groups.find(g => g.id == activeId);
             if(parentObj) {
                 if(!parentObj.chat) parentObj.chat = [];
                 parentObj.chat.push(newMessage);
@@ -621,6 +752,7 @@ const MessengerView = {
         const type = this.state.activeType;
         const id = this.state.activeId;
         let parentObj = null;
+        
         if(type === 'group') {
             parentObj = Store.state.groups.find(g => g.id == id);
             if(parentObj) {
@@ -631,6 +763,7 @@ const MessengerView = {
             const myId = this.getMyId();
             const me = Store.state.members.find(m => m.id == myId);
             const other = Store.state.members.find(m => m.id == id);
+            
             [me, other].forEach(u => {
                 if(u && u.privateChat) {
                     const m = u.privateChat.find(msg => msg.id == msgId);
@@ -646,7 +779,10 @@ const MessengerView = {
         try {
             const sessionStr = localStorage.getItem('vm_supabase_session');
             const headers = {};
-            if(sessionStr) { const session = JSON.parse(sessionStr); if(session?.access_token) headers.Authorization = `Bearer ${session.access_token}`; }
+            if(sessionStr) {
+                 const session = JSON.parse(sessionStr);
+                 if(session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+            }
             const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, { global: { headers } });
             const payload = { ...item }; delete payload.id;
             sb.from(table).update(payload).eq('id', item.id).then(({error}) => {
