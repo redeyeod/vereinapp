@@ -113,7 +113,7 @@
         <!-- Header (Wird im Chat-Modus auf Mobile ausgeblendet) -->
         <header id="main-header" class="h-16 md:h-20 bg-dark-card/80 backdrop-blur-md border-b border-dark-border flex items-center justify-between px-4 md:px-8 z-30 sticky top-0 transition-transform duration-300">
             <!-- Logo -->
-            <button onclick="if(typeof App !== 'undefined') App.switchMobileMode('app')" class="flex items-center gap-3 group">
+            <button onclick="if(typeof App !== 'undefined') App.router('dashboard')" class="flex items-center gap-3 group">
                 <div class="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform">
                     <i class="fa-solid fa-users-rectangle text-sm md:text-base"></i>
                 </div>
@@ -192,11 +192,11 @@
 
         <!-- NEW: Mobile Bottom Navigation -->
         <div id="mobile-bottom-nav" class="md:hidden fixed bottom-0 left-0 w-full h-16 bg-dark-card border-t border-dark-border flex items-center justify-around z-40 pb-safe">
-            <button onclick="App.switchMobileMode('app')" class="flex flex-col items-center justify-center w-1/2 h-full text-brand-500 transition-colors" id="btn-mode-app">
+            <button onclick="App.router('dashboard')" class="flex flex-col items-center justify-center w-1/2 h-full text-brand-500 transition-colors" id="btn-mode-app">
                 <i class="fa-solid fa-layer-group text-xl mb-1"></i>
                 <span class="text-[10px] font-bold uppercase tracking-wider">App</span>
             </button>
-            <button onclick="App.switchMobileMode('chat')" class="flex flex-col items-center justify-center w-1/2 h-full text-dark-muted hover:text-white transition-colors" id="btn-mode-chat">
+            <button onclick="App.router('messenger')" class="flex flex-col items-center justify-center w-1/2 h-full text-dark-muted hover:text-white transition-colors" id="btn-mode-chat">
                 <i class="fa-solid fa-comments text-xl mb-1"></i>
                 <span class="text-[10px] font-bold uppercase tracking-wider">Chat</span>
             </button>
