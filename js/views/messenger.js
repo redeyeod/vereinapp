@@ -690,8 +690,36 @@ const MessengerView = {
     },
 
     safeUpdate(table, item) {
-        // Wrapper für Store Update
-        if(window.Store) Store.update(table, item);
+        // Fallback wenn Supabase nicht global verfügbar ist
+        if (typeof supabase === 'undefined' || typeof CONFIG === 'undefined') {
+            if(window.Store) Store.update(table, item);
+            return;
+        }
+
+        try {
+            // Hole Session für Auth Header
+            const sessionStr = localStorage.getItem('vm_supabase_session');
+            const headers = {};
+            if(sessionStr) { 
+                const session = JSON.parse(sessionStr); 
+                if(session?.access_token) headers.Authorization = `Bearer ${session.access_token}`; 
+            }
+
+            const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, { global: { headers } });
+            
+            // WICHTIG: ID aus dem Update-Payload entfernen!
+            const payload = { ...item }; 
+            delete payload.id; 
+            
+            sb.from(table).update(payload).eq('id', item.id).then(({error}) => {
+                if(error && window.App) window.App.showToast(error.message, 'error');
+                else if(window.Store && window.Store.fetchTable) window.Store.fetchTable(table);
+            });
+        } catch(e) { 
+            console.error(e); 
+            // Fallback
+            if(window.Store) Store.update(table, item);
+        }
     },
 
     showUserProfile(id) { if(window.App && App.openModal) App.openModal(`<div class="p-4 text-center text-white">Profil von ID ${id}</div>`); },
