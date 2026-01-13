@@ -178,18 +178,19 @@
             <!-- Views werden hier geladen -->
         </main>
 
-        <!-- MOBILE BOTTOM FOOTER (Für App vs Chat) -->
-        <div id="mobile-bottom-nav" class="md:hidden fixed bottom-0 left-0 w-full h-16 bg-dark-card border-t border-dark-border flex items-center justify-around z-50 pb-safe shadow-2xl">
-            <!-- App Button: Loads Dashboard or last App view -->
-            <button id="footer-btn-app" onclick="App.router('dashboard')" class="flex flex-col items-center justify-center w-full h-full text-brand-500 transition-colors group">
-                <i class="fa-solid fa-layer-group text-xl mb-1 group-active:scale-90 transition-transform"></i>
-                <span class="text-[10px] font-bold uppercase tracking-wider">App</span>
+        <!-- MOBILE BOTTOM FOOTER (Floating Glass Island) -->
+        <div id="mobile-bottom-nav" class="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[85%] max-w-sm h-16 bg-[#16202a]/80 backdrop-blur-2xl border border-white/10 rounded-full flex items-center p-1.5 z-50 shadow-2xl shadow-black/40 ring-1 ring-white/5 safe-bottom">
+            
+            <!-- App Button -->
+            <button id="footer-btn-app" onclick="App.router('dashboard')" class="flex-1 h-full rounded-full flex items-center justify-center gap-2.5 transition-all duration-300 relative overflow-hidden group text-brand-500 [&.text-brand-500]:bg-brand-500/20">
+                <i class="fa-solid fa-layer-group text-lg transition-transform group-active:scale-90"></i>
+                <span class="text-xs font-bold tracking-wider">App</span>
             </button>
             
-            <!-- Chat Button: Loads Messenger -->
-            <button id="footer-btn-chat" onclick="App.router('messenger')" class="flex flex-col items-center justify-center w-full h-full text-dark-muted hover:text-white transition-colors group">
-                <i class="fa-solid fa-comments text-xl mb-1 group-active:scale-90 transition-transform"></i>
-                <span class="text-[10px] font-bold uppercase tracking-wider">Chat</span>
+            <!-- Chat Button -->
+            <button id="footer-btn-chat" onclick="App.router('messenger')" class="flex-1 h-full rounded-full flex items-center justify-center gap-2.5 transition-all duration-300 relative overflow-hidden group text-dark-muted hover:text-white [&.text-brand-500]:bg-brand-500/20">
+                <i class="fa-solid fa-comments text-lg transition-transform group-active:scale-90"></i>
+                <span class="text-xs font-bold tracking-wider">Chat</span>
             </button>
         </div>
 
