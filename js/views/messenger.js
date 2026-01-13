@@ -71,14 +71,23 @@ const MessengerView = {
 
             /* --- MOBILE FULLSCREEN MODES --- */
             
-            /* Basis für Messenger Mode (Header weg, Padding weg) */
+            /* Basis für Messenger Mode (Header weg, Padding weg, FIXED Layout) */
+            /* WICHTIG: position: fixed und height: 100dvh verhindern, dass der Header beim Öffnen der Tastatur rausgeschoben wird */
             body.messenger-mode #main-header { display: none !important; }
-            body.messenger-mode #content { padding: 0 !important; height: 100vh !important; overflow: hidden !important; }
+            body.messenger-mode #content { 
+                padding: 0 !important; 
+                height: 100dvh !important; 
+                overflow: hidden !important; 
+                position: fixed !important; 
+                top: 0; 
+                left: 0; 
+                width: 100%; 
+            }
 
-            /* A) CHAT ACTIVE: Kein Footer, Kein Header */
+            /* A) CHAT ACTIVE: Kein Footer */
             body.messenger-mode.chat-active #mobile-bottom-nav { display: none !important; }
             
-            /* B) LIST ACTIVE: Footer sichtbar, Header weg */
+            /* B) LIST ACTIVE: Footer sichtbar */
             body.messenger-mode.list-active #mobile-bottom-nav { display: flex !important; }
             body.messenger-mode.list-active #messenger-list { padding-bottom: 90px !important; } /* Platz für Footer */
             
