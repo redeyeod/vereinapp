@@ -380,8 +380,22 @@ const App = {
             #app-view { height: 100dvh; }
             @supports (-webkit-touch-callout: none) { #app-view { height: -webkit-fill-available; } }
             header { transition: transform 0.3s ease; }
+            
+            /* Enforce consistent Footer Size */
+            #mobile-bottom-nav {
+                height: 4.5rem !important;
+                width: 92% !important;
+                max-width: 400px !important;
+                bottom: 1.5rem !important;
+            }
+            
             .form-input { width: 100%; background: rgba(30,41,59,0.5); border: 1px solid #334155; border-radius: 0.75rem; padding: 0.75rem 1rem; color: #fff; }
+            .form-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2); background-color: rgba(30, 41, 59, 0.8); }
+            .btn-primary { background-color: #2563eb; color: white; font-weight: 700; padding: 0.75rem 1.5rem; border-radius: 0.75rem; transition: all 0.2s; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2); }
+            .btn-primary:hover { background-color: #1d4ed8; transform: translateY(-1px); }
+            .btn-primary:active { transform: translateY(0); }
             .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+            .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
             .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
         `;
         document.head.appendChild(s);
