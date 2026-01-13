@@ -92,7 +92,7 @@ const NewsView = {
                             </button>` : ''}
                         </div>
 
-                        <div class="mt-4 text-gray-300 leading-relaxed text-sm md:text-base whitespace-pre-wrap font-light border-l-2 border-dark-border pl-4 ml-1">
+                        <div class="mt-3 text-gray-300 leading-relaxed text-sm md:text-base whitespace-pre-wrap font-light">
                             ${n.content}
                         </div>
                     </div>
