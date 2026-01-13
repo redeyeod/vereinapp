@@ -92,6 +92,7 @@
             height: 72px !important;
             width: 92% !important;
             max-width: 400px !important;
+            /* Wichtig: Wir steuern bottom spacing im HTML via calc() */
         }
     </style>
 </head>
@@ -211,8 +212,8 @@
         </main>
 
         <!-- MOBILE BOTTOM FOOTER (Floating Liquid Bubbles) -->
-        <!-- Forced Height [72px] for consistent look -->
-        <div id="mobile-bottom-nav" class="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-w-[400px] h-[72px] bg-[#0f172a]/80 backdrop-blur-2xl border border-white/10 rounded-full flex items-center p-1.5 z-[100] shadow-[0_8px_32px_rgba(0,0,0,0.5)] ring-1 ring-white/5 safe-bottom overflow-hidden relative">
+        <!-- FIX: 'safe-bottom' entfernt, 'bottom-[calc...]' hinzugefügt für korrekte Positionierung -->
+        <div id="mobile-bottom-nav" class="md:hidden fixed left-1/2 -translate-x-1/2 w-[92%] max-w-[400px] h-[72px] bg-[#0f172a]/80 backdrop-blur-2xl border border-white/10 rounded-full flex items-center p-1.5 z-[100] shadow-[0_8px_32px_rgba(0,0,0,0.5)] ring-1 ring-white/5 overflow-hidden relative bottom-[calc(1.5rem+env(safe-area-inset-bottom))]">
             
             <!-- The SWIPE Glider Background -->
             <div id="nav-glider" class="absolute left-1.5 top-1.5 bottom-1.5 w-[calc(50%-6px)] bg-gradient-to-br from-brand-600 to-indigo-600 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.4)] z-0 border border-white/10"></div>
