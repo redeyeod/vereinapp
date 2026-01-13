@@ -71,21 +71,30 @@ const MessengerView = {
 
             /* --- MOBILE FULLSCREEN MODES --- */
             
-            /* Basis für Messenger Mode (Header weg, Padding weg, FIXED Layout) */
-            /* WICHTIG: inset: 0 und position: fixed zwingen den Container exakt in den sichtbaren Bereich */
+            /* NUCLEAR OPTION: Body/HTML komplett fixieren wenn Chat aktiv ist.
+               Verhindert, dass der Browser den Viewport verschiebt (Header wegscrollt).
+            */
+            html.messenger-mode, body.messenger-mode {
+                overflow: hidden !important;
+                height: 100% !important;
+                position: fixed !important; /* WICHTIG: Verhindert Scrollen des ganzen Screens */
+                width: 100% !important;
+            }
+
             body.messenger-mode #main-header { display: none !important; }
+            
             body.messenger-mode #content { 
                 padding: 0 !important; 
-                position: fixed !important; 
+                position: absolute !important; /* Absolute im fixierten Body */
                 top: 0 !important;
                 bottom: 0 !important;
                 left: 0 !important;
                 right: 0 !important;
-                height: auto !important; /* Height auto damit bottom: 0 greift */
+                height: 100% !important;
                 width: 100% !important;
                 overflow: hidden !important; 
                 z-index: 100 !important;
-                background-color: #0f172a; /* Hintergrundfarbe fixieren */
+                background-color: #0f172a;
             }
 
             /* A) CHAT ACTIVE: Kein Footer */
@@ -93,10 +102,8 @@ const MessengerView = {
             
             /* B) LIST ACTIVE: Footer sichtbar */
             body.messenger-mode.list-active #mobile-bottom-nav { display: flex !important; z-index: 101 !important; }
-            /* Padding bottom für die Liste, damit Footer nichts verdeckt */
             body.messenger-mode.list-active #messenger-list { padding-bottom: 90px !important; } 
             
-            /* Safe Area Top fix für Liste ohne Header */
             body.messenger-mode.list-active .messenger-sidebar-header {
                 padding-top: max(1rem, env(safe-area-inset-top)); 
                 height: auto;
@@ -117,28 +124,29 @@ const MessengerView = {
         const isMobile = window.innerWidth < 768;
 
         // Reset Classes first
+        document.documentElement.classList.remove('messenger-mode');
         document.body.classList.remove('messenger-mode', 'chat-active', 'list-active');
 
         if (isMobile) {
+            // Apply to HTML and Body for maximum stability
+            document.documentElement.classList.add('messenger-mode');
             document.body.classList.add('messenger-mode');
+            
             if (this.state.mobileChatVisible) {
-                // Chat offen: Vollbild komplett
                 document.body.classList.add('chat-active');
             } else {
-                // Liste offen: Vollbild aber mit Footer
                 document.body.classList.add('list-active');
             }
         }
 
-        // Layout Template - ID hinzugefügt für den Observer
+        // Layout Template
         container.innerHTML = `
             <div id="messenger-view-root" class="flex h-full w-full max-w-[1800px] mx-auto overflow-hidden bg-dark-card/50 backdrop-blur-sm md:rounded-2xl md:border md:border-white/5 shadow-2xl relative">
                 
                 <!-- 1. LEFT SIDEBAR (List) -->
-                <!-- Auf Mobile ausgeblendet, wenn Chat aktiv ist -->
                 <div class="${this.state.mobileChatVisible && isMobile ? 'hidden' : 'flex'} w-full md:w-[380px] lg:w-[420px] flex-col border-r border-white/5 bg-dark-card/80 z-20 h-full">
                     
-                    <!-- Sidebar Header (mit Safe Area Support) -->
+                    <!-- Sidebar Header -->
                     <div class="messenger-sidebar-header h-16 px-5 flex items-center justify-between shrink-0 border-b border-white/5 bg-dark-bg/50 backdrop-blur-md">
                         <h2 class="font-bold text-white text-lg tracking-tight">Nachrichten</h2>
                         <div class="flex gap-2">
@@ -161,12 +169,10 @@ const MessengerView = {
 
                     <!-- Chat List -->
                     <div id="messenger-list" class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
-                        <!-- Wird durch renderSidebarList gefüllt -->
                     </div>
                 </div>
 
                 <!-- 2. RIGHT CHAT AREA -->
-                <!-- Auf Mobile nur sichtbar wenn aktiv (Slide-In Effekt via CSS Klasse im Parent möglich) -->
                 <div id="messenger-chat-area" class="${this.state.mobileChatVisible && isMobile ? 'flex fixed inset-0 z-50 slide-in-right' : 'hidden md:flex'} flex-col flex-1 bg-dark-bg relative w-full h-full overflow-hidden">
                     ${this.renderActiveChat(isMobile)}
                 </div>
@@ -175,11 +181,10 @@ const MessengerView = {
         `;
 
         // --- CLEANUP WATCHER ---
-        // Wenn der User die Seite verlässt, wird #messenger-view-root entfernt. 
-        // Der Observer merkt das und räumt die Body-Klassen auf.
         if (!this.state.observer) {
             this.state.observer = new MutationObserver((mutations) => {
                 if (!document.getElementById('messenger-view-root')) {
+                    document.documentElement.classList.remove('messenger-mode');
                     document.body.classList.remove('messenger-mode', 'chat-active', 'list-active');
                     if(this.state.observer) {
                         this.state.observer.disconnect();
@@ -187,15 +192,12 @@ const MessengerView = {
                     }
                 }
             });
-            // Überwache den Parent Container (normalerweise #content)
             this.state.observer.observe(container, { childList: true });
         }
 
         this.renderSidebarList();
         
-        // Scroll to bottom after render if chat is open
         if (this.state.activeId || this.state.activeType === 'news') {
-             // Kurzer Timeout für DOM Rendering
              setTimeout(() => this.scrollToBottom(false), 50);
         }
     },
@@ -290,7 +292,6 @@ const MessengerView = {
             dateStr = (d.toDateString() === new Date().toDateString()) ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : d.toLocaleDateString([], {day:'2-digit', month:'2-digit'});
         }
 
-        // Icon/Avatar Logic
         const avatar = item.img 
             ? `<img src="${item.img}" class="w-full h-full object-cover">`
             : `<div class="w-full h-full flex items-center justify-center font-bold text-sm ${item.color}">${item.icon ? `<i class="fa-solid ${item.icon}"></i>` : item.initials}</div>`;
@@ -324,17 +325,15 @@ const MessengerView = {
         this.state.activeType = type;
         this.state.activeId = id;
         this.state.showAttachMenu = false;
-        this.state.mobileChatVisible = true; // Trigger Mobile Fullscreen
+        this.state.mobileChatVisible = true; 
         this.state.showChatSearch = false;
         this.state.chatFilterTerm = '';
 
-        // Trigger Re-Render
         this.render(document.getElementById('content'));
     },
 
     closeChat() {
         this.state.mobileChatVisible = false;
-        // Trigger Re-Render to show list again and hide chat
         this.render(document.getElementById('content'));
     },
 
@@ -369,7 +368,7 @@ const MessengerView = {
                 id: n.id, sender: 'Vorstand', text: `📢 **${n.title}**\n\n${n.content}`, 
                 time: n.date, isMe: false, isSystem: true 
             })).sort((a,b) => new Date(a.time) - new Date(b.time));
-            canWrite = App.can('admin'); // Nur Admins schreiben
+            canWrite = App.can('admin'); 
         } else if (type === 'group') {
             const g = groups.find(x => x.id == id);
             if(g) { 
@@ -393,11 +392,10 @@ const MessengerView = {
             messages = messages.filter(m => m.text && m.text.toLowerCase().includes(this.state.chatFilterTerm));
         }
 
-        // HEADER
+        // HEADER (Fixed Position)
         const header = `
-            <div class="h-16 px-4 bg-dark-card/90 backdrop-blur-xl border-b border-white/5 flex items-center justify-between shadow-lg z-30 shrink-0">
+            <div class="h-16 px-4 bg-dark-card/90 backdrop-blur-xl border-b border-white/5 flex items-center justify-between shadow-lg z-30 shrink-0 absolute top-0 left-0 w-full">
                 <div class="flex items-center gap-3 overflow-hidden">
-                    <!-- BACK BUTTON (MOBILE ONLY) -->
                     <button onclick="MessengerView.closeChat()" class="md:hidden w-8 h-8 flex items-center justify-center text-white/70 hover:text-white rounded-full hover:bg-white/10 -ml-2">
                         <i class="fa-solid fa-arrow-left"></i>
                     </button>
@@ -423,7 +421,6 @@ const MessengerView = {
                 </div>
             </div>
             
-            <!-- SEARCH BAR OVERLAY -->
             ${this.state.showChatSearch ? `
             <div class="absolute top-0 left-0 w-full h-16 bg-dark-card z-40 flex items-center px-4 animate-msg border-b border-white/5">
                 <button onclick="MessengerView.toggleChatSearch()" class="mr-3 text-dark-muted hover:text-white"><i class="fa-solid fa-arrow-left"></i></button>
@@ -440,13 +437,13 @@ const MessengerView = {
                </div>`;
 
         // INPUT AREA
-        const inputArea = canWrite ? this.renderInputArea() : `<div class="p-4 bg-dark-card/90 text-center text-dark-muted text-xs uppercase font-bold tracking-widest border-t border-white/5">Nur Lesen</div>`;
+        const inputArea = canWrite ? this.renderInputArea() : `<div class="p-4 bg-dark-card/90 text-center text-dark-muted text-xs uppercase font-bold tracking-widest border-t border-white/5 absolute bottom-0 w-full">Nur Lesen</div>`;
 
         return `
             ${header}
-            <div id="msg-scroll-container" class="flex-1 overflow-y-auto px-4 py-4 space-y-3 msg-bg-pattern chat-scroll relative">
+            <!-- Scroll Container: Top/Bottom Padding for fixed elements -->
+            <div id="msg-scroll-container" class="absolute top-0 bottom-0 w-full overflow-y-auto px-4 pt-20 pb-20 space-y-3 msg-bg-pattern chat-scroll">
                 ${msgsHtml}
-                <div class="h-2"></div>
             </div>
             ${inputArea}
         `;
@@ -455,8 +452,9 @@ const MessengerView = {
     renderInputArea() {
         const replyMsg = this.state.replyingTo ? this.findMessage(this.state.replyingTo) : null;
         
+        // WICHTIG: Input area ist absolute am Boden
         return `
-            <div class="p-3 md:p-4 bg-dark-card border-t border-white/5 relative z-30 shrink-0 safe-bottom">
+            <div class="p-3 md:p-4 bg-dark-card border-t border-white/5 absolute bottom-0 w-full z-30 shrink-0 safe-bottom">
                 
                 <!-- Helper Menus (Absolute) -->
                 ${this.renderAttachMenu()}
