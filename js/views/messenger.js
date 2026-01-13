@@ -71,13 +71,11 @@ const MessengerView = {
 
             /* --- MOBILE FULLSCREEN MODES --- */
             
-            /* NUCLEAR OPTION: Body/HTML komplett fixieren wenn Chat aktiv ist.
-               Verhindert, dass der Browser den Viewport verschiebt (Header wegscrollt).
-            */
+            /* NUCLEAR OPTION: Body/HTML komplett fixieren wenn Chat aktiv ist. */
             html.messenger-mode, body.messenger-mode {
                 overflow: hidden !important;
                 height: 100% !important;
-                position: fixed !important; /* WICHTIG: Verhindert Scrollen des ganzen Screens */
+                position: fixed !important; 
                 width: 100% !important;
             }
 
@@ -85,7 +83,7 @@ const MessengerView = {
             
             body.messenger-mode #content { 
                 padding: 0 !important; 
-                position: absolute !important; /* Absolute im fixierten Body */
+                position: absolute !important; 
                 top: 0 !important;
                 bottom: 0 !important;
                 left: 0 !important;
@@ -95,6 +93,9 @@ const MessengerView = {
                 overflow: hidden !important; 
                 z-index: 100 !important;
                 background-color: #0f172a;
+                /* Flex Layout für den Content Container erzwingen */
+                display: flex !important;
+                flex-direction: column !important;
             }
 
             /* A) CHAT ACTIVE: Kein Footer */
@@ -139,7 +140,7 @@ const MessengerView = {
             }
         }
 
-        // Layout Template
+        // Layout Template - ID hinzugefügt für den Observer
         container.innerHTML = `
             <div id="messenger-view-root" class="flex h-full w-full max-w-[1800px] mx-auto overflow-hidden bg-dark-card/50 backdrop-blur-sm md:rounded-2xl md:border md:border-white/5 shadow-2xl relative">
                 
@@ -392,9 +393,10 @@ const MessengerView = {
             messages = messages.filter(m => m.text && m.text.toLowerCase().includes(this.state.chatFilterTerm));
         }
 
-        // HEADER (Fixed Position)
+        // --- NEW FLEXBOX LAYOUT ---
+        // Header: fixed height, shrink-0
         const header = `
-            <div class="h-16 px-4 bg-dark-card/90 backdrop-blur-xl border-b border-white/5 flex items-center justify-between shadow-lg z-30 shrink-0 absolute top-0 left-0 w-full">
+            <div class="h-16 px-4 bg-dark-card/90 backdrop-blur-xl border-b border-white/5 flex items-center justify-between shadow-lg z-30 shrink-0 relative">
                 <div class="flex items-center gap-3 overflow-hidden">
                     <button onclick="MessengerView.closeChat()" class="md:hidden w-8 h-8 flex items-center justify-center text-white/70 hover:text-white rounded-full hover:bg-white/10 -ml-2">
                         <i class="fa-solid fa-arrow-left"></i>
@@ -419,16 +421,15 @@ const MessengerView = {
                         <i class="fa-solid fa-ellipsis-vertical"></i>
                      </button>
                 </div>
+                ${this.state.showChatSearch ? `
+                <div class="absolute top-0 left-0 w-full h-16 bg-dark-card z-40 flex items-center px-4 animate-msg border-b border-white/5">
+                    <button onclick="MessengerView.toggleChatSearch()" class="mr-3 text-dark-muted hover:text-white"><i class="fa-solid fa-arrow-left"></i></button>
+                    <input type="text" placeholder="In diesem Chat suchen..." value="${this.state.chatFilterTerm}" onkeyup="MessengerView.handleChatFilter(this.value)" class="flex-1 bg-transparent border-none text-white focus:outline-none placeholder-dark-muted" autoFocus>
+                </div>` : ''}
             </div>
-            
-            ${this.state.showChatSearch ? `
-            <div class="absolute top-0 left-0 w-full h-16 bg-dark-card z-40 flex items-center px-4 animate-msg border-b border-white/5">
-                <button onclick="MessengerView.toggleChatSearch()" class="mr-3 text-dark-muted hover:text-white"><i class="fa-solid fa-arrow-left"></i></button>
-                <input type="text" placeholder="In diesem Chat suchen..." value="${this.state.chatFilterTerm}" onkeyup="MessengerView.handleChatFilter(this.value)" class="flex-1 bg-transparent border-none text-white focus:outline-none placeholder-dark-muted" autoFocus>
-            </div>` : ''}
         `;
 
-        // MESSAGES
+        // MESSAGES: flex-1, overflow-y-auto
         const msgsHtml = messages.length 
             ? messages.map(msg => this.renderMessageBubble(msg)).join('')
             : `<div class="flex flex-col items-center justify-center mt-20 opacity-50">
@@ -436,27 +437,30 @@ const MessengerView = {
                 <p class="text-dark-muted text-sm">Sag Hallo!</p>
                </div>`;
 
-        // INPUT AREA
-        const inputArea = canWrite ? this.renderInputArea() : `<div class="p-4 bg-dark-card/90 text-center text-dark-muted text-xs uppercase font-bold tracking-widest border-t border-white/5 absolute bottom-0 w-full">Nur Lesen</div>`;
+        // INPUT: shrink-0
+        const inputArea = canWrite ? this.renderInputArea() : `<div class="p-4 bg-dark-card/90 text-center text-dark-muted text-xs uppercase font-bold tracking-widest border-t border-white/5 shrink-0">Nur Lesen</div>`;
 
+        // FULL FLEX CONTAINER
         return `
-            ${header}
-            <!-- Scroll Container: Top/Bottom Padding for fixed elements -->
-            <div id="msg-scroll-container" class="absolute top-0 bottom-0 w-full overflow-y-auto px-4 pt-20 pb-20 space-y-3 msg-bg-pattern chat-scroll">
-                ${msgsHtml}
+            <div class="flex flex-col h-full w-full">
+                ${header}
+                <div id="msg-scroll-container" class="flex-1 overflow-y-auto px-4 py-4 space-y-3 msg-bg-pattern chat-scroll">
+                    ${msgsHtml}
+                    <div class="h-2"></div>
+                </div>
+                ${inputArea}
             </div>
-            ${inputArea}
         `;
     },
 
     renderInputArea() {
         const replyMsg = this.state.replyingTo ? this.findMessage(this.state.replyingTo) : null;
         
-        // WICHTIG: Input area ist absolute am Boden
+        // Input ist jetzt Teil des Flex Flows (shrink-0)
         return `
-            <div class="p-3 md:p-4 bg-dark-card border-t border-white/5 absolute bottom-0 w-full z-30 shrink-0 safe-bottom">
+            <div class="p-3 md:p-4 bg-dark-card border-t border-white/5 shrink-0 safe-bottom z-30">
                 
-                <!-- Helper Menus (Absolute) -->
+                <!-- Helper Menus (Absolute, überlappend) -->
                 ${this.renderAttachMenu()}
 
                 <!-- Reply Preview -->
