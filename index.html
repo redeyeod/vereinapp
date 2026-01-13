@@ -86,6 +86,13 @@
         #mobile-bottom-nav.chat-mode #footer-btn-chat { color: #fff; text-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
         #mobile-bottom-nav.chat-mode #footer-btn-chat i { transform: scale(1.1); }
         #mobile-bottom-nav.chat-mode #footer-btn-app { color: #64748b; }
+
+        /* FORCE FOOTER SIZE CONSISTENCY */
+        #mobile-bottom-nav {
+            height: 72px !important;
+            width: 92% !important;
+            max-width: 400px !important;
+        }
     </style>
 </head>
 <body class="bg-dark-bg text-dark-text antialiased selection:bg-brand-500/30 selection:text-brand-500 overflow-hidden">
@@ -137,7 +144,6 @@
     <div id="app-view" class="h-screen flex flex-col overflow-hidden hidden bg-dark-bg">
         
         <!-- HEADER (MODERN GLASS DESIGN) -->
-        <!-- Wichtig: z-30 damit er unter Modals aber über Content liegt -->
         <header id="main-header" class="h-20 bg-dark-bg/60 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-6 z-30 sticky top-0 transition-transform duration-500 ease-in-out">
             <!-- Logo Area -->
             <button onclick="if(typeof App !== 'undefined') App.router('dashboard')" class="flex items-center gap-3 group">
@@ -200,28 +206,26 @@
         </header>
 
         <!-- CONTENT -->
-        <!-- WICHTIG: p-4 padding-bottom muss groß genug sein für den Footer (pb-28) -->
         <main id="content" class="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 pb-28 scroll-smooth w-full relative">
             <!-- Views werden hier geladen -->
         </main>
 
         <!-- MOBILE BOTTOM FOOTER (Floating Liquid Bubbles) -->
-        <!-- Fest positioniert am unteren Rand, schwebend -->
-        <div id="mobile-bottom-nav" class="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[95%] max-w-[380px] h-[70px] bg-[#0f172a]/80 backdrop-blur-2xl border border-white/10 rounded-full flex items-center p-1.5 z-[100] shadow-[0_8px_32px_rgba(0,0,0,0.5)] ring-1 ring-white/5 safe-bottom overflow-hidden relative">
+        <!-- Forced Height [72px] for consistent look -->
+        <div id="mobile-bottom-nav" class="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-w-[400px] h-[72px] bg-[#0f172a]/80 backdrop-blur-2xl border border-white/10 rounded-full flex items-center p-1.5 z-[100] shadow-[0_8px_32px_rgba(0,0,0,0.5)] ring-1 ring-white/5 safe-bottom overflow-hidden relative">
             
-            <!-- Der GLIDER (Der bewegliche Hintergrund) -->
-            <!-- Startet links (App Position) -->
+            <!-- The SWIPE Glider Background -->
             <div id="nav-glider" class="absolute left-1.5 top-1.5 bottom-1.5 w-[calc(50%-6px)] bg-gradient-to-br from-brand-600 to-indigo-600 rounded-full shadow-[0_0_15px_rgba(59,130,246,0.4)] z-0 border border-white/10"></div>
 
             <!-- App Button -->
             <button id="footer-btn-app" onclick="App.router('dashboard')" class="flex-1 h-full rounded-full flex flex-col items-center justify-center gap-1 transition-all duration-300 relative z-10 group cursor-pointer">
-                <i class="fa-solid fa-layer-group text-xl"></i>
+                <i class="fa-solid fa-layer-group text-xl mb-1 transition-transform group-active:scale-90"></i>
                 <span class="text-[10px] font-bold uppercase tracking-widest">App</span>
             </button>
             
             <!-- Chat Button -->
             <button id="footer-btn-chat" onclick="App.router('messenger')" class="flex-1 h-full rounded-full flex flex-col items-center justify-center gap-1 transition-all duration-300 relative z-10 group cursor-pointer">
-                <i class="fa-solid fa-comments text-xl"></i>
+                <i class="fa-solid fa-comments text-xl mb-1 transition-transform group-active:scale-90"></i>
                 <span class="text-[10px] font-bold uppercase tracking-widest">Chat</span>
             </button>
         </div>
