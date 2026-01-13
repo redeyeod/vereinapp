@@ -75,10 +75,25 @@ const MessengerView = {
             .slide-in-right { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
             @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
-            /* Mobile Fullscreen Overrides */
-            body.chat-active #mobile-bottom-nav { display: none !important; }
-            body.chat-active #main-header { display: none !important; }
-            body.chat-active #content { padding: 0 !important; height: 100vh !important; overflow: hidden !important; }
+            /* --- MOBILE FULLSCREEN MODES --- */
+            
+            /* Basis für Messenger Mode (Header weg, Padding weg) */
+            body.messenger-mode #main-header { display: none !important; }
+            body.messenger-mode #content { padding: 0 !important; height: 100vh !important; overflow: hidden !important; }
+
+            /* A) CHAT ACTIVE: Kein Footer, Kein Header */
+            body.messenger-mode.chat-active #mobile-bottom-nav { display: none !important; }
+            
+            /* B) LIST ACTIVE: Footer sichtbar, Header weg */
+            body.messenger-mode.list-active #mobile-bottom-nav { display: flex !important; }
+            body.messenger-mode.list-active #messenger-list { padding-bottom: 90px !important; } /* Platz für Footer */
+            
+            /* Safe Area Top fix für Liste ohne Header */
+            body.messenger-mode.list-active .messenger-sidebar-header {
+                padding-top: max(1rem, env(safe-area-inset-top)); 
+                height: auto;
+                min-height: 4.5rem;
+            }
         `;
         document.head.appendChild(style);
     },
@@ -92,11 +107,20 @@ const MessengerView = {
         
         // Prüfen ob Mobile View aktiv
         const isMobile = window.innerWidth < 768;
-        const showChat = this.state.mobileChatVisible && isMobile;
 
-        // Toggle Body Class für Footer/Header Hiding auf Mobile
-        if (showChat) document.body.classList.add('chat-active');
-        else document.body.classList.remove('chat-active');
+        // Reset Classes first
+        document.body.classList.remove('messenger-mode', 'chat-active', 'list-active');
+
+        if (isMobile) {
+            document.body.classList.add('messenger-mode');
+            if (this.state.mobileChatVisible) {
+                // Chat offen: Vollbild komplett
+                document.body.classList.add('chat-active');
+            } else {
+                // Liste offen: Vollbild aber mit Footer
+                document.body.classList.add('list-active');
+            }
+        }
 
         // Layout Template
         container.innerHTML = `
@@ -104,10 +128,10 @@ const MessengerView = {
                 
                 <!-- 1. LEFT SIDEBAR (List) -->
                 <!-- Auf Mobile ausgeblendet, wenn Chat aktiv ist -->
-                <div class="${showChat ? 'hidden' : 'flex'} w-full md:w-[380px] lg:w-[420px] flex-col border-r border-white/5 bg-dark-card/80 z-20">
+                <div class="${this.state.mobileChatVisible && isMobile ? 'hidden' : 'flex'} w-full md:w-[380px] lg:w-[420px] flex-col border-r border-white/5 bg-dark-card/80 z-20">
                     
-                    <!-- Sidebar Header -->
-                    <div class="h-16 px-5 flex items-center justify-between shrink-0 border-b border-white/5 bg-dark-bg/50 backdrop-blur-md">
+                    <!-- Sidebar Header (mit Safe Area Support) -->
+                    <div class="messenger-sidebar-header h-16 px-5 flex items-center justify-between shrink-0 border-b border-white/5 bg-dark-bg/50 backdrop-blur-md">
                         <h2 class="font-bold text-white text-lg tracking-tight">Nachrichten</h2>
                         <div class="flex gap-2">
                              <button class="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-dark-muted hover:text-white transition-colors"><i class="fa-solid fa-pen-to-square"></i></button>
@@ -135,7 +159,7 @@ const MessengerView = {
 
                 <!-- 2. RIGHT CHAT AREA -->
                 <!-- Auf Mobile nur sichtbar wenn aktiv (Slide-In Effekt via CSS Klasse im Parent möglich) -->
-                <div id="messenger-chat-area" class="${showChat ? 'flex fixed inset-0 z-50 slide-in-right' : 'hidden md:flex'} flex-col flex-1 bg-dark-bg relative w-full h-full">
+                <div id="messenger-chat-area" class="${this.state.mobileChatVisible && isMobile ? 'flex fixed inset-0 z-50 slide-in-right' : 'hidden md:flex'} flex-col flex-1 bg-dark-bg relative w-full h-full">
                     ${this.renderActiveChat(isMobile)}
                 </div>
 
@@ -189,6 +213,9 @@ const MessengerView = {
             clearInterval(this.state.pollingInterval);
             this.state.pollingInterval = null;
         }
+        
+        // Clean up body classes when leaving view
+        document.body.classList.remove('messenger-mode', 'chat-active', 'list-active');
     },
 
     // --- SIDEBAR LOGIC ---
