@@ -72,24 +72,29 @@ const MessengerView = {
             /* --- MOBILE FULLSCREEN MODES --- */
             
             /* Basis für Messenger Mode (Header weg, Padding weg, FIXED Layout) */
-            /* WICHTIG: position: fixed und height: 100dvh verhindern, dass der Header beim Öffnen der Tastatur rausgeschoben wird */
+            /* WICHTIG: inset: 0 und position: fixed zwingen den Container exakt in den sichtbaren Bereich */
             body.messenger-mode #main-header { display: none !important; }
             body.messenger-mode #content { 
                 padding: 0 !important; 
-                height: 100dvh !important; 
-                overflow: hidden !important; 
                 position: fixed !important; 
-                top: 0; 
-                left: 0; 
-                width: 100%; 
+                top: 0 !important;
+                bottom: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                height: auto !important; /* Height auto damit bottom: 0 greift */
+                width: 100% !important;
+                overflow: hidden !important; 
+                z-index: 100 !important;
+                background-color: #0f172a; /* Hintergrundfarbe fixieren */
             }
 
             /* A) CHAT ACTIVE: Kein Footer */
             body.messenger-mode.chat-active #mobile-bottom-nav { display: none !important; }
             
             /* B) LIST ACTIVE: Footer sichtbar */
-            body.messenger-mode.list-active #mobile-bottom-nav { display: flex !important; }
-            body.messenger-mode.list-active #messenger-list { padding-bottom: 90px !important; } /* Platz für Footer */
+            body.messenger-mode.list-active #mobile-bottom-nav { display: flex !important; z-index: 101 !important; }
+            /* Padding bottom für die Liste, damit Footer nichts verdeckt */
+            body.messenger-mode.list-active #messenger-list { padding-bottom: 90px !important; } 
             
             /* Safe Area Top fix für Liste ohne Header */
             body.messenger-mode.list-active .messenger-sidebar-header {
@@ -131,7 +136,7 @@ const MessengerView = {
                 
                 <!-- 1. LEFT SIDEBAR (List) -->
                 <!-- Auf Mobile ausgeblendet, wenn Chat aktiv ist -->
-                <div class="${this.state.mobileChatVisible && isMobile ? 'hidden' : 'flex'} w-full md:w-[380px] lg:w-[420px] flex-col border-r border-white/5 bg-dark-card/80 z-20">
+                <div class="${this.state.mobileChatVisible && isMobile ? 'hidden' : 'flex'} w-full md:w-[380px] lg:w-[420px] flex-col border-r border-white/5 bg-dark-card/80 z-20 h-full">
                     
                     <!-- Sidebar Header (mit Safe Area Support) -->
                     <div class="messenger-sidebar-header h-16 px-5 flex items-center justify-between shrink-0 border-b border-white/5 bg-dark-bg/50 backdrop-blur-md">
@@ -143,7 +148,7 @@ const MessengerView = {
                     </div>
 
                     <!-- Search Bar -->
-                    <div class="p-3">
+                    <div class="p-3 shrink-0">
                         <div class="relative group">
                             <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted group-focus-within:text-brand-500 transition-colors"></i>
                             <input type="text" 
@@ -162,7 +167,7 @@ const MessengerView = {
 
                 <!-- 2. RIGHT CHAT AREA -->
                 <!-- Auf Mobile nur sichtbar wenn aktiv (Slide-In Effekt via CSS Klasse im Parent möglich) -->
-                <div id="messenger-chat-area" class="${this.state.mobileChatVisible && isMobile ? 'flex fixed inset-0 z-50 slide-in-right' : 'hidden md:flex'} flex-col flex-1 bg-dark-bg relative w-full h-full">
+                <div id="messenger-chat-area" class="${this.state.mobileChatVisible && isMobile ? 'flex fixed inset-0 z-50 slide-in-right' : 'hidden md:flex'} flex-col flex-1 bg-dark-bg relative w-full h-full overflow-hidden">
                     ${this.renderActiveChat(isMobile)}
                 </div>
 
