@@ -62,13 +62,24 @@
         #toast { visibility: hidden; min-width: 280px; background-color: #1e293b; color: #fff; border: 1px solid #334155; border-radius: 99px; padding: 12px 24px; position: fixed; z-index: 100; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(20px); transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); opacity: 0; box-shadow: 0 10px 30px -5px rgba(0,0,0,0.3); }
         #toast.show { visibility: visible; opacity: 1; transform: translateX(-50%) translateY(0); }
 
-        /* --- SWIPE ANIMATION LOGIC --- */
-        /* Wenn der Container die Klasse 'active-chat' hat, schiebe den Glider nach rechts */
-        #mobile-bottom-nav.active-chat #nav-glider {
-            transform: translateX(100%);
-            background-color: rgba(59, 130, 246, 0.15); /* Brand Color Tint */
-            border-color: rgba(59, 130, 246, 0.3);
+        /* --- FOOTER SWIPE ANIMATION --- */
+        #nav-glider {
+            transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+            transform: translateX(0); /* Default: App links */
         }
+        
+        /* Wenn Chat aktiv ist, schiebe nach rechts */
+        #mobile-bottom-nav.chat-mode #nav-glider {
+            transform: translateX(100%);
+        }
+        
+        /* Text Farben Anpassung basierend auf Mode */
+        #mobile-bottom-nav.chat-mode #footer-btn-app { color: #94a3b8; } /* Muted */
+        #mobile-bottom-nav.chat-mode #footer-btn-chat { color: #fff; } /* White/Active */
+        
+        /* Default (App Mode) Farben */
+        #mobile-bottom-nav:not(.chat-mode) #footer-btn-app { color: #fff; }
+        #mobile-bottom-nav:not(.chat-mode) #footer-btn-chat { color: #94a3b8; }
     </style>
 </head>
 <body class="bg-dark-bg text-dark-text antialiased selection:bg-brand-500/30 selection:text-brand-500 overflow-hidden">
@@ -187,26 +198,27 @@
         </main>
 
         <!-- MOBILE BOTTOM FOOTER (Floating Glass Island with SWIPE Effect) -->
-        <div id="mobile-bottom-nav" class="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[85%] max-w-sm h-16 bg-[#16202a]/90 backdrop-blur-2xl border border-white/10 rounded-full flex items-center p-1.5 z-50 shadow-2xl shadow-black/40 ring-1 ring-white/5 safe-bottom overflow-hidden relative">
+        <!-- Breite erhöht auf w-[95%] für besseres Handling -->
+        <div id="mobile-bottom-nav" class="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[95%] max-w-sm h-[4.5rem] bg-[#16202a]/90 backdrop-blur-2xl border border-white/10 rounded-full flex items-center p-1.5 z-[100] shadow-2xl shadow-black/50 ring-1 ring-white/5 safe-bottom overflow-hidden relative">
             
-            <!-- The SWIPE Glider Background -->
-            <div id="nav-glider" class="absolute left-1.5 top-1.5 bottom-1.5 w-[calc(50%-6px)] bg-white/5 border border-white/10 rounded-full transition-transform duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] z-0"></div>
+            <!-- The SWIPE Glider Background (Wird per CSS #nav-glider gesteuert) -->
+            <div id="nav-glider" class="absolute left-1.5 top-1.5 bottom-1.5 w-[calc(50%-6px)] bg-gradient-to-r from-brand-600/30 to-indigo-600/30 border border-brand-500/30 rounded-full z-0 shadow-glow"></div>
 
             <!-- App Button -->
-            <button id="footer-btn-app" onclick="document.getElementById('mobile-bottom-nav').classList.remove('active-chat'); App.router('dashboard')" class="flex-1 h-full rounded-full flex items-center justify-center gap-2.5 transition-all duration-300 relative z-10 text-brand-500">
-                <i class="fa-solid fa-layer-group text-lg transition-transform active:scale-90"></i>
+            <button id="footer-btn-app" onclick="App.router('dashboard')" class="flex-1 h-full rounded-full flex items-center justify-center gap-2.5 transition-all duration-300 relative z-10 group">
+                <i class="fa-solid fa-layer-group text-xl mb-1 transition-transform group-active:scale-90"></i>
                 <span class="text-xs font-bold tracking-wider">App</span>
             </button>
             
             <!-- Chat Button -->
-            <button id="footer-btn-chat" onclick="document.getElementById('mobile-bottom-nav').classList.add('active-chat'); App.router('messenger')" class="flex-1 h-full rounded-full flex items-center justify-center gap-2.5 transition-all duration-300 relative z-10 text-dark-muted hover:text-white">
-                <i class="fa-solid fa-comments text-lg transition-transform active:scale-90"></i>
+            <button id="footer-btn-chat" onclick="App.router('messenger')" class="flex-1 h-full rounded-full flex items-center justify-center gap-2.5 transition-all duration-300 relative z-10 group">
+                <i class="fa-solid fa-comments text-xl mb-1 transition-transform group-active:scale-90"></i>
                 <span class="text-xs font-bold tracking-wider">Chat</span>
             </button>
         </div>
 
         <!-- Mobile Menu Drawer (Overlay for Sidebar Menu) -->
-        <div id="mobile-menu" class="fixed inset-0 z-[60] pointer-events-none">
+        <div id="mobile-menu" class="fixed inset-0 z-[110] pointer-events-none">
             <div id="mobile-menu-backdrop" onclick="App.toggleMobileMenu()" class="absolute inset-0 bg-black/80 backdrop-blur-sm opacity-0 transition-opacity duration-300"></div>
             <div id="mobile-menu-drawer" class="absolute right-0 top-0 h-full w-[85%] max-w-xs bg-dark-bg border-l border-white/10 shadow-2xl transform translate-x-full transition-transform duration-300 pointer-events-auto flex flex-col p-4">
                 <div class="p-6 border-b border-white/5 flex items-center justify-between">
@@ -252,7 +264,7 @@
     </div>
 
     <!-- Modals & Toasts -->
-    <div id="modal-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] hidden flex items-center justify-center p-4">
+    <div id="modal-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[150] hidden flex items-center justify-center p-4">
         <div class="glass border border-white/10 rounded-2xl shadow-2xl w-full max-w-md p-0 opacity-0 transition-all transform scale-95" id="modal-content"></div>
     </div>
     <div id="toast"></div>
