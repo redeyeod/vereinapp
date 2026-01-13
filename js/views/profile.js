@@ -22,15 +22,23 @@ const ProfileView = {
         };
 
         // Daten frisch aus dem Store holen
-        const members = Store.state.members || [];
-        if(currentUserId && typeof Store !== 'undefined') {
+        const members = (typeof Store !== 'undefined' && Store.state && Store.state.members) ? Store.state.members : [];
+        if(currentUserId) {
             const foundUser = members.find(m => m.id == currentUserId);
             if(foundUser) {
+                // ROLES FIX: Prüfen ob Array oder String
+                let roleDisplay = 'Mitglied';
+                if (Array.isArray(foundUser.roles) && foundUser.roles.length > 0) {
+                    roleDisplay = foundUser.roles.join(', ');
+                } else if (foundUser.role) {
+                    roleDisplay = foundUser.role;
+                }
+
                 user = {
                     name: `${foundUser.firstName} ${foundUser.lastName}`,
-                    role: foundUser.role,
+                    role: roleDisplay,
                     memberSince: foundUser.joinedDate ? new Date(foundUser.joinedDate).getFullYear() : '2024',
-                    position: foundUser.role,
+                    position: roleDisplay,
                     email: foundUser.email || 'Keine E-Mail hinterlegt'
                 };
             }
@@ -130,7 +138,8 @@ const ProfileView = {
      */
     openCredentialsModal() {
         const currentUserId = localStorage.getItem('vm_current_user_id');
-        const user = Store.state.members.find(m => m.id == currentUserId);
+        const members = (typeof Store !== 'undefined' && Store.state && Store.state.members) ? Store.state.members : [];
+        const user = members.find(m => m.id == currentUserId);
         if(!user) return;
 
         const html = `
@@ -175,7 +184,8 @@ const ProfileView = {
         const newPass = fd.get('password');
         
         const currentUserId = localStorage.getItem('vm_current_user_id');
-        const user = Store.state.members.find(m => m.id == currentUserId);
+        const members = (typeof Store !== 'undefined' && Store.state && Store.state.members) ? Store.state.members : [];
+        const user = members.find(m => m.id == currentUserId);
         
         if(user) {
             const updatedUser = { ...user, email: newEmail };
