@@ -20,9 +20,14 @@ const App = {
     ],
 
     async init() {
-        console.log("App: Init v2.3 (Footer Logic)...");
+        console.log("App: Init v2.4 (Fixes & Bubbles)...");
         this.injectStyles();
         this.loadCurrentUser();
+
+        // Resize Listener für Responsive-Fixes
+        window.addEventListener('resize', () => {
+            if(this.state.currentUser) this.updateMobileLayout(Store.state.currentView);
+        });
 
         // Warte auf Store (max 2 Sekunden)
         let attempts = 0;
@@ -135,10 +140,11 @@ const App = {
         const footer = document.getElementById('mobile-bottom-nav');
 
         const isChat = viewName === 'messenger';
+        const isMobile = window.innerWidth < 768; // Nur auf Mobile wirksam
 
         // 1. Header & Padding
-        if (isChat) {
-            // --- CHAT MODE ---
+        if (isChat && isMobile) {
+            // --- CHAT MODE (Nur Mobile) ---
             if(header) header.classList.add('-translate-y-full'); // Header verstecken
             if(content) {
                 // Padding entfernen für Fullscreen Chat, unten Platz für Footer lassen
@@ -146,7 +152,7 @@ const App = {
                 content.classList.add('p-0', 'pb-24'); 
             }
         } else {
-            // --- APP MODE ---
+            // --- APP MODE oder DESKTOP ---
             if(header) header.classList.remove('-translate-y-full'); // Header zeigen
             if(content) {
                 // Normales Padding
@@ -156,7 +162,6 @@ const App = {
         }
 
         // 2. Footer Swipe Animation (via CSS Class 'chat-mode')
-        // Diese Klasse steuert den #nav-glider im CSS
         if(footer) {
             if(isChat) footer.classList.add('chat-mode');
             else footer.classList.remove('chat-mode');
