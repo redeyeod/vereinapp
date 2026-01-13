@@ -2,7 +2,7 @@
  * =============================================================================
  * MODERN MESSENGER VIEW (Responsive & Integrated)
  * Design: Glassmorphism / Tailwind Slate Theme
- * Features: Fullscreen Mobile Chat, Real-time Search, Attachments, Polls, Auto-Refresh
+ * Features: Fullscreen Mobile Chat, Real-time Search, Attachments, Polls
  * =============================================================================
  */
 
@@ -22,15 +22,13 @@ const MessengerView = {
         
         replyingTo: null,
         editingId: null,
-        scrollPositions: {},
-        
-        pollingInterval: null // Für Auto-Refresh
+        scrollPositions: {}
     },
 
     // --- CONFIG & THEME ---
     // Wir nutzen Tailwind Klassen, aber hier definieren wir dynamische Werte
     config: {
-        bgPatternOpacity: '0.03', // Subtiler Pattern Hintergrund
+        // bgPatternOpacity entfernt, da Hintergrund nun solid ist
     },
 
     // --- HELPER ---
@@ -50,13 +48,11 @@ const MessengerView = {
         const style = document.createElement('style');
         style.id = 'messenger-styles';
         
-        // SVG Pattern (Subtiles Hexagon/Dot Pattern passend zum Dark Mode)
-        const pattern = `data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%2394a3b8' fill-opacity='0.1' fill-rule='evenodd'%3E%3Ccircle cx='3' cy='3' r='3'/%3E%3Ccircle cx='13' cy='13' r='3'/%3E%3C/g%3E%3C/svg%3E`;
+        // Pattern entfernt -> Solid Background
 
         style.innerHTML = `
             .msg-bg-pattern {
-                background-color: #0f172a; /* Slate 900 */
-                background-image: url("${pattern}");
+                background-color: #0f172a; /* Slate 900 - Solid Dark Background */
             }
             /* Custom Scrollbar für Chat */
             .chat-scroll::-webkit-scrollbar { width: 4px; }
@@ -168,54 +164,13 @@ const MessengerView = {
 
         this.renderSidebarList();
         
-        // Auto-Refresh starten
-        this.startPolling();
+        // Auto-Refresh (Polling) entfernt wie gewünscht
         
         // Scroll to bottom after render if chat is open
         if (this.state.activeId || this.state.activeType === 'news') {
              // Kurzer Timeout für DOM Rendering
              setTimeout(() => this.scrollToBottom(false), 50);
         }
-    },
-
-    // --- POLLING (AUTO REFRESH) ---
-    startPolling() {
-        // Verhindert doppelte Intervalle
-        if (this.state.pollingInterval) return;
-        
-        // Check alle 3 Sekunden
-        this.state.pollingInterval = setInterval(async () => {
-            // Sicherheitscheck: Sind wir noch im Messenger?
-            if (!document.getElementById('messenger-chat-area')) {
-                this.stopPolling();
-                return;
-            }
-
-            // Daten neu laden (Store triggert dann App.onUpdate -> render)
-            if (typeof Store !== 'undefined' && Store.fetchTable) {
-                // Optimierung: Nur laden was nötig ist
-                if (this.state.activeType === 'private') {
-                    await Store.fetchTable('members');
-                } else if (this.state.activeType === 'group' || this.state.activeType === 'news') {
-                    await Store.fetchTable('groups');
-                    if(this.state.activeType === 'news') await Store.fetchTable('news');
-                } else {
-                    // Fallback: Alles laden
-                    await Store.fetchTable('members');
-                    await Store.fetchTable('groups');
-                }
-            }
-        }, 3000); 
-    },
-
-    stopPolling() {
-        if (this.state.pollingInterval) {
-            clearInterval(this.state.pollingInterval);
-            this.state.pollingInterval = null;
-        }
-        
-        // Clean up body classes when leaving view
-        document.body.classList.remove('messenger-mode', 'chat-active', 'list-active');
     },
 
     // --- SIDEBAR LOGIC ---
