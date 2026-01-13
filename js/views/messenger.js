@@ -17,7 +17,6 @@ const MessengerView = {
         showChatSearch: false,
         chatFilterTerm: '',
         showAttachMenu: false,
-        showEmojiPicker: false,
         mobileChatVisible: false, // Steuert Mobile View (List vs. Chat)
         
         replyingTo: null,
@@ -311,7 +310,6 @@ const MessengerView = {
         this.state.activeType = type;
         this.state.activeId = id;
         this.state.showAttachMenu = false;
-        this.state.showEmojiPicker = false;
         this.state.mobileChatVisible = true; // Trigger Mobile Fullscreen
         this.state.showChatSearch = false;
         this.state.chatFilterTerm = '';
@@ -448,11 +446,10 @@ const MessengerView = {
                 
                 <!-- Helper Menus (Absolute) -->
                 ${this.renderAttachMenu()}
-                ${this.renderEmojiPicker()}
 
                 <!-- Reply Preview -->
                 ${replyMsg ? `
-                <div class="flex items-center justify-between bg-dark-bg/50 p-2 rounded-lg border-l-2 border-brand-500 mb-2 animate-msg backdrop-blur-md">
+                <div id="reply-preview-box" class="flex items-center justify-between bg-dark-bg/50 p-2 rounded-lg border-l-2 border-brand-500 mb-2 animate-msg backdrop-blur-md">
                     <div class="text-xs overflow-hidden">
                         <span class="text-brand-500 font-bold block mb-0.5">${replyMsg.sender}</span>
                         <span class="text-dark-muted truncate block max-w-[200px]">${replyMsg.text}</span>
@@ -467,9 +464,6 @@ const MessengerView = {
                     </button>
                     
                     <form onsubmit="MessengerView.sendMessage(event)" class="flex-1 bg-dark-bg border border-white/10 focus-within:border-brand-500/50 rounded-2xl flex items-end px-3 py-2 transition-colors relative">
-                        <button type="button" onclick="MessengerView.toggleEmojiPicker()" class="text-dark-muted hover:text-yellow-400 transition-colors mr-2 mb-1">
-                            <i class="fa-regular fa-face-smile text-lg"></i>
-                        </button>
                         <input type="text" name="message" id="chat-input" autocomplete="off" placeholder="Nachricht..." 
                             class="flex-1 bg-transparent border-none text-white text-sm focus:outline-none placeholder-dark-muted/50 max-h-24 py-1">
                         <button type="submit" class="w-8 h-8 rounded-full bg-brand-600 hover:bg-brand-500 text-white shadow-glow flex items-center justify-center transition-all ml-2 mb-0.5 active:scale-90">
@@ -599,18 +593,6 @@ const MessengerView = {
         `;
     },
 
-    renderEmojiPicker() {
-        if (!this.state.showEmojiPicker) return '';
-        const emojis = ['👍','❤️','😂','😮','🙏','🔥','🎉','👋','😎','🤔','👀','💯','🚀','⚽','🍺','✅','❌','❓'];
-        return `
-            <div class="absolute bottom-20 left-2 bg-dark-card border border-white/10 rounded-2xl p-3 shadow-2xl z-40 w-64 animate-msg">
-                <div class="grid grid-cols-6 gap-1">
-                    ${emojis.map(e => `<button onclick="MessengerView.addEmoji('${e}')" class="p-2 hover:bg-white/10 rounded-lg transition text-xl">${e}</button>`).join('')}
-                </div>
-            </div>
-        `;
-    },
-
     // --- ACTIONS & UTILS ---
 
     toggleChatSearch() { this.state.showChatSearch = !this.state.showChatSearch; if(!this.state.showChatSearch) this.state.chatFilterTerm = ''; this.render(document.getElementById('content')); },
@@ -636,11 +618,16 @@ const MessengerView = {
         this.addMessageToChat({ text, type: 'text', replyToId: this.state.replyingTo });
         
         input.value = '';
-        this.state.replyingTo = null;
-        this.render(document.getElementById('content'));
         
-        // Focus zurück
-        setTimeout(() => document.getElementById('chat-input')?.focus(), 10);
+        // Reply Box visuell entfernen ohne kompletten Re-Render
+        if (this.state.replyingTo) {
+            this.state.replyingTo = null;
+            const replyBox = document.getElementById('reply-preview-box');
+            if(replyBox) replyBox.remove();
+        }
+        
+        // Focus behalten
+        input.focus();
     },
 
     addMessageToChat(msgData) {
@@ -662,7 +649,7 @@ const MessengerView = {
             read: false
         };
 
-        // Speichern (Mock Implementation der Logik aus deiner alten Datei)
+        // 1. Daten in Store/DB speichern
         if (this.state.activeType === 'group') {
              const g = Store.state.groups.find(x => x.id == this.state.activeId);
              if(g) {
@@ -677,8 +664,13 @@ const MessengerView = {
              if(otherUser) { if(!otherUser.privateChat) otherUser.privateChat=[]; otherUser.privateChat.push(newMsg); this.safeUpdate('members', otherUser); }
         }
         
-        // Scrollen
-        setTimeout(() => this.scrollToBottom(true), 50);
+        // 2. DOM direkt updaten (verhindert Re-Render & Wackeln)
+        const container = document.getElementById('msg-scroll-container');
+        if (container) {
+            const html = this.renderMessageBubble(newMsg);
+            container.insertAdjacentHTML('beforeend', html);
+            setTimeout(() => this.scrollToBottom(true), 10);
+        }
     },
 
     // Standard Features
@@ -687,9 +679,7 @@ const MessengerView = {
     deleteMessage(id) { /* Löschlogik analog zu deiner alten Datei */ this.render(document.getElementById('content')); },
     copyMessageText(txt) { navigator.clipboard.writeText(txt); if(window.App) window.App.showToast("Kopiert!"); },
     
-    toggleAttachMenu() { this.state.showAttachMenu = !this.state.showAttachMenu; this.state.showEmojiPicker = false; this.render(document.getElementById('content')); },
-    toggleEmojiPicker() { this.state.showEmojiPicker = !this.state.showEmojiPicker; this.state.showAttachMenu = false; this.render(document.getElementById('content')); },
-    addEmoji(e) { const inp = document.getElementById('chat-input'); if(inp) { inp.value += e; inp.focus(); } },
+    toggleAttachMenu() { this.state.showAttachMenu = !this.state.showAttachMenu; this.render(document.getElementById('content')); },
     
     handleAttachment(type) {
         if(type === 'poll') {
