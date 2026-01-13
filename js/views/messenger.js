@@ -22,11 +22,12 @@ const MessengerView = {
         
         replyingTo: null,
         editingId: null,
-        scrollPositions: {}
+        scrollPositions: {},
+        
+        observer: null // Wächter für Cleanup beim Verlassen
     },
 
     // --- CONFIG & THEME ---
-    // Wir nutzen Tailwind Klassen, aber hier definieren wir dynamische Werte
     config: {
         // bgPatternOpacity entfernt, da Hintergrund nun solid ist
     },
@@ -48,8 +49,6 @@ const MessengerView = {
         const style = document.createElement('style');
         style.id = 'messenger-styles';
         
-        // Pattern entfernt -> Solid Background
-
         style.innerHTML = `
             .msg-bg-pattern {
                 background-color: #0f172a; /* Slate 900 - Solid Dark Background */
@@ -118,9 +117,9 @@ const MessengerView = {
             }
         }
 
-        // Layout Template
+        // Layout Template - ID hinzugefügt für den Observer
         container.innerHTML = `
-            <div class="flex h-full w-full max-w-[1800px] mx-auto overflow-hidden bg-dark-card/50 backdrop-blur-sm md:rounded-2xl md:border md:border-white/5 shadow-2xl relative">
+            <div id="messenger-view-root" class="flex h-full w-full max-w-[1800px] mx-auto overflow-hidden bg-dark-card/50 backdrop-blur-sm md:rounded-2xl md:border md:border-white/5 shadow-2xl relative">
                 
                 <!-- 1. LEFT SIDEBAR (List) -->
                 <!-- Auf Mobile ausgeblendet, wenn Chat aktiv ist -->
@@ -162,9 +161,24 @@ const MessengerView = {
             </div>
         `;
 
+        // --- CLEANUP WATCHER ---
+        // Wenn der User die Seite verlässt, wird #messenger-view-root entfernt. 
+        // Der Observer merkt das und räumt die Body-Klassen auf.
+        if (!this.state.observer) {
+            this.state.observer = new MutationObserver((mutations) => {
+                if (!document.getElementById('messenger-view-root')) {
+                    document.body.classList.remove('messenger-mode', 'chat-active', 'list-active');
+                    if(this.state.observer) {
+                        this.state.observer.disconnect();
+                        this.state.observer = null;
+                    }
+                }
+            });
+            // Überwache den Parent Container (normalerweise #content)
+            this.state.observer.observe(container, { childList: true });
+        }
+
         this.renderSidebarList();
-        
-        // Auto-Refresh (Polling) entfernt wie gewünscht
         
         // Scroll to bottom after render if chat is open
         if (this.state.activeId || this.state.activeType === 'news') {
