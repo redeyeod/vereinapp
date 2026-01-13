@@ -2,7 +2,7 @@
  * =============================================================================
  * MODERN MESSENGER VIEW (Responsive & Integrated)
  * Design: Glassmorphism / Tailwind Slate Theme
- * Features: Fullscreen Mobile Chat, Real-time Search, Attachments, Polls
+ * Features: Fullscreen Mobile Chat, Real-time Search, Attachments, Polls, Auto-Refresh
  * =============================================================================
  */
 
@@ -22,7 +22,9 @@ const MessengerView = {
         
         replyingTo: null,
         editingId: null,
-        scrollPositions: {}
+        scrollPositions: {},
+        
+        pollingInterval: null // Für Auto-Refresh
     },
 
     // --- CONFIG & THEME ---
@@ -142,10 +144,50 @@ const MessengerView = {
 
         this.renderSidebarList();
         
+        // Auto-Refresh starten
+        this.startPolling();
+        
         // Scroll to bottom after render if chat is open
         if (this.state.activeId || this.state.activeType === 'news') {
              // Kurzer Timeout für DOM Rendering
              setTimeout(() => this.scrollToBottom(false), 50);
+        }
+    },
+
+    // --- POLLING (AUTO REFRESH) ---
+    startPolling() {
+        // Verhindert doppelte Intervalle
+        if (this.state.pollingInterval) return;
+        
+        // Check alle 3 Sekunden
+        this.state.pollingInterval = setInterval(async () => {
+            // Sicherheitscheck: Sind wir noch im Messenger?
+            if (!document.getElementById('messenger-chat-area')) {
+                this.stopPolling();
+                return;
+            }
+
+            // Daten neu laden (Store triggert dann App.onUpdate -> render)
+            if (typeof Store !== 'undefined' && Store.fetchTable) {
+                // Optimierung: Nur laden was nötig ist
+                if (this.state.activeType === 'private') {
+                    await Store.fetchTable('members');
+                } else if (this.state.activeType === 'group' || this.state.activeType === 'news') {
+                    await Store.fetchTable('groups');
+                    if(this.state.activeType === 'news') await Store.fetchTable('news');
+                } else {
+                    // Fallback: Alles laden
+                    await Store.fetchTable('members');
+                    await Store.fetchTable('groups');
+                }
+            }
+        }, 3000); 
+    },
+
+    stopPolling() {
+        if (this.state.pollingInterval) {
+            clearInterval(this.state.pollingInterval);
+            this.state.pollingInterval = null;
         }
     },
 
