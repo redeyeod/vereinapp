@@ -1,6 +1,6 @@
 /**
  * =============================================================================
- * APP CORE LOGIC (Refined & Mobile Ready)
+ * APP CORE LOGIC (Footer Navigation Ready)
  * Enthält: Routing, Auth, RBAC (Rechte), Mobile Menü Steuerung & UI Helper
  * =============================================================================
  */
@@ -20,7 +20,7 @@ const App = {
     ],
 
     async init() {
-        console.log("App: Init v2.1 (Stable)...");
+        console.log("App: Init v2.3 (Footer Logic)...");
         this.injectStyles();
         this.loadCurrentUser();
 
@@ -60,7 +60,7 @@ const App = {
         }
     },
 
-    // --- MOBILE MENU LOGIC ---
+    // --- MOBILE MENU LOGIC (Sidebar) ---
     toggleMobileMenu() {
         this.state.mobileMenuOpen = !this.state.mobileMenuOpen;
         const menu = document.getElementById('mobile-menu');
@@ -80,11 +80,108 @@ const App = {
         }
     },
 
+    // --- ROUTER & UI SWITCHING ---
+    router(viewName) {
+        if(this.state.mobileMenuOpen) this.toggleMobileMenu();
+        if(!viewName) viewName = 'dashboard';
+        
+        localStorage.setItem('vm_last_view', viewName);
+        if (Store && Store.state) Store.state.currentView = viewName;
+
+        // UI Anpassung für Mobile (Chat vs App Mode & Footer Animation)
+        this.updateMobileLayout(viewName);
+        this.updateActiveNav(viewName);
+        
+        const container = document.getElementById('content');
+        const subtitle = document.getElementById('page-subtitle');
+        if (container) container.innerHTML = ''; 
+        if(subtitle) subtitle.textContent = viewName.charAt(0).toUpperCase() + viewName.slice(1);
+
+        const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
+        
+        // Render View
+        let viewObj = window[viewObjName];
+        if(!viewObj) {
+            // Fallback Mapping
+            const map = { 
+                'dashboard': window.DashboardView, 
+                'members': window.MembersView, 
+                'groups': window.GroupsView, 
+                'calendar': window.CalendarView, 
+                'news': window.NewsView, 
+                'documents': window.DocsView, 
+                'messenger': window.MessengerView, 
+                'profile': window.ProfileView, 
+                'workhours': window.WorkHoursView,
+                'admin_roles': window.AdminRolesView
+            };
+            viewObj = map[viewName];
+        }
+
+        if (viewObj && typeof viewObj.render === 'function') {
+            container.classList.remove('fade-in');
+            void container.offsetWidth; 
+            viewObj.render(container);
+            container.classList.add('fade-in');
+        } else {
+            if(container) container.innerHTML = `<div class="p-10 text-center opacity-50">Lade ${viewName}...</div>`;
+        }
+    },
+
+    // WICHTIG: Steuert Header, Padding und Footer-Animation
+    updateMobileLayout(viewName) {
+        const header = document.getElementById('main-header');
+        const content = document.getElementById('content');
+        const footer = document.getElementById('mobile-bottom-nav');
+
+        const isChat = viewName === 'messenger';
+
+        // 1. Header & Padding
+        if (isChat) {
+            // --- CHAT MODE ---
+            if(header) header.classList.add('-translate-y-full'); // Header verstecken
+            if(content) {
+                // Padding entfernen für Fullscreen Chat, unten Platz für Footer lassen
+                content.classList.remove('pt-4', 'md:p-8');
+                content.classList.add('p-0', 'pb-24'); 
+            }
+        } else {
+            // --- APP MODE ---
+            if(header) header.classList.remove('-translate-y-full'); // Header zeigen
+            if(content) {
+                // Normales Padding
+                content.classList.add('pt-4', 'md:p-8', 'pb-28'); 
+                content.classList.remove('p-0', 'pb-24');
+            }
+        }
+
+        // 2. Footer Swipe Animation (via CSS Class 'chat-mode')
+        // Diese Klasse steuert den #nav-glider im CSS
+        if(footer) {
+            if(isChat) footer.classList.add('chat-mode');
+            else footer.classList.remove('chat-mode');
+        }
+    },
+
+    updateActiveNav(viewName) {
+        // Desktop Header Nav Highlights
+        document.querySelectorAll('nav button').forEach(btn => {
+            btn.classList.remove('text-brand-500', 'bg-brand-500/10', 'border-brand-500/20');
+            btn.classList.add('text-dark-muted', 'border-transparent');
+            
+            // Check if matches (lazy check via onclick attribute content)
+            if(btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(`'${viewName}'`)) {
+                btn.classList.remove('text-dark-muted', 'border-transparent');
+                btn.classList.add('text-brand-500', 'bg-brand-500/10', 'border-brand-500/20');
+            }
+        });
+    },
+
     // --- AUTHENTICATION ---
     async handleLogin(e) {
         if(e) e.preventDefault();
         const btn = e.target.querySelector('button');
-        const originalContent = btn.innerHTML;
+        const originalHTML = btn.innerHTML;
         btn.innerHTML = '<i class="fa-solid fa-circle-notch animate-spin"></i>';
         btn.disabled = true;
 
@@ -99,7 +196,6 @@ const App = {
             const { data, error } = await _sb.auth.signInWithPassword({ email, password });
 
             if (error) {
-                // Notfall-Admin Login (Hardcoded)
                 if(email === 'admin@gmail.com' && password === 'admin') {
                     this.loginSuccess({ id: '999', firstName: 'System', lastName: 'Admin', email: email, roles: ['Vorstand'] });
                     return;
@@ -109,8 +205,7 @@ const App = {
 
             if (data.session) {
                 localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
-                
-                // Versuch, User-Daten zu laden
+                // Reload Data
                 try {
                     if (Store.fetchTable) {
                         await Store.fetchTable('members');
@@ -119,53 +214,40 @@ const App = {
                     }
                 } catch(e) {}
                 
-                let user = null;
-                if (Store.state && Store.state.members) {
-                    user = Store.state.members.find(m => m.email.toLowerCase() === email);
-                }
-                // Fallback User, falls DB noch nicht geladen
+                let user = Store.state.members ? Store.state.members.find(m => m.email.toLowerCase() === email) : null;
                 if (!user) user = { id: data.user.id, email: email, firstName: 'User', roles: ['Mitglied'] };
 
                 this.loginSuccess(user);
             }
         } catch (err) {
-            if(errorDiv) {
-                errorDiv.textContent = err.message;
-                errorDiv.classList.remove('hidden');
-            }
+            if(errorDiv) { errorDiv.textContent = err.message; errorDiv.classList.remove('hidden'); }
             this.showToast(err.message, "error");
         } finally {
-            btn.innerHTML = originalContent;
+            btn.innerHTML = originalHTML;
             btn.disabled = false;
         }
     },
 
     loginSuccess(user) {
         if (!user) return;
-        
-        // Admin Force
         if (user.email.toLowerCase() === 'admin@gmail.com') {
             const currentRoles = this.getUserRoles(user);
             if(!currentRoles.includes('Vorstand')) {
-                 if(user.roles) user.roles.push('Vorstand');
-                 else user.roles = ['Vorstand'];
+                 if(user.roles) user.roles.push('Vorstand'); else user.roles = ['Vorstand'];
             }
         }
-        
         localStorage.setItem('vm_current_user_id', user.id);
         this.state.currentUser = user;
-        
         document.getElementById('auth-view').classList.add('hidden');
         document.getElementById('app-view').classList.remove('hidden');
         this.updateHeaderUI();
-        
         localStorage.removeItem('vm_last_view');
         this.router('dashboard');
         this.showToast(`Hallo ${user.firstName}!`, "success");
     },
 
     logout() {
-        if(confirm("Möchtest du dich abmelden?")) {
+        if(confirm("Abmelden?")) {
             localStorage.removeItem('vm_supabase_session');
             localStorage.removeItem('vm_current_user_id');
             localStorage.removeItem('vm_last_view'); 
@@ -176,189 +258,62 @@ const App = {
     loadCurrentUser() {
         const sessionStr = localStorage.getItem('vm_supabase_session');
         if(!sessionStr) return;
-
         try {
             const session = JSON.parse(sessionStr);
             if (!session || !session.user) return;
             const email = session.user.email.toLowerCase();
-            
             let user = { id: session.user.id, email: email, firstName: 'User', roles: ['Mitglied'] };
-            
-            if(Store && Store.state && Store.state.members && Store.state.members.length > 0) {
+            if(Store && Store.state.members.length > 0) {
                 const found = Store.state.members.find(m => m.email.toLowerCase() === email);
                 if(found) user = found;
             }
-            
             if (email === 'admin@gmail.com') {
                  const r = this.getUserRoles(user);
                  if(!r.includes('Vorstand')) {
-                      if(Array.isArray(user.roles)) user.roles.push('Vorstand');
-                      else user.roles = ['Vorstand'];
+                      if(Array.isArray(user.roles)) user.roles.push('Vorstand'); else user.roles = ['Vorstand'];
                  }
             }
-
             this.state.currentUser = user;
             this.updateHeaderUI();
-            
             document.getElementById('auth-view').classList.add('hidden');
             document.getElementById('app-view').classList.remove('hidden');
-        } catch(e) { console.error("Session Parse Error:", e); }
+        } catch(e) {}
     },
 
-    // Helper: Gibt immer ein Array zurück
     getUserRoles(user) {
         if (!user) return [];
         if (Array.isArray(user.roles)) return user.roles;
-        if (user.role) return [user.role]; // Legacy Support
+        if (user.role) return [user.role];
         return ['Mitglied'];
     },
 
     updateHeaderUI() {
         const user = this.state.currentUser;
         if(!user) return;
-        
         const roles = this.getUserRoles(user);
         const roleStr = roles.length > 1 ? `${roles[0]} +${roles.length-1}` : (roles[0] || 'Mitglied');
         
-        const nameEl = document.getElementById('current-user-name');
-        const roleEl = document.getElementById('current-user-role');
-        if(nameEl) nameEl.textContent = user.firstName;
-        if(roleEl) roleEl.textContent = roleStr;
-
-        const mobName = document.getElementById('mobile-user-name');
-        const mobRole = document.getElementById('mobile-user-role');
-        if(mobName) mobName.textContent = user.firstName + ' ' + (user.lastName || '');
-        if(mobRole) mobRole.textContent = roleStr;
+        const ids = ['current-user-name', 'mobile-user-name'];
+        ids.forEach(id => { const el = document.getElementById(id); if(el) el.textContent = user.firstName; });
+        
+        const rIds = ['current-user-role', 'mobile-user-role'];
+        rIds.forEach(id => { const el = document.getElementById(id); if(el) el.textContent = roleStr; });
 
         const isAdmin = this.can('admin_global');
         const adminBtn = document.getElementById('nav-btn-roles');
         const mobileAdmin = document.getElementById('mobile-admin-section');
-        
-        if(adminBtn) {
-            if(isAdmin) adminBtn.classList.remove('hidden');
-            else adminBtn.classList.add('hidden');
-        }
-        if(mobileAdmin) {
-             if(isAdmin) mobileAdmin.classList.remove('hidden');
-             else mobileAdmin.classList.add('hidden');
-        }
+        if(adminBtn) isAdmin ? adminBtn.classList.remove('hidden') : adminBtn.classList.add('hidden');
+        if(mobileAdmin) isAdmin ? mobileAdmin.classList.remove('hidden') : mobileAdmin.classList.add('hidden');
     },
 
-    // --- ROUTER ---
-    router(viewName) {
-        if(this.state.mobileMenuOpen) this.toggleMobileMenu();
-        if(!viewName) viewName = 'dashboard';
-        
-        localStorage.setItem('vm_last_view', viewName);
-        if (Store && Store.state) Store.state.currentView = viewName;
-        
-        // Navigation Active State Update & Mobile UI Logic
-        this.updateActiveNav(viewName);
-        this.updateMobileLayout(viewName);
-
-        const container = document.getElementById('content');
-        const subtitle = document.getElementById('page-subtitle');
-        if (container) container.innerHTML = ''; 
-        if(subtitle) subtitle.textContent = viewName.charAt(0).toUpperCase() + viewName.slice(1);
-
-        const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
-        
-        if (viewName === 'admin_roles') {
-             if (window.AdminRolesView) window.AdminRolesView.render(container);
-             else container.innerHTML = '<div class="p-10 text-center text-red-400">AdminRolesView script nicht geladen.</div>';
-        } else {
-            let viewObj = window[viewObjName];
-            if(!viewObj) {
-                const map = { 
-                    'dashboard': window.DashboardView, 
-                    'members': window.MembersView, 
-                    'groups': window.GroupsView, 
-                    'calendar': window.CalendarView, 
-                    'news': window.NewsView, 
-                    'documents': window.DocsView, 
-                    'messenger': window.MessengerView, 
-                    'profile': window.ProfileView, 
-                    'workhours': window.WorkHoursView
-                };
-                viewObj = map[viewName];
-            }
-
-            if (viewObj && typeof viewObj.render === 'function') {
-                container.classList.remove('fade-in');
-                void container.offsetWidth; // Trigger Reflow
-                viewObj.render(container);
-                container.classList.add('fade-in');
-            } else {
-                if(container) container.innerHTML = `<div class="p-10 text-center opacity-50">Lade ${viewName}...</div>`;
-            }
-        }
-    },
-
-    // NEU: Steuert die Mobile-Ansicht (Chat vs. App Header)
-    updateMobileLayout(viewName) {
-        const header = document.getElementById('main-header');
-        const content = document.getElementById('content');
-        const btnApp = document.getElementById('footer-btn-app');
-        const btnChat = document.getElementById('footer-btn-chat');
-
-        // Modus bestimmen
-        const isChat = viewName === 'messenger';
-
-        if (isChat) {
-            // --- CHAT MODE ---
-            // Header auf Mobile verstecken (Klasse -translate-y-full schiebt ihn nach oben weg)
-            if(header) header.classList.add('-translate-y-full'); 
-            
-            // Content Padding anpassen: Kein Header-Abstand oben, aber Footer-Abstand unten
-            if(content) {
-                content.classList.remove('pt-4', 'md:p-8');
-                content.classList.add('p-0', 'pb-16'); // pb-16 = Platz für Footer
-            }
-
-            // Footer Button Styles
-            if(btnApp) { btnApp.classList.remove('text-brand-500'); btnApp.classList.add('text-dark-muted'); }
-            if(btnChat) { btnChat.classList.remove('text-dark-muted'); btnChat.classList.add('text-brand-500'); }
-        } else {
-            // --- APP MODE ---
-            // Header zeigen
-            if(header) header.classList.remove('-translate-y-full');
-            
-            // Content Padding normal: Header-Abstand + Footer-Abstand
-            if(content) {
-                content.classList.add('pt-4', 'md:p-8', 'pb-20'); 
-                content.classList.remove('p-0', 'pb-16');
-            }
-
-            // Footer Button Styles
-            if(btnApp) { btnApp.classList.remove('text-dark-muted'); btnApp.classList.add('text-brand-500'); }
-            if(btnChat) { btnChat.classList.remove('text-brand-500'); btnChat.classList.add('text-dark-muted'); }
-        }
-    },
-
-    // Helper: Setzt den aktiven Navigations-Button im Header
-    updateActiveNav(viewName) {
-        document.querySelectorAll('nav button').forEach(btn => {
-            // Reset styles
-            btn.classList.remove('text-brand-500', 'bg-brand-500/10', 'border-brand-500/20');
-            btn.classList.add('text-dark-muted', 'border-transparent');
-            
-            // Check if matches (using onclick content as lazy check or custom attribute)
-            if(btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(`'${viewName}'`)) {
-                btn.classList.remove('text-dark-muted', 'border-transparent');
-                btn.classList.add('text-brand-500', 'bg-brand-500/10', 'border-brand-500/20');
-            }
-        });
-    },
-
-    // --- PERMISSIONS / RBAC SYSTEM ---
     can(action, context = null) {
         const user = this.state.currentUser;
-        if (!user) return false; 
+        if (!user) return false; 
         if (user.email.toLowerCase() === 'admin@gmail.com') return true;
 
         const allRolesConfig = (Store.state && Store.state.roles && Store.state.roles.length > 0) ? Store.state.roles : this.defaultRoles;
         const userRoleNames = this.getUserRoles(user);
-         
+        
         let aggregatedPermissions = new Set();
         userRoleNames.forEach(roleName => {
             const config = allRolesConfig.find(r => r.name === roleName);
@@ -379,7 +334,7 @@ const App = {
                 if (userGroups.includes(context)) return true;
             }
         }
-         
+        
         if (action === 'manage_groups') {
             if (context) return this.can('manage_group_content', context);
             const hasSpecificGroup = perms.some(p => p.startsWith('manage_group:'));
@@ -389,83 +344,49 @@ const App = {
         return false;
     },
 
-    // --- UI HELPERS ---
-    showAuthView() {
-        document.getElementById('auth-view').classList.remove('hidden');
-        document.getElementById('app-view').classList.add('hidden');
-    },
-
-    openModal(htmlContent) { 
-        const overlay = document.getElementById('modal-overlay');
-        const content = document.getElementById('modal-content');
-        if (overlay && content) {
-            content.innerHTML = htmlContent;
-            overlay.classList.remove('hidden');
-            overlay.classList.add('flex');
-             
-            content.classList.remove('opacity-100', 'scale-100');
-            content.classList.add('opacity-0', 'scale-95');
-             
-            setTimeout(() => {
-                content.classList.remove('opacity-0', 'scale-95');
-                content.classList.add('opacity-100', 'scale-100');
-            }, 10);
+    showAuthView() { document.getElementById('auth-view').classList.remove('hidden'); document.getElementById('app-view').classList.add('hidden'); },
+    
+    openModal(html) {
+        const ov = document.getElementById('modal-overlay');
+        const c = document.getElementById('modal-content');
+        if(ov && c) {
+            c.innerHTML = html;
+            ov.classList.remove('hidden'); ov.classList.add('flex');
+            setTimeout(() => { c.classList.remove('opacity-0', 'scale-95'); }, 10);
         }
     },
-
-    closeModal() { 
-        const overlay = document.getElementById('modal-overlay');
-        const content = document.getElementById('modal-content');
-        if (content) {
-            content.classList.remove('opacity-100', 'scale-100');
-            content.classList.add('opacity-0', 'scale-95');
-        }
-        setTimeout(() => {
-            if (overlay) {
-                overlay.classList.add('hidden');
-                overlay.classList.remove('flex');
-            }
-        }, 200);
+    
+    closeModal() {
+        const ov = document.getElementById('modal-overlay');
+        const c = document.getElementById('modal-content');
+        if(c) c.classList.add('opacity-0', 'scale-95');
+        setTimeout(() => { if(ov) ov.classList.add('hidden'); ov.classList.remove('flex'); }, 200);
     },
 
-    showToast(message, type = "info") { 
-        const toast = document.getElementById("toast"); 
-        if (!toast) return;
-        toast.className = "show";
-         
-        if (type === "error") { toast.style.borderColor = "#ef4444"; toast.style.color = "#fca5a5"; }
-        else if (type === "success") { toast.style.borderColor = "#10b981"; toast.style.color = "#6ee7b7"; }
-        else { toast.style.borderColor = "#3b82f6"; toast.style.color = "#fff"; }
-         
-        let icon = type === 'error' ? 'fa-circle-xmark' : (type === 'success' ? 'fa-circle-check' : 'fa-circle-info');
-        toast.innerHTML = `<div class="flex items-center gap-3"><i class="fa-solid ${icon}"></i><span>${message}</span></div>`;
-        setTimeout(() => { toast.className = ""; }, 3500); 
+    showToast(msg, type="info") {
+        const t = document.getElementById("toast");
+        if(!t) return;
+        t.className = "show";
+        t.style.borderColor = type === 'error' ? '#ef4444' : (type === 'success' ? '#10b981' : '#3b82f6');
+        t.innerHTML = `<span>${msg}</span>`;
+        setTimeout(() => t.className = "", 3000);
     },
 
     injectStyles() {
-        if (document.getElementById('app-dynamic-styles')) return;
-        const style = document.createElement('style');
-        style.id = 'app-dynamic-styles';
-        style.textContent = `
-            /* Fix für Mobile Viewports (Safari Adressleiste) */
+        if(document.getElementById('app-styles')) return;
+        const s = document.createElement('style');
+        s.id = 'app-styles';
+        s.textContent = `
             #app-view { height: 100dvh; }
             @supports (-webkit-touch-callout: none) { #app-view { height: -webkit-fill-available; } }
-            
-            /* Header Animation */
-            header { transition: all 0.3s ease; }
-            
-            .form-input { width: 100%; background-color: rgba(30, 41, 59, 0.5); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 0.75rem; padding: 0.75rem 1rem; color: #f1f5f9; outline: none; transition: all 0.2s; }
-            .form-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2); background-color: rgba(30, 41, 59, 0.8); }
-            .btn-primary { background-color: #2563eb; color: white; font-weight: 700; padding: 0.75rem 1.5rem; border-radius: 0.75rem; transition: all 0.2s; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2); }
-            .btn-primary:hover { background-color: #1d4ed8; transform: translateY(-1px); }
-            .btn-primary:active { transform: translateY(0); }
-            .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-            .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-            .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+            header { transition: transform 0.3s ease; }
+            .form-input { width: 100%; background: rgba(30,41,59,0.5); border: 1px solid #334155; border-radius: 0.75rem; padding: 0.75rem 1rem; color: #fff; }
+            .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+            .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
         `;
-        document.head.appendChild(style);
+        document.head.appendChild(s);
     }
 };
 
 window.App = App;
-document.addEventListener('DOMContentLoaded', () => { App.init().catch(e => console.error(e)); });
+document.addEventListener('DOMContentLoaded', () => App.init());
