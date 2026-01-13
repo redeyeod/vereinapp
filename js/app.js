@@ -1,428 +1,140 @@
-/**
- * =============================================================================
- * APP CORE LOGIC
- * Enthält: Routing, Auth, RBAC (Rechte), Mobile Menü Steuerung & UI Helper
- * =============================================================================
- */
-
-const App = {
-    state: {
-        lastRead: parseInt(localStorage.getItem('vm_last_read')) || 0,
-        theme: localStorage.getItem('vm_theme') || 'dark',
-        currentUser: null,
-        mobileMenuOpen: false
-    },
-
-    defaultRoles: [
-        { name: 'Vorstand', permissions: ['admin_global'] },
-        { name: 'Mitglied', permissions: [] }
-    ],
-
-    async init() {
-        console.log("App: Init v2.1 (Stable)...");
-        this.injectStyles();
-        this.loadCurrentUser();
-
-        // Warte auf Store (max 2 Sekunden)
-        let attempts = 0;
-        while (typeof Store === 'undefined' && attempts < 20) {
-            await new Promise(r => setTimeout(r, 100));
-            attempts++;
-        }
-
-        if (typeof Store === 'undefined') return console.error("Store missing");
-
-        try {
-            await Store.init();
-            // Daten vorladen, wenn möglich
-            if (Store.fetchTable) {
-                await Store.fetchTable('roles');
-                await Store.fetchTable('groups');
-            }
-            this.loadCurrentUser(); 
-        } catch (e) { console.error(e); }
-
-        // Globaler Listener für Daten-Updates
-        Store.onUpdate = () => {
-            if (!this.state.currentUser) return;
-            // Nur refreshen wenn keine Eingabe aktiv ist, um Tippen nicht zu unterbrechen
-            const activeTag = document.activeElement ? document.activeElement.tagName : '';
-            if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
-                this.router(Store.state.currentView || localStorage.getItem('vm_last_view') || 'dashboard');
-            }
-        };
-
-        if (this.state.currentUser) {
-            this.router(localStorage.getItem('vm_last_view') || 'dashboard');
-        } else {
-            this.showAuthView();
-        }
-    },
-
-    // --- MOBILE MENU LOGIC ---
-    toggleMobileMenu() {
-        this.state.mobileMenuOpen = !this.state.mobileMenuOpen;
-        const menu = document.getElementById('mobile-menu');
-        const backdrop = document.getElementById('mobile-menu-backdrop');
-        const drawer = document.getElementById('mobile-menu-drawer');
-        
-        if (this.state.mobileMenuOpen) {
-            // Öffnen
-            menu.classList.remove('pointer-events-none');
-            backdrop.classList.remove('opacity-0');
-            drawer.classList.remove('translate-x-full');
-        } else {
-            // Schließen
-            menu.classList.add('pointer-events-none');
-            backdrop.classList.add('opacity-0');
-            drawer.classList.add('translate-x-full');
-        }
-    },
-
-    // --- AUTHENTICATION ---
-    async handleLogin(e) {
-        if(e) e.preventDefault();
-        const btn = e.target.querySelector('button');
-        const originalContent = btn.innerHTML;
-        btn.innerHTML = '<i class="fa-solid fa-circle-notch animate-spin"></i>';
-        btn.disabled = true;
-
-        const fd = new FormData(e.target);
-        const email = fd.get('email').toLowerCase().trim();
-        const password = fd.get('password');
-        const errorDiv = document.getElementById('login-error');
-        if(errorDiv) errorDiv.classList.add('hidden');
-
-        try {
-            const _sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-            const { data, error } = await _sb.auth.signInWithPassword({ email, password });
-
-            if (error) {
-                // Notfall-Admin Login (Hardcoded)
-                if(email === 'admin@gmail.com' && password === 'admin') {
-                    this.loginSuccess({ id: '999', firstName: 'System', lastName: 'Admin', email: email, roles: ['Vorstand'] });
-                    return;
-                }
-                throw new Error("Logindaten ungültig.");
-            }
-
-            if (data.session) {
-                localStorage.setItem('vm_supabase_session', JSON.stringify(data.session));
-                
-                // Versuch, User-Daten zu laden
-                try {
-                    if (Store.fetchTable) {
-                        await Store.fetchTable('members');
-                        await Store.fetchTable('roles'); 
-                        await Store.fetchTable('groups');
+<!DOCTYPE html>
+<html lang="de" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VereinsManager</title>
+    
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] },
+                    colors: {
+                        dark: { bg: '#0f172a', card: '#1e293b', hover: '#334155', border: '#334155', text: '#f8fafc', muted: '#94a3b8' },
+                        brand: { 500: '#3b82f6', 600: '#2563eb' }
                     }
-                } catch(e) {}
-                
-                let user = null;
-                if (Store.state && Store.state.members) {
-                    user = Store.state.members.find(m => m.email.toLowerCase() === email);
                 }
-                // Fallback User, falls DB noch nicht geladen
-                if (!user) user = { id: data.user.id, email: email, firstName: 'User', roles: ['Mitglied'] };
-
-                this.loginSuccess(user);
-            }
-        } catch (err) {
-            if(errorDiv) {
-                errorDiv.textContent = err.message;
-                errorDiv.classList.remove('hidden');
-            }
-            this.showToast(err.message, "error");
-        } finally {
-            btn.innerHTML = originalContent;
-            btn.disabled = false;
-        }
-    },
-
-    loginSuccess(user) {
-        if (!user) return;
-        
-        // Admin Force
-        if (user.email.toLowerCase() === 'admin@gmail.com') {
-            const currentRoles = this.getUserRoles(user);
-            if(!currentRoles.includes('Vorstand')) {
-                 if(user.roles) user.roles.push('Vorstand');
-                 else user.roles = ['Vorstand'];
             }
         }
-        
-        localStorage.setItem('vm_current_user_id', user.id);
-        this.state.currentUser = user;
-        
-        document.getElementById('auth-view').classList.add('hidden');
-        document.getElementById('app-view').classList.remove('hidden');
-        this.updateHeaderUI();
-        
-        localStorage.removeItem('vm_last_view');
-        this.router('dashboard');
-        this.showToast(`Hallo ${user.firstName}!`, "success");
-    },
+    </script>
+    
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; -webkit-tap-highlight-color: transparent; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        #toast { visibility: hidden; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #1e293b; color: white; padding: 10px 20px; border-radius: 50px; opacity: 0; transition: opacity 0.3s; z-index: 100; border: 1px solid #334155; }
+        #toast.show { visibility: visible; opacity: 1; }
+    </style>
+</head>
+<body class="bg-dark-bg text-dark-text antialiased overflow-hidden selection:bg-brand-500/30">
 
-    logout() {
-        if(confirm("Möchtest du dich abmelden?")) {
-            localStorage.removeItem('vm_supabase_session');
-            localStorage.removeItem('vm_current_user_id');
-            localStorage.removeItem('vm_last_view'); 
-            location.reload();
-        }
-    },
+    <!-- LOGIN -->
+    <div id="auth-view" class="h-screen w-full flex items-center justify-center p-4 relative overflow-hidden">
+        <div class="relative z-10 w-full max-w-sm glass p-8 rounded-2xl shadow-2xl">
+            <h1 class="text-2xl font-bold text-white text-center mb-6">Login</h1>
+            <form onsubmit="App.handleLogin(event)" class="space-y-4">
+                <input type="email" name="email" required placeholder="Email" class="w-full bg-dark-bg/50 border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-brand-500">
+                <input type="password" name="password" required placeholder="Passwort" class="w-full bg-dark-bg/50 border border-dark-border rounded-xl px-4 py-3 text-white focus:outline-none focus:border-brand-500">
+                <button type="submit" class="w-full bg-brand-600 hover:bg-brand-500 text-white font-bold py-3 rounded-xl transition-all">Anmelden</button>
+            </form>
+            <div id="login-error" class="text-red-400 text-xs text-center mt-4 hidden"></div>
+        </div>
+    </div>
 
-    loadCurrentUser() {
-        const sessionStr = localStorage.getItem('vm_supabase_session');
-        if(!sessionStr) return;
-
-        try {
-            const session = JSON.parse(sessionStr);
-            if (!session || !session.user) return;
-            const email = session.user.email.toLowerCase();
+    <!-- MAIN APP -->
+    <div id="app-view" class="h-screen flex flex-col overflow-hidden hidden">
+        
+        <!-- HEADER (Desktop Only / Mobile controlled via JS) -->
+        <header id="main-header" class="h-16 md:h-20 bg-dark-card/90 backdrop-blur-xl border-b border-dark-border flex items-center justify-between px-4 md:px-8 z-30 sticky top-0 transition-transform duration-300">
+            <button onclick="App.router('dashboard')" class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-brand-600 to-brand-500 flex items-center justify-center text-white"><i class="fa-solid fa-users-rectangle"></i></div>
+                <h1 class="text-lg font-bold text-white hidden sm:block">VereinApp</h1>
+            </button>
             
-            let user = { id: session.user.id, email: email, firstName: 'User', roles: ['Mitglied'] };
+            <nav class="hidden md:flex items-center gap-1 bg-dark-bg/50 p-1 rounded-full border border-white/5">
+                <button onclick="App.router('dashboard')" class="px-4 py-2 rounded-full text-dark-muted hover:text-white transition-colors"><i class="fa-solid fa-house"></i></button>
+                <button onclick="App.router('members')" class="px-4 py-2 rounded-full text-dark-muted hover:text-white transition-colors"><i class="fa-solid fa-users"></i></button>
+                <button onclick="App.router('messenger')" class="px-4 py-2 rounded-full text-dark-muted hover:text-white transition-colors"><i class="fa-solid fa-comments"></i></button>
+            </nav>
+
+            <div class="flex items-center gap-4">
+                <button onclick="App.router('profile')" class="hidden md:flex items-center gap-3 text-right group">
+                    <div><p id="current-user-name" class="text-sm font-bold text-white">User</p><p id="current-user-role" class="text-[10px] text-dark-muted uppercase">Rolle</p></div>
+                    <div class="w-9 h-9 rounded-full bg-dark-hover flex items-center justify-center border border-transparent group-hover:border-brand-500 transition-all"><i class="fa-solid fa-user text-dark-muted"></i></div>
+                </button>
+                <button onclick="App.toggleMobileMenu()" class="md:hidden text-white text-xl p-2"><i class="fa-solid fa-bars"></i></button>
+            </div>
+        </header>
+
+        <!-- CONTENT -->
+        <main id="content" class="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 scroll-smooth w-full relative">
+            <!-- Dynamic Content -->
+        </main>
+
+        <!-- MOBILE BOTTOM FOOTER (NEW) -->
+        <div id="mobile-bottom-nav" class="md:hidden fixed bottom-0 left-0 w-full h-16 bg-dark-card border-t border-dark-border flex items-center justify-around z-50 pb-safe shadow-2xl">
+            <!-- App Button: Loads Dashboard or last App view -->
+            <button id="footer-btn-app" onclick="App.router('dashboard')" class="flex flex-col items-center justify-center w-full h-full text-brand-500 transition-colors">
+                <i class="fa-solid fa-layer-group text-xl mb-1"></i>
+                <span class="text-[10px] font-bold uppercase tracking-wider">App</span>
+            </button>
             
-            if(Store && Store.state && Store.state.members && Store.state.members.length > 0) {
-                const found = Store.state.members.find(m => m.email.toLowerCase() === email);
-                if(found) user = found;
-            }
-            
-            if (email === 'admin@gmail.com') {
-                 const r = this.getUserRoles(user);
-                 if(!r.includes('Vorstand')) {
-                      if(Array.isArray(user.roles)) user.roles.push('Vorstand');
-                      else user.roles = ['Vorstand'];
-                 }
-            }
+            <!-- Chat Button: Loads Messenger -->
+            <button id="footer-btn-chat" onclick="App.router('messenger')" class="flex flex-col items-center justify-center w-full h-full text-dark-muted hover:text-white transition-colors">
+                <i class="fa-solid fa-comments text-xl mb-1"></i>
+                <span class="text-[10px] font-bold uppercase tracking-wider">Chat</span>
+            </button>
+        </div>
 
-            this.state.currentUser = user;
-            this.updateHeaderUI();
-            
-            document.getElementById('auth-view').classList.add('hidden');
-            document.getElementById('app-view').classList.remove('hidden');
-        } catch(e) { console.error("Session Parse Error:", e); }
-    },
+        <!-- Mobile Menu Drawer (Overlay) -->
+        <div id="mobile-menu" class="fixed inset-0 z-[60] pointer-events-none">
+            <div id="mobile-menu-backdrop" onclick="App.toggleMobileMenu()" class="absolute inset-0 bg-black/80 opacity-0 transition-opacity duration-300"></div>
+            <div id="mobile-menu-drawer" class="absolute right-0 top-0 h-full w-[80%] bg-dark-bg border-l border-dark-border transform translate-x-full transition-transform duration-300 pointer-events-auto flex flex-col p-4">
+                <div class="flex justify-end mb-6"><button onclick="App.toggleMobileMenu()" class="p-2 text-white"><i class="fa-solid fa-times text-xl"></i></button></div>
+                <div class="space-y-4">
+                    <button onclick="App.router('profile')" class="flex items-center gap-3 p-3 bg-dark-card rounded-xl border border-dark-border w-full"><i class="fa-solid fa-user text-brand-500"></i> <span class="text-white font-bold">Mein Profil</span></button>
+                    <div class="h-px bg-dark-border"></div>
+                    <button onclick="App.router('dashboard')" class="block w-full text-left p-2 text-dark-muted hover:text-white">Dashboard</button>
+                    <button onclick="App.router('members')" class="block w-full text-left p-2 text-dark-muted hover:text-white">Mitglieder</button>
+                    <button onclick="App.router('groups')" class="block w-full text-left p-2 text-dark-muted hover:text-white">Gruppen</button>
+                    <button onclick="App.logout()" class="block w-full text-left p-2 text-red-400 mt-4">Abmelden</button>
+                </div>
+            </div>
+        </div>
 
-    // Helper: Gibt immer ein Array zurück
-    getUserRoles(user) {
-        if (!user) return [];
-        if (Array.isArray(user.roles)) return user.roles;
-        if (user.role) return [user.role]; // Legacy Support
-        return ['Mitglied'];
-    },
+    </div>
 
-    updateHeaderUI() {
-        const user = this.state.currentUser;
-        if(!user) return;
-        
-        const roles = this.getUserRoles(user);
-        const roleStr = roles.length > 1 ? `${roles[0]} +${roles.length-1}` : (roles[0] || 'Mitglied');
-        
-        const nameEl = document.getElementById('current-user-name');
-        const roleEl = document.getElementById('current-user-role');
-        if(nameEl) nameEl.textContent = user.firstName;
-        if(roleEl) roleEl.textContent = roleStr;
+    <!-- Modals & Toasts -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] hidden flex items-center justify-center p-4">
+        <div class="glass border border-white/10 rounded-2xl shadow-2xl w-full max-w-md p-0 opacity-0 transition-all transform scale-95" id="modal-content"></div>
+    </div>
+    <div id="toast"></div>
 
-        const mobName = document.getElementById('mobile-user-name');
-        const mobRole = document.getElementById('mobile-user-role');
-        if(mobName) mobName.textContent = user.firstName + ' ' + (user.lastName || '');
-        if(mobRole) mobRole.textContent = roleStr;
-
-        const isAdmin = this.can('admin_global');
-        const adminBtn = document.getElementById('nav-btn-roles');
-        const mobileAdmin = document.getElementById('mobile-admin-section');
-        
-        if(adminBtn) {
-            if(isAdmin) adminBtn.classList.remove('hidden');
-            else adminBtn.classList.add('hidden');
-        }
-        if(mobileAdmin) {
-             if(isAdmin) mobileAdmin.classList.remove('hidden');
-             else mobileAdmin.classList.add('hidden');
-        }
-    },
-
-    // --- ROUTER ---
-    router(viewName) {
-        if(this.state.mobileMenuOpen) this.toggleMobileMenu();
-        if(!viewName) viewName = 'dashboard';
-        
-        localStorage.setItem('vm_last_view', viewName);
-        if (Store && Store.state) Store.state.currentView = viewName;
-        
-        // Navigation Active State Update
-        this.updateActiveNav(viewName);
-
-        const container = document.getElementById('content');
-        const subtitle = document.getElementById('page-subtitle');
-        if (container) container.innerHTML = ''; 
-        if(subtitle) subtitle.textContent = viewName.charAt(0).toUpperCase() + viewName.slice(1);
-
-        const viewObjName = viewName.charAt(0).toUpperCase() + viewName.slice(1) + 'View';
-        
-        if (viewName === 'admin_roles') {
-             if (window.AdminRolesView) window.AdminRolesView.render(container);
-             else container.innerHTML = '<div class="p-10 text-center text-red-400">AdminRolesView script nicht geladen.</div>';
-        } else {
-            let viewObj = window[viewObjName];
-            if(!viewObj) {
-                const map = { 
-                    'dashboard': window.DashboardView, 
-                    'members': window.MembersView, 
-                    'groups': window.GroupsView, 
-                    'calendar': window.CalendarView, 
-                    'news': window.NewsView, 
-                    'documents': window.DocsView, 
-                    'messenger': window.MessengerView, 
-                    'profile': window.ProfileView, 
-                    'workhours': window.WorkHoursView
-                };
-                viewObj = map[viewName];
-            }
-
-            if (viewObj && typeof viewObj.render === 'function') {
-                container.classList.remove('fade-in');
-                void container.offsetWidth; // Trigger Reflow
-                viewObj.render(container);
-                container.classList.add('fade-in');
-            } else {
-                if(container) container.innerHTML = `<div class="p-10 text-center opacity-50">Lade ${viewName}...</div>`;
-            }
-        }
-    },
-
-    // Helper: Setzt den aktiven Navigations-Button im Header
-    updateActiveNav(viewName) {
-        document.querySelectorAll('nav button').forEach(btn => {
-            // Reset styles
-            btn.classList.remove('text-brand-500', 'bg-brand-500/10', 'border-brand-500/20');
-            btn.classList.add('text-dark-muted', 'border-transparent');
-            
-            // Check if matches (using onclick content as lazy check or custom attribute)
-            if(btn.getAttribute('onclick').includes(`'${viewName}'`)) {
-                btn.classList.remove('text-dark-muted', 'border-transparent');
-                btn.classList.add('text-brand-500', 'bg-brand-500/10', 'border-brand-500/20');
-            }
-        });
-    },
-
-    // --- PERMISSIONS / RBAC SYSTEM ---
-    can(action, context = null) {
-        const user = this.state.currentUser;
-        if (!user) return false; 
-        if (user.email.toLowerCase() === 'admin@gmail.com') return true;
-
-        const allRolesConfig = (Store.state && Store.state.roles && Store.state.roles.length > 0) ? Store.state.roles : this.defaultRoles;
-        const userRoleNames = this.getUserRoles(user);
-        
-        let aggregatedPermissions = new Set();
-        userRoleNames.forEach(roleName => {
-            const config = allRolesConfig.find(r => r.name === roleName);
-            if (config && Array.isArray(config.permissions)) {
-                config.permissions.forEach(p => aggregatedPermissions.add(p));
-            }
-        });
-        const perms = Array.from(aggregatedPermissions);
-
-        if (perms.includes('admin_global')) return true;
-        if (perms.includes(action)) return true;
-
-        if (action === 'manage_group_content' && context) {
-            if (perms.includes('manage_all_groups')) return true;
-            if (perms.includes(`manage_group:${context}`)) return true;
-            if (perms.includes('manage_own_group')) {
-                const userGroups = Array.isArray(user.groups) ? user.groups : [];
-                if (userGroups.includes(context)) return true;
-            }
-        }
-        
-        if (action === 'manage_groups') {
-            if (context) return this.can('manage_group_content', context);
-            const hasSpecificGroup = perms.some(p => p.startsWith('manage_group:'));
-            return perms.includes('manage_all_groups') || perms.includes('manage_own_group') || hasSpecificGroup;
-        }
-
-        return false;
-    },
-
-    // --- UI HELPERS ---
-    showAuthView() {
-        document.getElementById('auth-view').classList.remove('hidden');
-        document.getElementById('app-view').classList.add('hidden');
-    },
-
-    openModal(htmlContent) { 
-        const overlay = document.getElementById('modal-overlay');
-        const content = document.getElementById('modal-content');
-        if (overlay && content) {
-            content.innerHTML = htmlContent;
-            overlay.classList.remove('hidden');
-            overlay.classList.add('flex');
-            
-            content.classList.remove('opacity-100', 'scale-100');
-            content.classList.add('opacity-0', 'scale-95');
-            
-            setTimeout(() => {
-                content.classList.remove('opacity-0', 'scale-95');
-                content.classList.add('opacity-100', 'scale-100');
-            }, 10);
-        }
-    },
-
-    closeModal() { 
-        const overlay = document.getElementById('modal-overlay');
-        const content = document.getElementById('modal-content');
-        if (content) {
-            content.classList.remove('opacity-100', 'scale-100');
-            content.classList.add('opacity-0', 'scale-95');
-        }
-        setTimeout(() => {
-            if (overlay) {
-                overlay.classList.add('hidden');
-                overlay.classList.remove('flex');
-            }
-        }, 200);
-    },
-
-    showToast(message, type = "info") { 
-        const toast = document.getElementById("toast"); 
-        if (!toast) return;
-        toast.className = "show";
-        
-        if (type === "error") { toast.style.borderColor = "#ef4444"; toast.style.color = "#fca5a5"; }
-        else if (type === "success") { toast.style.borderColor = "#10b981"; toast.style.color = "#6ee7b7"; }
-        else { toast.style.borderColor = "#3b82f6"; toast.style.color = "#fff"; }
-        
-        let icon = type === 'error' ? 'fa-circle-xmark' : (type === 'success' ? 'fa-circle-check' : 'fa-circle-info');
-        toast.innerHTML = `<div class="flex items-center gap-3"><i class="fa-solid ${icon}"></i><span>${message}</span></div>`;
-        setTimeout(() => { toast.className = ""; }, 3500); 
-    },
-
-    injectStyles() {
-        if (document.getElementById('app-dynamic-styles')) return;
-        const style = document.createElement('style');
-        style.id = 'app-dynamic-styles';
-        style.textContent = `
-            /* Fix für Mobile Viewports (Safari Adressleiste) */
-            #app-view { height: 100dvh; }
-            @supports (-webkit-touch-callout: none) { #app-view { height: -webkit-fill-available; } }
-            
-            /* Header Animation */
-            header { transition: all 0.3s ease; }
-            
-            .form-input { width: 100%; background-color: rgba(30, 41, 59, 0.5); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 0.75rem; padding: 0.75rem 1rem; color: #f1f5f9; outline: none; transition: all 0.2s; }
-            .form-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2); background-color: rgba(30, 41, 59, 0.8); }
-            .btn-primary { background-color: #2563eb; color: white; font-weight: 700; padding: 0.75rem 1.5rem; border-radius: 0.75rem; transition: all 0.2s; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2); }
-            .btn-primary:hover { background-color: #1d4ed8; transform: translateY(-1px); }
-            .btn-primary:active { transform: translateY(0); }
-            .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-            .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-            .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-        `;
-        document.head.appendChild(style);
-    }
-};
-
-window.App = App;
-document.addEventListener('DOMContentLoaded', () => { App.init().catch(e => console.error(e)); });
+    <!-- Load Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/store.js"></script>
+    <script src="js/views/dashboard.js"></script>
+    <script src="js/views/members.js"></script>
+    <script src="js/views/groups.js"></script>
+    <script src="js/views/calendar.js"></script>
+    <script src="js/views/news.js"></script>
+    <script src="js/views/documents.js"></script>
+    <script src="js/views/messenger.js"></script>
+    <script src="js/views/profile.js"></script>
+    <script src="js/views/workhours.js"></script>
+    <script src="js/views/admin_roles.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
