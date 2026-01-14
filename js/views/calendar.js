@@ -88,7 +88,7 @@ const CalendarView = {
                 <div class="flex-1 min-w-0">
                     <div class="flex justify-between items-start">
                         <h4 class="text-white font-bold text-base truncate pr-2 group-hover:text-brand-400 transition-colors">${e.title}</h4>
-                        ${e.comment ? '<i class="fa-solid fa-circle-info text-brand-500 text-[8px] mt-1.5 animate-pulse"></i>' : ''}
+                        ${e.description ? '<i class="fa-solid fa-align-left text-brand-500 text-[10px] mt-1.5 opacity-70"></i>' : ''}
                     </div>
                     
                     <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-dark-muted mt-1.5 items-center">
@@ -121,7 +121,7 @@ const CalendarView = {
 
         // Links im Text klickbar machen
         const formatDescription = (text) => {
-            if(!text) return '<span class="text-dark-muted italic text-sm">Keine Beschreibung vorhanden.</span>';
+            if(!text) return '<span class="text-dark-muted italic text-sm">Keine weiteren Details vorhanden.</span>';
             let formatted = text.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-brand-400 hover:underline break-all">$1</a>');
             return formatted.replace(/\n/g, '<br>');
         };
@@ -170,18 +170,10 @@ const CalendarView = {
                         </div>` : ''}
                     </div>
 
-                    <!-- Notiz (Kurz) -->
-                    ${e.comment ? `
-                    <div class="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10 flex gap-3">
-                        <i class="fa-solid fa-circle-info text-amber-500 mt-0.5 flex-shrink-0"></i>
-                        <p class="text-sm text-amber-200/80 italic leading-relaxed">${e.comment}</p>
-                    </div>` : ''}
-
                     <!-- Beschreibung (Lang) -->
                     <div>
                         <div class="flex justify-between items-center mb-3">
-                            <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider">Details</h4>
-                            ${canManage ? `<button onclick="CalendarView.openDescriptionModal(${e.id})" class="text-xs text-brand-400 hover:text-white transition-colors flex items-center gap-1"><i class="fa-solid fa-pen"></i> Bearbeiten</button>` : ''}
+                            <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider">Beschreibung & Details</h4>
                         </div>
                         <div class="bg-dark-bg p-5 rounded-2xl border border-dark-border text-dark-text leading-relaxed text-sm shadow-inner min-h-[100px]">
                             ${formatDescription(e.description)}
@@ -209,41 +201,6 @@ const CalendarView = {
         if(modalContainer) {
             modalContainer.classList.remove('max-w-md');
             modalContainer.classList.add('max-w-3xl', 'w-full', 'max-h-[90vh]');
-        }
-    },
-
-    /**
-     * Modal NUR für die lange Beschreibung (Editor)
-     */
-    openDescriptionModal(id) {
-        if(!App.can('manage_events')) return;
-
-        const e = Store.state.events.find(ev => ev.id === id);
-        if(!e) return;
-
-        const html = `
-            <div class="p-6 h-full flex flex-col">
-                <div class="flex justify-between items-center mb-4 border-b border-dark-border pb-4">
-                    <h3 class="text-lg font-bold text-white">Beschreibung bearbeiten</h3>
-                    <button onclick="CalendarView.openDetailModal(${id})" class="text-dark-muted hover:text-white p-2 flex items-center gap-2 text-xs font-bold bg-dark-bg rounded-lg border border-dark-border transition-colors">
-                        <i class="fa-solid fa-arrow-left"></i> Zurück
-                    </button>
-                </div>
-                
-                <form onsubmit="CalendarView.handleDescriptionUpdate(event, ${id})" class="flex-1 flex flex-col">
-                    <div class="flex-1 mb-4 relative">
-                        <textarea name="description" class="w-full h-full bg-dark-bg border border-dark-border rounded-xl p-4 text-white focus:outline-none focus:border-brand-500 transition-colors font-mono text-sm resize-none custom-scrollbar" placeholder="Hier können Details, Links und weitere Infos stehen...">${e.description || ''}</textarea>
-                    </div>
-                    <button type="submit" class="btn-primary w-full py-3">Speichern & Zurück</button>
-                </form>
-            </div>
-        `;
-        App.openModal(html);
-
-        const modalContainer = document.getElementById('modal-content');
-        if(modalContainer) {
-            modalContainer.classList.remove('max-w-md');
-            modalContainer.classList.add('max-w-4xl', 'w-full', 'h-[80vh]');
         }
     },
 
@@ -304,8 +261,8 @@ const CalendarView = {
                     </div>
 
                     <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Kurzbeschreibung (Vorschau)</label>
-                        <input type="text" name="comment" class="form-input" placeholder="Z.B. 'Wichtig: Sportkleidung mitbringen'">
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Details / Beschreibung</label>
+                        <textarea name="description" rows="4" class="form-input resize-none custom-scrollbar" placeholder="Details zum Event..."></textarea>
                     </div>
                     
                     <button type="submit" class="btn-primary w-full mt-4">Termin erstellen</button>
@@ -367,8 +324,8 @@ const CalendarView = {
                     </div>
 
                     <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Kurzbeschreibung</label>
-                        <input type="text" name="comment" value="${e.comment || ''}" class="form-input">
+                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Details / Beschreibung</label>
+                        <textarea name="description" rows="5" class="form-input resize-none custom-scrollbar">${e.description || ''}</textarea>
                     </div>
                     
                     <button type="submit" class="btn-primary w-full mt-4">Änderungen speichern</button>
@@ -393,8 +350,7 @@ const CalendarView = {
             time: isAllDay ? null : fd.get('time'),
             allDay: isAllDay,
             location: fd.get('location'),
-            comment: fd.get('comment'),
-            description: '', 
+            description: fd.get('description'), 
             group: null 
         };
         
@@ -423,7 +379,8 @@ const CalendarView = {
                 time: isAllDay ? null : fd.get('time'),
                 allDay: isAllDay,
                 location: fd.get('location'),
-                comment: fd.get('comment')
+                description: fd.get('description'),
+                comment: '' // Kurzbeschreibung entfernt, Feld leeren
             };
 
             await Store.update('events', updatedEvent);
@@ -433,30 +390,8 @@ const CalendarView = {
             if(index !== -1) Store.state.events[index] = updatedEvent;
 
             App.closeModal();
-            App.showToast('Stammdaten gespeichert');
+            App.showToast('Termin gespeichert');
             // Zurück zur Detail-Ansicht um Änderungen zu sehen
-            this.openDetailModal(id);
-        }
-    },
-
-    async handleDescriptionUpdate(e, id) {
-        e.preventDefault();
-        const fd = new FormData(e.target);
-        const originalEvent = Store.state.events.find(ev => ev.id === id);
-        
-        if (originalEvent) {
-            const updatedEvent = {
-                ...originalEvent,
-                description: fd.get('description')
-            };
-
-            await Store.update('events', updatedEvent);
-            
-            // Lokales Update
-            const index = Store.state.events.indexOf(originalEvent);
-            if(index !== -1) Store.state.events[index] = updatedEvent;
-
-            App.showToast('Inhalt gespeichert');
             this.openDetailModal(id);
         }
     }
