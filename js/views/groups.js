@@ -450,7 +450,10 @@ const GroupsView = {
                         <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Name</label>
                         <input name="name" class="form-input" placeholder="z.B. Elferrat" required>
                     </div>
-                    <button class="btn-primary w-full mt-2">Erstellen</button>
+                    <div class="flex gap-3 pt-2">
+                        <button type="button" onclick="App.closeModal()" class="flex-1 py-3 border border-dark-border rounded-xl text-dark-muted hover:text-white transition-colors">Abbrechen</button>
+                        <button type="submit" class="flex-1 btn-primary">Erstellen</button>
+                    </div>
                 </form>
             </div>`;
         App.openModal(html); 
