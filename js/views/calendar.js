@@ -383,9 +383,10 @@ const CalendarView = {
                 comment: '' // Kurzbeschreibung entfernt, Feld leeren
             };
 
-            await Store.update('events', updatedEvent);
+            // Speichern mit safeUpdate statt Store.update
+            await this.safeUpdate('events', updatedEvent);
             
-            // Lokales Update für sofortiges Feedback (Optional, da Realtime oft schnell genug ist)
+            // Lokales Update für sofortiges Feedback (Optional)
             const index = Store.state.events.indexOf(originalEvent);
             if(index !== -1) Store.state.events[index] = updatedEvent;
 
@@ -393,6 +394,46 @@ const CalendarView = {
             App.showToast('Termin gespeichert');
             // Zurück zur Detail-Ansicht um Änderungen zu sehen
             this.openDetailModal(id);
+        }
+    },
+
+    /**
+     * Führt ein sicheres Datenbank-Update durch (entfernt ID aus Payload)
+     */
+    async safeUpdate(table, item) {
+        // Fallback wenn Supabase nicht global verfügbar ist
+        if (typeof supabase === 'undefined' || typeof CONFIG === 'undefined') {
+            if(window.Store) Store.update(table, item);
+            return;
+        }
+
+        try {
+            // Hole Session für Auth Header
+            const sessionStr = localStorage.getItem('vm_supabase_session');
+            const headers = {};
+            if(sessionStr) { 
+                const session = JSON.parse(sessionStr); 
+                if(session?.access_token) headers.Authorization = `Bearer ${session.access_token}`; 
+            }
+
+            const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, { global: { headers } });
+            
+            // WICHTIG: ID aus dem Update-Payload entfernen!
+            const payload = { ...item }; 
+            delete payload.id; 
+            
+            const { error } = await sb.from(table).update(payload).eq('id', item.id);
+            
+            if (error) {
+                console.error("DB Update Error:", error);
+                if(window.App) window.App.showToast(error.message, 'error');
+            } else {
+                if(window.Store && window.Store.fetchTable) window.Store.fetchTable(table);
+            }
+        } catch(e) { 
+            console.error(e); 
+            // Fallback
+            if(window.Store) Store.update(table, item);
         }
     }
 };
