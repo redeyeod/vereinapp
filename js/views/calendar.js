@@ -1,420 +1,741 @@
 /**
  * =============================================================================
- * CALENDAR VIEW (Clean & Mobile First)
- * Verwaltung der Termine und Veranstaltungen (Global)
+ * MODERN MESSENGER VIEW (Responsive & Integrated)
+ * Design: Glassmorphism / Tailwind Slate Theme
+ * Features: Fullscreen Mobile Chat, Real-time Search, Attachments, Polls
  * =============================================================================
  */
 
-const CalendarView = {
-    /**
-     * Rendert die Kalender-Ansicht
-     * @param {HTMLElement} container 
-     */
-    render(container) {
-        // Sicherheits-Check: Falls Events noch undefined sind
-        const allEvents = Store.state.events || [];
-
-        // Filtere Events: NUR globale Events anzeigen (keine Gruppen-Events)
-        // Sortiere Events nach Datum (nächste zuerst)
-        const sortedEvents = allEvents
-            .filter(e => !e.group) // Nur Events ohne Gruppe
-            .sort((a, b) => new Date(a.date) - new Date(b.date));
+const MessengerView = {
+    // --- STATE ---
+    state: {
+        activeType: 'news', // 'news', 'group', 'private'
+        activeId: 0,        // 0 = kein Chat
+        filterTerm: '',     // Suche in der Sidebar
         
-        // BERECHTIGUNGS-CHECK:
-        // Nutzt jetzt das zentrale Rechtesystem. Jede Rolle mit 'manage_events' darf hier arbeiten.
-        const canManage = App.can('manage_events');
-
-        // Add Button: Kompakt und modern
-        const addButton = canManage 
-            ? `<button onclick="CalendarView.openAddModal()" class="pl-3 pr-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-brand-500/20 transition-all flex items-center gap-2">
-                 <i class="fa-solid fa-plus"></i> <span class="hidden sm:inline">Termin</span><span class="sm:hidden">Neu</span>
-               </button>`
-            : '';
-
-        container.innerHTML = `
-            <div class="fade-in space-y-6 pb-20">
-                <!-- Header -->
-                <div class="flex justify-between items-end px-1">
-                    <div>
-                        <h2 class="text-2xl md:text-3xl font-bold text-white">Kalender</h2>
-                        <p class="text-dark-muted text-sm mt-1">Alle öffentlichen Veranstaltungen.</p>
-                    </div>
-                    ${addButton}
-                </div>
-
-                <!-- Event List -->
-                <div class="space-y-3">
-                    ${sortedEvents.length > 0 ? sortedEvents.map(e => this.renderEventCard(e, canManage)).join('') : 
-                    `<div class="flex flex-col items-center justify-center py-20 text-center border border-dashed border-dark-border rounded-3xl bg-dark-bg/30">
-                        <div class="w-16 h-16 bg-dark-card rounded-full flex items-center justify-center mb-4 border border-dark-border shadow-sm">
-                            <i class="fa-regular fa-calendar-xmark text-2xl text-dark-muted"></i>
-                        </div>
-                        <h3 class="text-white font-bold">Keine Termine</h3>
-                        <p class="text-dark-muted text-sm mt-1">Aktuell stehen keine Veranstaltungen an.</p>
-                    </div>`}
-                </div>
-            </div>
-        `;
+        // Chat-Interne States
+        showChatSearch: false,
+        chatFilterTerm: '',
+        showAttachMenu: false,
+        mobileChatVisible: false, // Steuert Mobile View (List vs. Chat)
+        
+        replyingTo: null,
+        editingId: null,
+        scrollPositions: {},
+        
+        observer: null // Wächter für Cleanup beim Verlassen
     },
 
-    renderEventCard(e, canManage) {
-        const startDate = new Date(e.date);
-        const endDate = e.endDate ? new Date(e.endDate) : null;
-        
-        // Prüfen ob mehrtägig (für Anzeige im Badge)
-        const isMultiDay = endDate && (endDate.getDate() !== startDate.getDate() || endDate.getMonth() !== startDate.getMonth());
-        
-        const dateDisplayMonth = startDate.toLocaleString('de-DE', { month: 'short' });
-        const dateDisplayDay = startDate.getDate();
+    // --- CONFIG & THEME ---
+    config: {
+        // bgPatternOpacity entfernt, da Hintergrund nun solid ist
+    },
 
-        // Datums-Range Text für Badge
-        let rangeBadge = '';
-        if (isMultiDay) {
-            rangeBadge = `<div class="text-[9px] mt-1 border-t border-white/10 pt-1 text-brand-200">bis ${endDate.getDate()}.${endDate.toLocaleString('de-DE', { month: 'numeric' })}.</div>`;
+    // --- HELPER ---
+    getMyId() {
+        if (typeof App !== 'undefined' && App.state && App.state.currentUser) {
+            return App.state.currentUser.id;
+        }
+        return localStorage.getItem('vm_current_user_id') || 1;
+    },
+
+    init() {
+        this.injectStyles();
+    },
+
+    injectStyles() {
+        if (document.getElementById('messenger-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'messenger-styles';
+        
+        style.innerHTML = `
+            .msg-bg-pattern {
+                background-color: #0f172a; /* Slate 900 - Solid Dark Background */
+            }
+            /* Custom Scrollbar für Chat */
+            .chat-scroll::-webkit-scrollbar { width: 4px; }
+            .chat-scroll::-webkit-scrollbar-track { background: transparent; }
+            .chat-scroll::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.2); border-radius: 4px; }
+            .chat-scroll::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.4); }
+            
+            /* Message Bubble Tails */
+            .bubble-tail-in { border-top-left-radius: 2px !important; }
+            .bubble-tail-out { border-top-right-radius: 2px !important; }
+            
+            /* Animations */
+            @keyframes msgSlideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+            .animate-msg { animation: msgSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+            
+            .slide-in-right { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+            @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+            /* --- MOBILE FULLSCREEN MODES (Structure Fix) --- */
+            
+            /* 1. Body & HTML einfrieren */
+            html.messenger-mode, body.messenger-mode {
+                overflow: hidden !important;
+                height: 100% !important;
+                position: fixed !important; 
+                width: 100% !important;
+                overscroll-behavior: none;
+            }
+
+            body.messenger-mode #main-header { display: none !important; }
+            
+            /* 2. Content Container als Flexbox-Wrapper */
+            body.messenger-mode #content { 
+                padding: 0 !important; 
+                position: fixed !important; /* Fixed relative to Viewport */
+                top: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+                height: 100% !important; 
+                /* height: 100dvh;  <-- Optional, manchmal besser 100% bei fixed body */
+                width: 100% !important;
+                z-index: 100 !important;
+                background-color: #0f172a;
+                
+                /* Das hier ist der Trick: Flexbox Layout */
+                display: flex !important;
+                flex-direction: column !important;
+                overflow: hidden !important;
+            }
+
+            /* A) CHAT ACTIVE: Kein Footer */
+            body.messenger-mode.chat-active #mobile-bottom-nav { display: none !important; }
+            
+            /* B) LIST ACTIVE: Footer sichtbar */
+            body.messenger-mode.list-active #mobile-bottom-nav { display: flex !important; z-index: 101 !important; }
+            
+            /* Safe Area für Header in Liste */
+            body.messenger-mode.list-active .messenger-sidebar-header {
+                padding-top: max(1rem, env(safe-area-inset-top)); 
+                height: auto;
+                min-height: 4.5rem;
+            }
+        `;
+        document.head.appendChild(style);
+    },
+
+    // --- MAIN RENDER ---
+    render(container) {
+        if (!container) container = document.getElementById('content');
+        if (!container) return;
+        
+        this.init();
+        
+        // Prüfen ob Mobile View aktiv
+        const isMobile = window.innerWidth < 768;
+
+        // Reset Classes first
+        document.documentElement.classList.remove('messenger-mode');
+        document.body.classList.remove('messenger-mode', 'chat-active', 'list-active');
+
+        if (isMobile) {
+            document.documentElement.classList.add('messenger-mode');
+            document.body.classList.add('messenger-mode');
+            
+            if (this.state.mobileChatVisible) {
+                document.body.classList.add('chat-active');
+            } else {
+                document.body.classList.add('list-active');
+            }
         }
 
-        return `
-            <div onclick="CalendarView.openDetailModal(${e.id})" class="bg-dark-card hover:bg-dark-hover border border-dark-border p-4 rounded-2xl flex items-center gap-4 cursor-pointer group relative overflow-hidden transition-all shadow-sm">
-                <!-- Hover Effect Line -->
-                <div class="absolute left-0 top-4 bottom-4 w-1 bg-brand-500 rounded-r-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
-
-                <!-- Date Badge -->
-                <div class="bg-dark-bg border border-dark-border rounded-xl p-2 text-center min-w-[64px] group-hover:border-brand-500/30 transition-colors flex-shrink-0">
-                    <div class="text-[10px] font-bold uppercase text-brand-500">${dateDisplayMonth}</div>
-                    <div class="text-xl font-bold text-white leading-none mt-0.5">${dateDisplayDay}</div>
-                    ${rangeBadge}
-                </div>
-
-                <!-- Content -->
-                <div class="flex-1 min-w-0">
-                    <div class="flex justify-between items-start">
-                        <h4 class="text-white font-bold text-base truncate pr-2 group-hover:text-brand-400 transition-colors">${e.title}</h4>
-                        ${e.description ? '<i class="fa-solid fa-align-left text-brand-500 text-[10px] mt-1.5 opacity-70"></i>' : ''}
-                    </div>
+        // Layout Template
+        container.innerHTML = `
+            <div id="messenger-view-root" class="flex h-full w-full max-w-[1800px] mx-auto bg-dark-card/50 backdrop-blur-sm md:rounded-2xl md:border md:border-white/5 shadow-2xl relative md:overflow-hidden flex-1 overflow-hidden">
+                
+                <!-- 1. LEFT SIDEBAR (List) -->
+                <div class="${this.state.mobileChatVisible && isMobile ? 'hidden' : 'flex'} w-full md:w-[380px] lg:w-[420px] flex-col border-r border-white/5 bg-dark-card/80 z-20 h-full">
                     
-                    <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-dark-muted mt-1.5 items-center">
-                        <span class="flex items-center"><i class="fa-regular fa-clock mr-1.5 text-brand-500/70"></i> ${e.allDay ? 'Ganztägig' : (e.time || 'Zeit n.a.')}</span>
-                        ${e.location ? `<span class="flex items-center truncate max-w-[140px]"><i class="fa-solid fa-location-dot mr-1.5 text-brand-500/70"></i> ${e.location}</span>` : ''}
+                    <!-- Sidebar Header -->
+                    <div class="messenger-sidebar-header h-16 px-5 flex items-center justify-between shrink-0 border-b border-white/5 bg-dark-bg/50 backdrop-blur-md">
+                        <h2 class="font-bold text-white text-lg tracking-tight">Nachrichten</h2>
+                    </div>
+
+                    <!-- Search Bar -->
+                    <div class="p-3 shrink-0">
+                        <div class="relative group">
+                            <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted group-focus-within:text-brand-500 transition-colors"></i>
+                            <input type="text" 
+                                placeholder="Suchen..." 
+                                value="${this.state.filterTerm}" 
+                                onkeyup="MessengerView.handleSearch(this.value)" 
+                                class="w-full bg-dark-bg border border-white/5 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-brand-500/50 focus:bg-dark-bg/80 transition-all placeholder-dark-muted/50">
+                        </div>
+                    </div>
+
+                    <!-- Chat List -->
+                    <div id="messenger-list" class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1 ${!this.state.mobileChatVisible && isMobile ? 'pb-24' : ''}">
                     </div>
                 </div>
 
-                <!-- Chevron Icon -->
-                <div class="text-dark-muted opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all pl-2">
-                    <i class="fa-solid fa-chevron-right text-xs"></i>
+                <!-- 2. RIGHT CHAT AREA -->
+                <!-- Auf Mobile: flex-1 füllt den restlichen Raum im #content Container -->
+                <div id="messenger-chat-area" class="${this.state.mobileChatVisible && isMobile ? 'flex slide-in-right' : 'hidden md:flex'} flex-col flex-1 bg-dark-bg relative w-full h-full overflow-hidden">
+                    ${this.renderActiveChat(isMobile)}
+                </div>
+
+            </div>
+        `;
+
+        // --- CLEANUP WATCHER ---
+        if (!this.state.observer) {
+            this.state.observer = new MutationObserver((mutations) => {
+                if (!document.getElementById('messenger-view-root')) {
+                    document.documentElement.classList.remove('messenger-mode');
+                    document.body.classList.remove('messenger-mode', 'chat-active', 'list-active');
+                    if(this.state.observer) {
+                        this.state.observer.disconnect();
+                        this.state.observer = null;
+                    }
+                }
+            });
+            this.state.observer.observe(container, { childList: true });
+        }
+
+        this.renderSidebarList();
+        
+        if (this.state.activeId || this.state.activeType === 'news') {
+             setTimeout(() => this.scrollToBottom(false), 50);
+        }
+    },
+
+    // --- SIDEBAR LOGIC ---
+
+    handleSearch(val) { 
+        this.state.filterTerm = val.toLowerCase(); 
+        this.renderSidebarList(); 
+    },
+
+    renderSidebarList() {
+        const container = document.getElementById('messenger-list');
+        if(!container) return;
+
+        if (typeof Store === 'undefined' || !Store.state) {
+            container.innerHTML = `<div class="p-4 text-center text-dark-muted text-sm animate-pulse">Lade Chats...</div>`;
+            return;
+        }
+
+        const term = this.state.filterTerm;
+        const myId = this.getMyId();
+        const members = Store.state.members || [];
+        const groups = Store.state.groups || [];
+        const me = members.find(m => m.id == myId) || { groups: [] };
+        let items = [];
+
+        // 1. News Channel
+        if ('ankündigungen'.includes(term) || !term) {
+            items.push({ 
+                type: 'news', id: 0, name: 'Ankündigungen', 
+                icon: 'fa-bullhorn', color: 'bg-orange-500/20 text-orange-400', 
+                time: new Date() 
+            });
+        }
+
+        // 2. Groups
+        groups.forEach(g => {
+             const inGroup = Array.isArray(me.groups) && me.groups.includes(g.name);
+             if(inGroup && g.name.toLowerCase().includes(term)) {
+                 const lastMsg = g.chat && g.chat.length > 0 ? g.chat[g.chat.length-1] : null;
+                 items.push({ 
+                     type: 'group', id: g.id, name: g.name, 
+                     icon: 'fa-users', color: 'bg-brand-500/20 text-brand-400',
+                     lastMsg, time: lastMsg ? new Date(lastMsg.time) : new Date(0) 
+                 });
+             }
+        });
+
+        // 3. Private Chats
+        members.filter(m => m.id != myId).forEach(m => {
+            const name = `${m.firstName} ${m.lastName}`;
+            const chat = this.getMemberChat(m);
+            if (term && name.toLowerCase().includes(term) || (!term && chat.length > 0)) {
+                items.push({ 
+                    type: 'private', id: m.id, name, 
+                    img: null, // Avatar Logik könnte hier hin
+                    initials: m.firstName.charAt(0),
+                    color: 'bg-indigo-500/20 text-indigo-400',
+                    lastMsg: chat[chat.length-1], 
+                    time: chat.length > 0 ? new Date(chat[chat.length-1].time) : new Date(0) 
+                });
+            }
+        });
+
+        // Sort & Render
+        items = items.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id && t.type===v.type))===i); 
+        items.sort((a, b) => {
+            if (a.type === 'news') return -1; 
+            if (b.type === 'news') return 1;  
+            return b.time - a.time;           
+        });
+
+        if (items.length === 0) {
+            container.innerHTML = `<div class="flex flex-col items-center justify-center pt-10 text-dark-muted"><i class="fa-solid fa-comment-slash text-2xl mb-2"></i><p class="text-xs">Keine Chats gefunden.</p></div>`;
+            return;
+        }
+
+        container.innerHTML = items.map(item => this.renderListItem(item)).join('');
+    },
+
+    renderListItem(item) {
+        const isActive = this.state.activeType === item.type && (item.type === 'news' || this.state.activeId == item.id);
+        
+        let preview = '<span class="italic opacity-50">Tippen zum Starten</span>';
+        let dateStr = "";
+        
+        if (item.lastMsg) {
+            const txt = item.lastMsg.text || (item.lastMsg.type === 'image' ? '📷 Foto' : (item.lastMsg.type === 'poll' ? '📊 Umfrage' : '📎 Datei'));
+            const myId = this.getMyId();
+            const isMe = item.lastMsg.senderId ? (item.lastMsg.senderId == myId) : item.lastMsg.isMe;
+            const check = isMe ? `<i class="fa-solid fa-check-double text-[10px] ${item.lastMsg.read ? 'text-blue-400' : 'text-dark-muted'} mr-1"></i>` : '';
+            preview = `${check}${txt}`;
+            const d = new Date(item.lastMsg.time);
+            dateStr = (d.toDateString() === new Date().toDateString()) ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : d.toLocaleDateString([], {day:'2-digit', month:'2-digit'});
+        }
+
+        const avatar = item.img 
+            ? `<img src="${item.img}" class="w-full h-full object-cover">`
+            : `<div class="w-full h-full flex items-center justify-center font-bold text-sm ${item.color}">${item.icon ? `<i class="fa-solid ${item.icon}"></i>` : item.initials}</div>`;
+
+        return `
+            <div onclick="MessengerView.selectChat('${item.type}', '${item.id}')" 
+                 class="group flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border border-transparent ${isActive ? 'bg-brand-500/10 border-brand-500/20' : 'hover:bg-white/5 hover:border-white/5'}">
+                <div class="relative w-12 h-12 rounded-full overflow-hidden shrink-0 shadow-lg bg-dark-bg border border-white/5">
+                    ${avatar}
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex justify-between items-baseline mb-0.5">
+                        <h3 class="text-white font-medium text-[15px] truncate group-hover:text-brand-400 transition-colors ${isActive ? 'text-brand-400' : ''}">${item.name}</h3>
+                        <span class="text-[10px] text-dark-muted shrink-0">${dateStr}</span>
+                    </div>
+                    <p class="text-sm text-dark-muted truncate pr-2 opacity-80 group-hover:opacity-100 group-hover:text-gray-300 transition-all">
+                        ${preview}
+                    </p>
                 </div>
             </div>
         `;
     },
 
-    /**
-     * Öffnet die Detail-Ansicht eines Termins (Großes Modal)
-     */
-    openDetailModal(id) {
-        const e = Store.state.events ? Store.state.events.find(ev => ev.id === id) : null;
-        if(!e) return;
-        
-        const canManage = App.can('manage_events');
+    // --- CHAT INTERACTION ---
 
-        const startDate = new Date(e.date);
-        const endDate = e.endDate ? new Date(e.endDate) : null;
-        const dateStr = startDate.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        const endDateStr = endDate && endDate.getTime() !== startDate.getTime() ? endDate.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : null;
+    selectChat(type, id) {
+        if (id && !isNaN(id)) id = Number(id);
+        this.state.activeType = type;
+        this.state.activeId = id;
+        this.state.showAttachMenu = false;
+        this.state.mobileChatVisible = true; 
+        this.state.showChatSearch = false;
+        this.state.chatFilterTerm = '';
+        this.render(document.getElementById('content'));
+    },
 
-        // Links im Text klickbar machen
-        const formatDescription = (text) => {
-            if(!text) return '<span class="text-dark-muted italic text-sm">Keine weiteren Details vorhanden.</span>';
-            let formatted = text.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-brand-400 hover:underline break-all">$1</a>');
-            return formatted.replace(/\n/g, '<br>');
-        };
+    closeChat() {
+        this.state.mobileChatVisible = false;
+        this.render(document.getElementById('content'));
+    },
 
-        const html = `
-            <div class="p-6 md:p-8 h-full flex flex-col">
-                <!-- Header (Fixed) -->
-                <div class="flex justify-between items-start mb-6 border-b border-dark-border pb-4 flex-shrink-0">
-                    <div class="pr-4">
-                        <div class="flex items-center gap-2 mb-2">
-                            <span class="bg-brand-500/10 text-brand-400 text-[10px] font-bold px-2 py-0.5 rounded border border-brand-500/20 uppercase tracking-wider">Event</span>
-                        </div>
-                        <h3 class="text-2xl md:text-3xl font-bold text-white leading-tight break-words">${e.title}</h3>
+    // --- CHAT AREA RENDER ---
+
+    renderActiveChat(isMobile) {
+        // EMPTY STATE (Desktop)
+        if (!this.state.activeId && this.state.activeType !== 'news' && !isMobile) {
+            return `
+                <div class="flex flex-col items-center justify-center h-full text-center p-8 bg-dark-bg msg-bg-pattern">
+                    <div class="w-32 h-32 rounded-3xl bg-dark-card border border-white/5 flex items-center justify-center mb-6 shadow-2xl rotate-3">
+                        <i class="fa-solid fa-comments text-5xl text-dark-muted/50"></i>
                     </div>
-                    <button onclick="App.closeModal()" class="w-8 h-8 rounded-full bg-dark-bg text-dark-muted hover:text-white flex items-center justify-center transition-colors flex-shrink-0"><i class="fa-solid fa-times text-lg"></i></button>
+                    <h2 class="text-2xl font-bold text-white mb-2">Vereins Messenger</h2>
+                    <p class="text-dark-muted max-w-xs">Wähle einen Chat aus der Liste, um Nachrichten zu senden und zu empfangen.</p>
                 </div>
-                
-                <!-- Content (Scrollable) -->
-                <!-- WICHTIG: Kein 'max-h' auf dem inneren Container, das scrollen übernimmt dieser Wrapper -->
-                <div class="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-6">
+            `;
+        }
+
+        // DATA GATHERING
+        const { activeType: type, activeId: id } = this.state;
+        const news = (Store.state && Store.state.news) ? Store.state.news : [];
+        const groups = (Store.state && Store.state.groups) ? Store.state.groups : [];
+        const members = (Store.state && Store.state.members) ? Store.state.members : [];
+
+        let title = "Chat", subTitle = "", messages = [], canWrite = true, headerAction = "";
+
+        if (type === 'news') {
+            title = "Ankündigungen"; 
+            subTitle = "Offizieller Kanal";
+            messages = news.map(n => ({ 
+                id: n.id, sender: 'Vorstand', text: `📢 **${n.title}**\n\n${n.content}`, 
+                time: n.date, isMe: false, isSystem: true 
+            })).sort((a,b) => new Date(a.time) - new Date(b.time));
+            canWrite = App.can('admin'); 
+        } else if (type === 'group') {
+            const g = groups.find(x => x.id == id);
+            if(g) { 
+                title = g.name; 
+                subTitle = `${g.members ? g.members.length : 0} Teilnehmer`; 
+                messages = g.chat || [];
+                headerAction = `onclick="MessengerView.showGroupInfo('${id}')"`;
+            }
+        } else if (type === 'private') {
+            const m = members.find(x => x.id == id);
+            if(m) { 
+                title = `${m.firstName} ${m.lastName}`; 
+                subTitle = m.role || 'Mitglied'; 
+                messages = this.getMemberChat(m);
+                headerAction = `onclick="MessengerView.showUserProfile('${id}')"`;
+            }
+        }
+
+        // Filter Logic
+        if (this.state.chatFilterTerm) {
+            messages = messages.filter(m => m.text && m.text.toLowerCase().includes(this.state.chatFilterTerm));
+        }
+
+        // HEADER
+        // WICHTIG: Kein fixed hier! Wir nutzen Flexbox.
+        // pt-[env(safe-area-inset-top)] ensures header respects notch
+        const header = `
+            <div class="h-16 px-4 bg-dark-card/90 backdrop-blur-xl border-b border-white/5 flex items-center justify-between shadow-lg shrink-0 z-30 pt-[env(safe-area-inset-top)] box-content">
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <button onclick="MessengerView.closeChat()" class="md:hidden w-8 h-8 flex items-center justify-center text-white/70 hover:text-white rounded-full hover:bg-white/10 -ml-2">
+                        <i class="fa-solid fa-arrow-left"></i>
+                    </button>
                     
-                    <!-- Info Grid -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 flex-shrink-0">
-                        <!-- Zeit & Datum -->
-                        <div class="bg-dark-bg/50 p-4 rounded-2xl border border-dark-border flex items-start gap-4">
-                            <div class="w-10 h-10 rounded-xl bg-brand-500/10 text-brand-500 flex items-center justify-center text-lg flex-shrink-0">
-                                <i class="fa-regular fa-clock"></i>
-                            </div>
-                            <div>
-                                <p class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-0.5">Wann?</p>
-                                <p class="text-white font-medium text-sm leading-snug">${dateStr}</p>
-                                ${endDateStr ? `<p class="text-dark-muted text-xs mt-0.5">bis ${endDateStr}</p>` : ''}
-                                <p class="text-brand-400 font-bold text-sm mt-1">${e.allDay ? 'Ganztägig' : (e.time + ' Uhr')}</p>
-                            </div>
+                    <div class="flex items-center gap-3 cursor-pointer group" ${headerAction}>
+                        <div class="w-10 h-10 rounded-full ${type==='private'?'bg-indigo-500':'bg-brand-600'} flex items-center justify-center text-white font-bold shadow-glow text-sm">
+                            ${type === 'private' ? title.charAt(0) : '<i class="fa-solid fa-users"></i>'}
                         </div>
-
-                        <!-- Ort -->
-                        ${e.location ? `
-                        <div class="bg-dark-bg/50 p-4 rounded-2xl border border-dark-border flex items-start gap-4">
-                            <div class="w-10 h-10 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center text-lg flex-shrink-0">
-                                <i class="fa-solid fa-location-dot"></i>
-                            </div>
-                            <div>
-                                <p class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-0.5">Wo?</p>
-                                <p class="text-white font-medium text-sm leading-snug">${e.location}</p>
-                                <a href="https://maps.google.com/?q=${encodeURIComponent(e.location)}" target="_blank" class="text-xs text-dark-muted hover:text-white underline decoration-dotted mt-1 inline-block">Karte öffnen</a>
-                            </div>
-                        </div>` : ''}
-                    </div>
-
-                    <!-- Beschreibung -->
-                    <div>
-                        <div class="flex justify-between items-center mb-3">
-                            <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider">Beschreibung & Details</h4>
-                        </div>
-                        <!-- FIX: Kein max-h und kein overflow-y hier! Das macht das Scrollen auf Mobile kaputt (nested scroll) -->
-                        <div class="bg-dark-bg p-5 rounded-2xl border border-dark-border text-dark-text leading-relaxed text-sm shadow-inner min-h-[100px]">
-                            ${formatDescription(e.description)}
+                        <div class="flex flex-col justify-center overflow-hidden">
+                            <h3 class="text-white font-bold text-base leading-none truncate group-hover:text-brand-400 transition-colors">${title}</h3>
+                            <p class="text-dark-muted text-xs truncate mt-1">${subTitle}</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Footer Actions (Admin only - Fixed at Bottom) -->
-                ${canManage ? `
-                <div class="mt-6 pt-6 border-t border-dark-border flex gap-3 flex-shrink-0">
-                    <button onclick="CalendarView.openEditModal(${e.id})" class="flex-1 btn-primary text-sm">
-                        <i class="fa-solid fa-pen mr-2"></i> Bearbeiten
-                    </button>
-                    <button onclick="CalendarView.delete(${e.id}); App.closeModal()" class="flex-1 py-3 bg-dark-bg hover:bg-red-500/10 border border-dark-border hover:border-red-500/30 rounded-xl text-red-400 font-bold transition-all text-sm">
-                        <i class="fa-regular fa-trash-can mr-2"></i> Löschen
-                    </button>
+                <div class="flex items-center gap-2">
+                     <button onclick="MessengerView.toggleChatSearch()" class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/5 text-dark-muted hover:text-white transition-colors">
+                        <i class="fa-solid fa-search"></i>
+                     </button>
+                </div>
+                ${this.state.showChatSearch ? `
+                <div class="absolute top-0 left-0 w-full h-16 bg-dark-card z-50 flex items-center px-4 animate-msg border-b border-white/5 pt-[env(safe-area-inset-top)]">
+                    <button onclick="MessengerView.toggleChatSearch()" class="mr-3 text-dark-muted hover:text-white"><i class="fa-solid fa-arrow-left"></i></button>
+                    <input type="text" placeholder="In diesem Chat suchen..." value="${this.state.chatFilterTerm}" onkeyup="MessengerView.handleChatFilter(this.value)" class="flex-1 bg-transparent border-none text-white focus:outline-none placeholder-dark-muted" autoFocus>
                 </div>` : ''}
             </div>
         `;
+
+        // MESSAGES
+        const msgsHtml = messages.length 
+            ? messages.map(msg => this.renderMessageBubble(msg)).join('')
+            : `<div class="flex flex-col items-center justify-center mt-20 opacity-50">
+                <div class="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-4"><i class="fa-solid fa-hand-sparkles text-3xl text-brand-500"></i></div>
+                <p class="text-dark-muted text-sm">Sag Hallo!</p>
+               </div>`;
+
+        // INPUT AREA
+        // WICHTIG: shrink-0 verhindert, dass es kleiner wird.
+        const inputArea = canWrite ? this.renderInputArea() : `<div class="p-4 bg-dark-card/90 text-center text-dark-muted text-xs uppercase font-bold tracking-widest border-t border-white/5 shrink-0 safe-bottom">Nur Lesen</div>`;
+
+        // FULL FLEX CONTAINER
+        // Hier passiert die Magie: Flex Column, H-Full.
+        // Wenn Keyboard kommt, schrumpft dieser Container.
+        // Header (oben) und Input (unten) haben feste/natürliche Größe.
+        // msg-scroll-container (mitte) hat flex-1 und overflow-y-auto -> er wird kleiner und scrollt.
+        return `
+            <div class="flex flex-col h-full w-full relative overflow-hidden">
+                ${header}
+                <div id="msg-scroll-container" class="flex-1 overflow-y-auto px-4 space-y-3 msg-bg-pattern chat-scroll pb-2">
+                    ${msgsHtml}
+                    <div class="h-2"></div>
+                </div>
+                ${inputArea}
+            </div>
+        `;
+    },
+
+    renderInputArea() {
+        const replyMsg = this.state.replyingTo ? this.findMessage(this.state.replyingTo) : null;
         
-        App.openModal(html);
+        // Input ist jetzt Teil des Flex Flows (shrink-0)
+        return `
+            <div class="p-3 md:p-4 bg-dark-card border-t border-white/5 shrink-0 safe-bottom z-30">
+                
+                <!-- Helper Menus (Absolute, überlappend) -->
+                ${this.renderAttachMenu()}
+
+                <!-- Reply Preview -->
+                ${replyMsg ? `
+                <div id="reply-preview-box" class="flex items-center justify-between bg-dark-bg/50 p-2 rounded-lg border-l-2 border-brand-500 mb-2 animate-msg backdrop-blur-md">
+                    <div class="text-xs overflow-hidden">
+                        <span class="text-brand-500 font-bold block mb-0.5">${replyMsg.sender}</span>
+                        <span class="text-dark-muted truncate block max-w-[200px]">${replyMsg.text}</span>
+                    </div>
+                    <button onclick="MessengerView.cancelReply()" class="w-6 h-6 flex items-center justify-center hover:bg-white/10 rounded-full text-dark-muted"><i class="fa-solid fa-times"></i></button>
+                </div>` : ''}
+
+                <!-- Input Row -->
+                <div class="flex items-end gap-2">
+                    <button onclick="MessengerView.toggleAttachMenu()" class="w-10 h-10 mb-0.5 rounded-full hover:bg-white/5 text-dark-muted hover:text-brand-400 transition-colors flex items-center justify-center shrink-0">
+                        <i class="fa-solid fa-plus text-lg"></i>
+                    </button>
+                    
+                    <form onsubmit="MessengerView.sendMessage(event)" class="flex-1 bg-dark-bg border border-white/10 focus-within:border-brand-500/50 rounded-2xl flex items-end px-3 py-2 transition-colors relative">
+                        <input type="text" name="message" id="chat-input" autocomplete="off" placeholder="Nachricht..." 
+                            class="flex-1 bg-transparent border-none text-white text-sm focus:outline-none placeholder-dark-muted/50 max-h-24 py-1">
+                        <button type="submit" class="w-8 h-8 rounded-full bg-brand-600 hover:bg-brand-500 text-white shadow-glow flex items-center justify-center transition-all ml-2 mb-0.5 active:scale-90">
+                            <i class="fa-solid fa-paper-plane text-xs"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        `;
+    },
+
+    renderMessageBubble(msg) {
+        if (msg.isSystem) return `<div class="flex justify-center my-4"><span class="bg-white/5 backdrop-blur-md text-dark-muted text-[10px] px-3 py-1 rounded-full uppercase font-bold tracking-widest shadow-sm border border-white/5">${msg.text}</span></div>`;
         
-        // Modal Größe anpassen
-        const modalContainer = document.getElementById('modal-content');
-        if(modalContainer) {
-            modalContainer.classList.remove('max-w-md');
-            // WICHTIG: Flex und Overflow Hidden auf den Container, damit der Inhalt scrollt
-            modalContainer.classList.add('max-w-3xl', 'w-full', 'h-[85vh]', 'max-h-[90vh]', 'flex', 'flex-col', 'overflow-hidden');
+        const myId = this.getMyId();
+        const me = (Store.state.members || []).find(m => m.id == myId);
+        let isMe = false;
+        if (msg.senderId) isMe = (msg.senderId == myId);
+        else if (msg.hasOwnProperty('isMe')) isMe = msg.isMe; 
+        
+        const isDeleted = msg.isDeleted;
+        
+        // Styles
+        const align = isMe ? 'items-end' : 'items-start';
+        // Eigene Nachricht: Brand Color gradient, Fremde Nachricht: Dark Card
+        const bgClass = isMe 
+            ? 'bg-gradient-to-br from-brand-600 to-blue-700 text-white shadow-lg shadow-brand-500/10' 
+            : 'bg-dark-card border border-white/5 text-gray-100 shadow-md';
+        
+        const tailClass = isMe ? 'bubble-tail-out' : 'bubble-tail-in';
+
+        // Content
+        let contentHtml = isDeleted 
+            ? `<span class="italic text-white/50 flex items-center gap-1 text-xs"><i class="fa-solid fa-ban"></i> Nachricht gelöscht</span>` 
+            : `<span class="text-[15px] leading-relaxed block">${msg.text.replace(/\n/g, '<br>')}</span>`;
+
+        if (msg.type === 'image') contentHtml = `<div class="mb-1 overflow-hidden rounded-lg border border-white/10"><img src="${msg.content}" class="max-w-full sm:max-w-[280px] cursor-pointer hover:opacity-90 transition-opacity" onclick="window.open('${msg.content}')"></div>`;
+        if (msg.type === 'poll') contentHtml = this.renderPoll(msg);
+
+        // Reply Reference
+        let replyHtml = '';
+        if (msg.replyToId) {
+            const parent = this.findMessage(msg.replyToId);
+            if(parent) replyHtml = `
+                <div class="bg-black/20 rounded p-1.5 mb-1.5 text-xs border-l-2 border-white/30 cursor-pointer hover:bg-black/30 transition">
+                    <span class="font-bold opacity-80 block mb-0.5">${parent.sender}</span>
+                    <span class="opacity-60 truncate block">${parent.text}</span>
+                </div>`;
+        }
+
+        const ctxId = `ctx-${msg.id}`;
+
+        return `
+            <div id="msg-${msg.id}" class="flex flex-col ${align} group relative w-full animate-msg">
+                <div class="relative max-w-[85%] md:max-w-[60%] min-w-[100px] ${bgClass} px-3 py-2 rounded-2xl ${tailClass}">
+                    
+                    <!-- Context Menu Trigger -->
+                    <button onclick="MessengerView.toggleMsgMenu('${ctxId}')" class="absolute top-1 right-1 w-6 h-6 flex items-center justify-center text-white/50 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        <i class="fa-solid fa-angle-down"></i>
+                    </button>
+
+                    ${replyHtml}
+                    ${!isMe && this.state.activeType === 'group' ? `<p class="text-[11px] font-bold text-brand-400 mb-0.5">${msg.sender}</p>` : ''}
+                    ${contentHtml}
+                    
+                    <div class="flex items-center justify-end gap-1 mt-1 opacity-60">
+                         <span class="text-[10px] font-medium">${new Date(msg.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+                         ${isMe ? '<i class="fa-solid fa-check-double text-[10px]"></i>' : ''}
+                    </div>
+                </div>
+
+                <!-- Context Menu -->
+                <div id="${ctxId}" class="hidden absolute top-8 ${isMe ? 'right-0' : 'left-0'} bg-dark-card border border-white/10 rounded-xl shadow-2xl z-50 w-48 overflow-hidden animate-msg">
+                    <div class="flex justify-around p-2 bg-white/5 border-b border-white/5">
+                        ${['👍','❤️','😂','😮'].map(e => `<button onclick="MessengerView.reactToMessage('${msg.id}', '${e}')" class="hover:scale-125 transition text-lg">${e}</button>`).join('')}
+                    </div>
+                    <div class="p-1">
+                        <button onclick="MessengerView.replyTo('${msg.id}')" class="w-full text-left px-3 py-2 text-sm text-dark-muted hover:text-white hover:bg-white/5 rounded-lg flex items-center gap-3"><i class="fa-solid fa-reply w-4"></i> Antworten</button>
+                        <button onclick="MessengerView.copyMessageText('${msg.text}')" class="w-full text-left px-3 py-2 text-sm text-dark-muted hover:text-white hover:bg-white/5 rounded-lg flex items-center gap-3"><i class="fa-regular fa-copy w-4"></i> Kopieren</button>
+                        ${isMe ? `<button onclick="MessengerView.deleteMessage('${msg.id}')" class="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg flex items-center gap-3"><i class="fa-solid fa-trash w-4"></i> Löschen</button>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    renderPoll(msg) {
+        // Simple Poll Visualization
+        const q = msg.content.question;
+        const opts = msg.content.options || [];
+        return `
+            <div class="font-bold mb-2 text-sm">${q}</div>
+            <div class="space-y-1.5">
+                ${opts.map(o => `
+                    <div onclick="MessengerView.votePoll('${msg.id}', ${o.id})" class="relative h-8 bg-black/20 rounded-lg overflow-hidden cursor-pointer hover:bg-black/30 border border-white/10">
+                         <div class="absolute left-0 top-0 h-full bg-white/20" style="width: ${o.votes.length * 10}%"></div>
+                         <div class="absolute inset-0 flex items-center justify-between px-3 text-xs">
+                             <span>${o.text}</span>
+                             <span class="font-bold">${o.votes.length}</span>
+                         </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    },
+
+    // --- MENUS & FEATURES ---
+
+    renderAttachMenu() {
+        if (!this.state.showAttachMenu) return '';
+        const items = [
+            { icon: 'fa-image', bg: 'bg-purple-500', label: 'Medien', action: 'image' },
+            { icon: 'fa-file', bg: 'bg-blue-500', label: 'Datei', action: 'file' },
+            { icon: 'fa-square-poll-vertical', bg: 'bg-teal-500', label: 'Umfrage', action: 'poll' }
+        ];
+        return `
+            <div class="absolute bottom-20 left-4 flex flex-col gap-3 animate-msg z-40">
+                ${items.map(i => `
+                    <button onclick="MessengerView.handleAttachment('${i.action}')" class="flex items-center gap-3 group">
+                        <div class="w-12 h-12 rounded-full ${i.bg} text-white flex items-center justify-center shadow-lg shadow-black/30 hover:scale-110 transition-transform">
+                            <i class="fa-solid ${i.icon}"></i>
+                        </div>
+                        <span class="bg-dark-card border border-white/10 text-white text-xs px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity shadow-md pointer-events-none">${i.label}</span>
+                    </button>
+                `).reverse().join('')}
+            </div>
+        `;
+    },
+
+    // --- ACTIONS & UTILS ---
+
+    toggleChatSearch() { this.state.showChatSearch = !this.state.showChatSearch; if(!this.state.showChatSearch) this.state.chatFilterTerm = ''; this.render(document.getElementById('content')); },
+    handleChatFilter(val) { this.state.chatFilterTerm = val.toLowerCase(); this.render(document.getElementById('content')); },
+    
+    toggleMsgMenu(id) {
+        const el = document.getElementById(id);
+        if(el) {
+            document.querySelectorAll('[id^="ctx-"]').forEach(x => { if(x.id!==id) x.classList.add('hidden') });
+            el.classList.toggle('hidden');
+            // Auto close click outside
+            const close = (e) => { if(!el.contains(e.target)) { el.classList.add('hidden'); document.removeEventListener('click', close); }};
+            setTimeout(() => document.addEventListener('click', close), 10);
         }
     },
 
-    delete(id) {
-        // --- BERECHTIGUNGS FIX ---
-        const user = App.state.currentUser;
-        const isVorstand = user && ((Array.isArray(user.roles) && user.roles.includes('Vorstand')) || user.role === 'Vorstand');
-        if(!isVorstand && !App.can('manage_events')) return;
-
-        if(confirm("Termin wirklich löschen?")) {
-            Store.remove('events', id);
-            setTimeout(() => this.render(document.getElementById('content')), 100);
-            App.showToast('Termin gelöscht');
-        }
-    },
-
-    // --- ADD / EDIT FORM MODALS ---
-
-    openAddModal() {
-        // --- BERECHTIGUNGS FIX ---
-        const user = App.state.currentUser;
-        const isVorstand = user && ((Array.isArray(user.roles) && user.roles.includes('Vorstand')) || user.role === 'Vorstand');
-        if(!isVorstand && !App.can('manage_events')) return;
-
-        const html = `
-            <div class="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 sticky top-0 bg-dark-card z-10">
-                    <h3 class="text-xl font-bold text-white">Neuer Termin</h3>
-                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
-                </div>
-                
-                <form onsubmit="CalendarView.handleAdd(event)" class="space-y-5">
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Titel</label>
-                        <input type="text" name="title" required class="form-input" placeholder="z.B. Sommerfest">
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Start</label>
-                            <input type="date" name="date" id="startDateInput" required class="form-input dark-date" onchange="document.getElementById('endDateInput').min = this.value; if(!document.getElementById('endDateInput').value) document.getElementById('endDateInput').value = this.value;">
-                        </div>
-                        <div>
-                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ende (Optional)</label>
-                            <input type="date" name="endDate" id="endDateInput" class="form-input dark-date">
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-4 items-end">
-                        <div>
-                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Uhrzeit</label>
-                            <input type="time" name="time" id="eventTimeInput" required class="form-input dark-date">
-                        </div>
-                        <label class="flex items-center gap-3 p-3 bg-dark-bg/50 border border-dark-border rounded-xl cursor-pointer hover:border-brand-500/50 transition-colors h-[46px]">
-                            <input type="checkbox" name="allDay" id="eventAllDay" class="w-5 h-5 rounded border-dark-border bg-dark-bg text-brand-600 focus:ring-brand-500" 
-                                onchange="const t = document.getElementById('eventTimeInput'); t.disabled = this.checked; if(this.checked) t.value = ''; else t.focus(); t.required = !this.checked;">
-                            <span class="text-sm font-medium text-white">Ganztägig</span>
-                        </label>
-                    </div>
-                    
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ort</label>
-                        <input type="text" name="location" class="form-input" placeholder="z.B. Vereinsheim">
-                    </div>
-
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Details / Beschreibung</label>
-                        <textarea name="description" rows="4" class="form-input resize-none custom-scrollbar" placeholder="Details zum Event..."></textarea>
-                    </div>
-                    
-                    <button type="submit" class="btn-primary w-full mt-4">Termin erstellen</button>
-                </form>
-            </div>
-        `;
-        App.openModal(html);
-    },
-
-    openEditModal(id) {
-        // --- BERECHTIGUNGS FIX ---
-        const user = App.state.currentUser;
-        const isVorstand = user && ((Array.isArray(user.roles) && user.roles.includes('Vorstand')) || user.role === 'Vorstand');
-        if(!isVorstand && !App.can('manage_events')) return;
-
-        const e = Store.state.events.find(ev => ev.id === id);
-        if(!e) return;
-
-        const timeValue = e.time || '';
-        const allDayChecked = e.allDay ? 'checked' : '';
-        const timeDisabled = e.allDay ? 'disabled' : '';
-
-        const html = `
-            <div class="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 sticky top-0 bg-dark-card z-10">
-                    <h3 class="text-xl font-bold text-white">Termin bearbeiten</h3>
-                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
-                </div>
-                
-                <form onsubmit="CalendarView.handleUpdate(event, ${id})" class="space-y-5">
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Titel</label>
-                        <input type="text" name="title" value="${e.title}" required class="form-input">
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Start</label>
-                            <input type="date" name="date" value="${e.date}" id="editStartDateInput" required class="form-input dark-date" onchange="document.getElementById('editEndDateInput').min = this.value">
-                        </div>
-                        <div>
-                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ende</label>
-                            <input type="date" name="endDate" value="${e.endDate || ''}" id="editEndDateInput" class="form-input dark-date">
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-4 items-end">
-                        <div>
-                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Uhrzeit</label>
-                            <input type="time" name="time" value="${timeValue}" id="editEventTimeInput" ${timeDisabled} required class="form-input dark-date">
-                        </div>
-                        <label class="flex items-center gap-3 p-3 bg-dark-bg/50 border border-dark-border rounded-xl cursor-pointer hover:border-brand-500/50 transition-colors h-[46px]">
-                            <input type="checkbox" name="allDay" id="editEventAllDay" ${allDayChecked} class="w-5 h-5 rounded border-dark-border bg-dark-bg text-brand-600 focus:ring-brand-500" 
-                                onchange="const t = document.getElementById('editEventTimeInput'); t.disabled = this.checked; if(this.checked) t.value = ''; else t.focus(); t.required = !this.checked;">
-                            <span class="text-sm font-medium text-white">Ganztägig</span>
-                        </label>
-                    </div>
-                    
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ort</label>
-                        <input type="text" name="location" value="${e.location || ''}" class="form-input">
-                    </div>
-
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Details / Beschreibung</label>
-                        <textarea name="description" rows="5" class="form-input resize-none custom-scrollbar">${e.description || ''}</textarea>
-                    </div>
-                    
-                    <button type="submit" class="btn-primary w-full mt-4">Änderungen speichern</button>
-                </form>
-            </div>
-        `;
-        App.openModal(html);
-    },
-
-    handleAdd(e) {
+    sendMessage(e) {
         e.preventDefault();
-        const fd = new FormData(e.target);
-        const isAllDay = fd.get('allDay') === 'on';
-        const startDate = fd.get('date');
-        let endDate = fd.get('endDate');
-        if (!endDate || new Date(endDate) < new Date(startDate)) endDate = startDate;
+        const input = document.getElementById('chat-input');
+        const text = input.value.trim();
+        if(!text) return;
+        
+        this.addMessageToChat({ text, type: 'text', replyToId: this.state.replyingTo });
+        
+        input.value = '';
+        
+        // Reply Box visuell entfernen ohne kompletten Re-Render
+        if (this.state.replyingTo) {
+            this.state.replyingTo = null;
+            const replyBox = document.getElementById('reply-preview-box');
+            if(replyBox) replyBox.remove();
+        }
+        
+        // Focus behalten
+        input.focus();
+    },
 
-        const newEvent = {
-            title: fd.get('title'),
-            date: startDate,
-            endDate: endDate,
-            time: isAllDay ? null : fd.get('time'),
-            allDay: isAllDay,
-            location: fd.get('location'),
-            description: fd.get('description'), 
-            group: null 
+    addMessageToChat(msgData) {
+        const myId = this.getMyId();
+        const me = Store.state.members.find(m => m.id == myId) || { firstName: 'Ich' };
+        
+        const newMsg = {
+            id: Date.now(),
+            text: msgData.text,
+            type: msgData.type || 'text',
+            content: msgData.content || null,
+            sender: me.firstName,
+            senderId: myId,
+            recipientId: this.state.activeId,
+            isMe: true,
+            time: new Date().toISOString(),
+            replyToId: msgData.replyToId,
+            isDeleted: false,
+            read: false
         };
+
+        // 1. Daten in Store/DB speichern
+        if (this.state.activeType === 'group') {
+             const g = Store.state.groups.find(x => x.id == this.state.activeId);
+             if(g) {
+                 if(!g.chat) g.chat = [];
+                 g.chat.push(newMsg);
+                 this.safeUpdate('groups', g);
+             }
+        } else if (this.state.activeType === 'private') {
+             const meUser = Store.state.members.find(x => x.id == myId);
+             const otherUser = Store.state.members.find(x => x.id == this.state.activeId);
+             if(meUser) { if(!meUser.privateChat) meUser.privateChat=[]; meUser.privateChat.push(newMsg); this.safeUpdate('members', meUser); }
+             if(otherUser) { if(!otherUser.privateChat) otherUser.privateChat=[]; otherUser.privateChat.push(newMsg); this.safeUpdate('members', otherUser); }
+        }
         
-        Store.add('events', newEvent);
-        App.closeModal();
-        App.showToast('Termin erstellt');
-    },
-
-    async handleUpdate(e, id) {
-        e.preventDefault();
-        const fd = new FormData(e.target);
-        const isAllDay = fd.get('allDay') === 'on';
-        const startDate = fd.get('date');
-        let endDate = fd.get('endDate');
-        if (!endDate || new Date(endDate) < new Date(startDate)) endDate = startDate;
-
-        // Wir holen das Original-Objekt, um die ID und andere Felder zu behalten
-        const originalEvent = Store.state.events.find(ev => ev.id === id);
-        
-        if (originalEvent) {
-            const updatedEvent = {
-                ...originalEvent,
-                title: fd.get('title'),
-                date: startDate,
-                endDate: endDate,
-                time: isAllDay ? null : fd.get('time'),
-                allDay: isAllDay,
-                location: fd.get('location'),
-                description: fd.get('description'),
-                comment: '' // Kurzbeschreibung entfernt, Feld leeren
-            };
-
-            // Speichern mit safeUpdate statt Store.update
-            await this.safeUpdate('events', updatedEvent);
-            
-            // Lokales Update für sofortiges Feedback (Optional)
-            const index = Store.state.events.indexOf(originalEvent);
-            if(index !== -1) Store.state.events[index] = updatedEvent;
-
-            App.closeModal();
-            App.showToast('Termin gespeichert');
-            // Zurück zur Detail-Ansicht um Änderungen zu sehen
-            this.openDetailModal(id);
+        // 2. DOM direkt updaten (verhindert Re-Render & Wackeln)
+        const container = document.getElementById('msg-scroll-container');
+        if (container) {
+            const html = this.renderMessageBubble(newMsg);
+            container.insertAdjacentHTML('beforeend', html);
+            setTimeout(() => this.scrollToBottom(true), 10);
         }
     },
 
-    /**
-     * Führt ein sicheres Datenbank-Update durch (entfernt ID aus Payload)
-     */
-    async safeUpdate(table, item) {
+    // Standard Features
+    replyTo(id) { this.state.replyingTo = id; this.render(document.getElementById('content')); document.getElementById('chat-input')?.focus(); },
+    cancelReply() { this.state.replyingTo = null; this.render(document.getElementById('content')); },
+    deleteMessage(id) { /* Löschlogik analog zu deiner alten Datei */ this.render(document.getElementById('content')); },
+    copyMessageText(txt) { navigator.clipboard.writeText(txt); if(window.App) window.App.showToast("Kopiert!"); },
+    
+    toggleAttachMenu() { this.state.showAttachMenu = !this.state.showAttachMenu; this.render(document.getElementById('content')); },
+    
+    handleAttachment(type) {
+        if(type === 'poll') {
+             const q = prompt("Frage:");
+             if(q) this.addMessageToChat({ text: '', type: 'poll', content: { question: q, options: [{id:1, text:'Ja', votes:[]}, {id:2, text:'Nein', votes:[]}] } });
+        } else {
+             this.addMessageToChat({ text: '', type: 'image', content: 'https://picsum.photos/400/300' });
+        }
+        this.toggleAttachMenu();
+    },
+
+    getMemberChat(partner) {
+        if (!partner) return [];
+        const myId = this.getMyId();
+        const me = (Store.state.members || []).find(m => m.id == myId);
+        if(!me || !me.privateChat) return [];
+        return me.privateChat.filter(msg => 
+            (msg.senderId == myId && msg.recipientId == partner.id) || 
+            (msg.senderId == partner.id && msg.recipientId == myId)
+        );
+    },
+
+    findMessage(id) {
+         // Helper um Nachricht zu finden (vereinfacht)
+         if(this.state.activeType === 'group') {
+             const g = Store.state.groups.find(x => x.id == this.state.activeId);
+             return g?.chat?.find(m => m.id == id);
+         }
+         const me = Store.state.members.find(x => x.id == this.getMyId());
+         return me?.privateChat?.find(m => m.id == id);
+    },
+
+    scrollToBottom(smooth) {
+        const el = document.getElementById('msg-scroll-container');
+        if(el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+    },
+
+    safeUpdate(table, item) {
         // Fallback wenn Supabase nicht global verfügbar ist
         if (typeof supabase === 'undefined' || typeof CONFIG === 'undefined') {
             if(window.Store) Store.update(table, item);
@@ -436,21 +757,19 @@ const CalendarView = {
             const payload = { ...item }; 
             delete payload.id; 
             
-            const { error } = await sb.from(table).update(payload).eq('id', item.id);
-            
-            if (error) {
-                console.error("DB Update Error:", error);
-                if(window.App) window.App.showToast(error.message, 'error');
-            } else {
-                if(window.Store && window.Store.fetchTable) window.Store.fetchTable(table);
-            }
+            sb.from(table).update(payload).eq('id', item.id).then(({error}) => {
+                if(error && window.App) window.App.showToast(error.message, 'error');
+                else if(window.Store && window.Store.fetchTable) window.Store.fetchTable(table);
+            });
         } catch(e) { 
             console.error(e); 
             // Fallback
             if(window.Store) Store.update(table, item);
         }
-    }
+    },
+
+    showUserProfile(id) { if(window.App && App.openModal) App.openModal(`<div class="p-4 text-center text-white">Profil von ID ${id}</div>`); },
+    showGroupInfo(id) { if(window.App && App.router) App.router('groups'); }
 };
 
-// WICHTIG: Global verfügbar machen für die neue App.js
-window.CalendarView = CalendarView;
+window.MessengerView = MessengerView;
