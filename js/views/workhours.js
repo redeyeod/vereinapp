@@ -8,6 +8,9 @@
 const WorkHoursView = {
     // Standard-Zielvorgabe (Fallback)
     DEFAULT_TARGET: 6,
+    
+    // Suchbegriff für Admin-Liste
+    adminFilterTerm: '',
 
     /**
      * Haupt-Render Funktion
@@ -160,6 +163,22 @@ const WorkHoursView = {
     // ADMIN ANSICHT
     // =========================================================================
     
+    // Handler für die Suche
+    handleAdminSearch(val) {
+        this.adminFilterTerm = val.toLowerCase();
+        this.render(document.getElementById('content'));
+        
+        // Fokus wiederherstellen
+        setTimeout(() => {
+            const input = document.getElementById('adminSearchInput');
+            if(input) {
+                input.focus();
+                const len = input.value.length;
+                input.setSelectionRange(len, len);
+            }
+        }, 0);
+    },
+
     renderAdminView() {
         const entries = Store.state.work_entries || [];
         const members = Store.state.members || [];
@@ -168,7 +187,7 @@ const WorkHoursView = {
         const pendingEntries = entries.filter(e => e.status === 'pending');
         
         // Gesamtstatistik berechnen
-        const memberStats = members.map(m => {
+        let memberStats = members.map(m => {
             const hours = entries
                 .filter(e => e.memberId == m.id && e.status === 'approved')
                 .reduce((sum, e) => sum + parseFloat(e.hours), 0);
@@ -182,10 +201,20 @@ const WorkHoursView = {
             const target = (m.workTarget) ? parseInt(m.workTarget) : 6;
 
             return { ...m, hours, roleDisplay, target };
-        }).sort((a, b) => {
-            // Sortiere alphabetisch nach Vorname + Nachname
-            const nameA = ((a.firstName || '') + ' ' + (a.lastName || '')).toLowerCase();
-            const nameB = ((b.firstName || '') + ' ' + (b.lastName || '')).toLowerCase();
+        });
+
+        // FILTER: Suchfunktion
+        if (this.adminFilterTerm) {
+            memberStats = memberStats.filter(m => {
+                const searchStr = ((m.firstName || '') + ' ' + (m.lastName || '') + ' ' + (m.roleDisplay || '')).toLowerCase();
+                return searchStr.includes(this.adminFilterTerm);
+            });
+        }
+
+        // SORTIERUNG: Nach Nachname
+        memberStats.sort((a, b) => {
+            const nameA = ((a.lastName || '') + ' ' + (a.firstName || '')).toLowerCase();
+            const nameB = ((b.lastName || '') + ' ' + (b.firstName || '')).toLowerCase();
             return nameA.localeCompare(nameB);
         });
 
@@ -213,10 +242,21 @@ const WorkHoursView = {
                     <div class="flex flex-col sm:flex-row justify-between items-end sm:items-center mb-4 gap-4">
                         <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider">Mitglieder Übersicht</h4>
                         
-                        <!-- Actions -->
-                        <div class="flex gap-2">
+                        <!-- Actions & Search -->
+                        <div class="flex gap-2 w-full sm:w-auto">
+                            <!-- Search Input -->
+                            <div class="relative flex-1 sm:flex-none">
+                                <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-dark-muted text-xs"></i>
+                                <input type="text" 
+                                    id="adminSearchInput"
+                                    placeholder="Suchen..." 
+                                    value="${this.adminFilterTerm}" 
+                                    oninput="WorkHoursView.handleAdminSearch(this.value)" 
+                                    class="w-full sm:w-48 bg-dark-card border border-dark-border rounded-lg py-1.5 pl-8 pr-3 text-xs text-white focus:outline-none focus:border-brand-500 transition-all placeholder-dark-muted">
+                            </div>
+
                             <!-- Excel Export Button -->
-                            <button onclick="WorkHoursView.downloadExcel()" class="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-dark-card border border-dark-border text-dark-muted hover:text-white hover:border-brand-500/50 transition-colors flex items-center gap-2 shadow-sm">
+                            <button onclick="WorkHoursView.downloadExcel()" class="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-dark-card border border-dark-border text-dark-muted hover:text-white hover:border-brand-500/50 transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap">
                                 <i class="fa-solid fa-file-csv text-brand-500"></i> Export
                             </button>
                         </div>
@@ -230,7 +270,7 @@ const WorkHoursView = {
                                         <th class="p-4">Name</th>
                                         <th class="p-4 hidden sm:table-cell">Rolle</th>
                                         <th class="p-4 text-right">Stunden</th>
-                                        <th class="p-4 text-center w-32">Zielvorgabe</th>
+                                        <th class="p-4 text-center w-32">Status / Ziel</th>
                                         <th class="p-4 text-right w-10"></th>
                                     </tr>
                                 </thead>
@@ -333,59 +373,6 @@ const WorkHoursView = {
                 </div>
             </div>
         `;
-    },
-
-    // =========================================================================
-    // EXPORT FUNCTION (CSV)
-    // =========================================================================
-    downloadExcel() {
-        const entries = Store.state.work_entries || [];
-        const members = Store.state.members || [];
-        
-        // Daten für Export vorbereiten
-        const data = members.map(m => {
-            const hours = entries
-                .filter(e => e.memberId == m.id && e.status === 'approved')
-                .reduce((sum, e) => sum + parseFloat(e.hours), 0);
-            
-            let roleDisplay = 'Mitglied';
-            if (Array.isArray(m.roles) && m.roles.length > 0) roleDisplay = m.roles.join(', ');
-            else if (m.role) roleDisplay = m.role;
-
-            const target = (m.workTarget) ? parseInt(m.workTarget) : 6;
-            const status = hours >= target ? 'Erfüllt' : 'Offen';
-
-            // CSV kompatibel formatieren (Semikolon für Excel, Komma ersetzen)
-            return {
-                firstName: m.firstName || '',
-                lastName: m.lastName || '',
-                role: roleDisplay,
-                hours: hours.toFixed(1).replace('.', ','), 
-                target: target,
-                status: status
-            };
-        });
-
-        // CSV Header
-        let csvContent = "Vorname;Nachname;Rolle;Genehmigte Stunden;Zielvorgabe;Status\n";
-
-        // CSV Rows
-        data.forEach(row => {
-            csvContent += `${row.firstName};${row.lastName};${row.role};${row.hours};${row.target};${row.status}\n`;
-        });
-
-        // UTF-8 BOM für Excel hinzufügen (\uFEFF)
-        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        
-        link.setAttribute("href", url);
-        link.setAttribute("download", `arbeitsstunden_export_${new Date().getFullYear()}.csv`);
-        link.style.visibility = 'hidden';
-        
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
     },
 
     // =========================================================================
