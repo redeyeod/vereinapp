@@ -150,10 +150,7 @@ const MessengerView = {
                     <!-- Sidebar Header -->
                     <div class="messenger-sidebar-header h-16 px-5 flex items-center justify-between shrink-0 border-b border-white/5 bg-dark-bg/50 backdrop-blur-md">
                         <h2 class="font-bold text-white text-lg tracking-tight">Nachrichten</h2>
-                        <div class="flex gap-2">
-                             <button class="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-dark-muted hover:text-white transition-colors"><i class="fa-solid fa-pen-to-square"></i></button>
-                             <button class="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-dark-muted hover:text-white transition-colors"><i class="fa-solid fa-ellipsis-vertical"></i></button>
-                        </div>
+                        <!-- Buttons entfernt wie gewünscht -->
                     </div>
 
                     <!-- Search Bar -->
@@ -265,8 +262,15 @@ const MessengerView = {
         });
 
         // Sort & Render
-        items = items.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id && t.type===v.type))===i); // Unique
-        items.sort((a, b) => b.time - a.time);
+        // Filtere Duplikate (falls welche entstehen)
+        items = items.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id && t.type===v.type))===i); 
+        
+        // SORTIERUNG: Ankündigungen (news) immer zuerst, dann nach Zeit
+        items.sort((a, b) => {
+            if (a.type === 'news') return -1; // a ist News -> a kommt zuerst
+            if (b.type === 'news') return 1;  // b ist News -> b kommt zuerst
+            return b.time - a.time;           // Sonst nach Zeit
+        });
 
         if (items.length === 0) {
             container.innerHTML = `<div class="flex flex-col items-center justify-center pt-10 text-dark-muted"><i class="fa-solid fa-comment-slash text-2xl mb-2"></i><p class="text-xs">Keine Chats gefunden.</p></div>`;
@@ -393,8 +397,7 @@ const MessengerView = {
             messages = messages.filter(m => m.text && m.text.toLowerCase().includes(this.state.chatFilterTerm));
         }
 
-        // --- NEW FLEXBOX LAYOUT ---
-        // Header: fixed height, shrink-0
+        // HEADER (Fixed Position)
         const header = `
             <div class="h-16 px-4 bg-dark-card/90 backdrop-blur-xl border-b border-white/5 flex items-center justify-between shadow-lg z-30 shrink-0 relative">
                 <div class="flex items-center gap-3 overflow-hidden">
@@ -429,7 +432,7 @@ const MessengerView = {
             </div>
         `;
 
-        // MESSAGES: flex-1, overflow-y-auto
+        // MESSAGES
         const msgsHtml = messages.length 
             ? messages.map(msg => this.renderMessageBubble(msg)).join('')
             : `<div class="flex flex-col items-center justify-center mt-20 opacity-50">
@@ -437,7 +440,7 @@ const MessengerView = {
                 <p class="text-dark-muted text-sm">Sag Hallo!</p>
                </div>`;
 
-        // INPUT: shrink-0
+        // INPUT AREA
         const inputArea = canWrite ? this.renderInputArea() : `<div class="p-4 bg-dark-card/90 text-center text-dark-muted text-xs uppercase font-bold tracking-widest border-t border-white/5 shrink-0">Nur Lesen</div>`;
 
         // FULL FLEX CONTAINER
