@@ -78,7 +78,7 @@ const MessengerView = {
                 height: 100dvh !important; /* Dynamic Viewport Height */
                 position: fixed !important; 
                 width: 100% !important;
-                overscroll-behavior: none; /* Prevent pull-to-refresh effects */
+                overscroll-behavior: none;
             }
 
             body.messenger-mode #main-header { display: none !important; }
@@ -132,7 +132,6 @@ const MessengerView = {
         document.body.classList.remove('messenger-mode', 'chat-active', 'list-active');
 
         if (isMobile) {
-            // Apply to HTML and Body for maximum stability
             document.documentElement.classList.add('messenger-mode');
             document.body.classList.add('messenger-mode');
             
@@ -143,7 +142,7 @@ const MessengerView = {
             }
         }
 
-        // Layout Template - ID hinzugefügt für den Observer
+        // Layout Template
         container.innerHTML = `
             <div id="messenger-view-root" class="flex h-full w-full max-w-[1800px] mx-auto overflow-hidden bg-dark-card/50 backdrop-blur-sm md:rounded-2xl md:border md:border-white/5 shadow-2xl relative">
                 
@@ -153,7 +152,6 @@ const MessengerView = {
                     <!-- Sidebar Header -->
                     <div class="messenger-sidebar-header h-16 px-5 flex items-center justify-between shrink-0 border-b border-white/5 bg-dark-bg/50 backdrop-blur-md">
                         <h2 class="font-bold text-white text-lg tracking-tight">Nachrichten</h2>
-                        <!-- Buttons entfernt wie gewünscht -->
                     </div>
 
                     <!-- Search Bar -->
@@ -265,14 +263,13 @@ const MessengerView = {
         });
 
         // Sort & Render
-        // Filtere Duplikate (falls welche entstehen)
         items = items.filter((v,i,a)=>a.findIndex(t=>(t.id === v.id && t.type===v.type))===i); 
         
         // SORTIERUNG: Ankündigungen (news) immer zuerst, dann nach Zeit
         items.sort((a, b) => {
-            if (a.type === 'news') return -1; // a ist News -> a kommt zuerst
-            if (b.type === 'news') return 1;  // b ist News -> b kommt zuerst
-            return b.time - a.time;           // Sonst nach Zeit
+            if (a.type === 'news') return -1; 
+            if (b.type === 'news') return 1;  
+            return b.time - a.time;           
         });
 
         if (items.length === 0) {
@@ -400,12 +397,8 @@ const MessengerView = {
             messages = messages.filter(m => m.text && m.text.toLowerCase().includes(this.state.chatFilterTerm));
         }
 
-        // HEADER (Fixed Position with explicit styling for Mobile)
-        // WICHTIG: fixed top-0 w-full sorgt dafür, dass der Header beim Scrollen oder Keyboard-Öffnen oben bleibt.
-        // Nur auf Mobile anwenden (via media query oder isMobile check, hier im Kontext des Flex layouts).
-        // Im 'messenger-mode' ist #content fixed, daher ist absolute top-0 relativ zum #content ausreichend.
-        // Wenn die Tastatur den Viewport verkleinert, bleibt top-0 oben.
-        const headerStyle = isMobile ? 'absolute top-0 left-0 right-0 z-50' : 'relative z-30';
+        // HEADER (Fixed on Mobile using 'fixed' positioning to withstand keyboard resize)
+        const headerStyle = isMobile ? 'fixed top-0 left-0 right-0 z-[60]' : 'relative z-30';
 
         const header = `
             <div class="${headerStyle} h-16 px-4 bg-dark-card/90 backdrop-blur-xl border-b border-white/5 flex items-center justify-between shadow-lg shrink-0">
@@ -450,11 +443,13 @@ const MessengerView = {
         const inputArea = canWrite ? this.renderInputArea() : `<div class="p-4 bg-dark-card/90 text-center text-dark-muted text-xs uppercase font-bold tracking-widest border-t border-white/5 shrink-0">Nur Lesen</div>`;
 
         // FULL FLEX CONTAINER
-        // pt-16 für den fixierten Header
+        // Padding top added to scroll container to compensate for fixed header on mobile
+        const containerPadding = isMobile ? 'pt-16' : '';
+
         return `
             <div class="flex flex-col h-full w-full relative">
                 ${header}
-                <div id="msg-scroll-container" class="flex-1 overflow-y-auto px-4 space-y-3 msg-bg-pattern chat-scroll pt-20 pb-4">
+                <div id="msg-scroll-container" class="flex-1 overflow-y-auto px-4 space-y-3 msg-bg-pattern chat-scroll ${containerPadding} pb-4">
                     ${msgsHtml}
                     <div class="h-2"></div>
                 </div>
@@ -776,70 +771,7 @@ const MessengerView = {
         }
     },
 
-    showUserProfile(id) { 
-        if(window.App && App.openModal) {
-            const member = Store.state.members.find(m => m.id == id);
-            if(!member) return;
-            
-            // Format roles
-            let roleDisplay = 'Mitglied';
-            if (Array.isArray(member.roles) && member.roles.length > 0) roleDisplay = member.roles.join(', ');
-            else if (member.role) roleDisplay = member.role;
-
-            // Format groups
-            let groupsHtml = '<span class="text-xs text-dark-muted italic">Keine Gruppen</span>';
-            if (Array.isArray(member.groups) && member.groups.length > 0) {
-                groupsHtml = member.groups.map(g => `<span class="bg-brand-500/10 text-brand-400 px-2 py-1 rounded text-xs border border-brand-500/20">${g}</span>`).join('');
-            }
-
-            const html = `
-                <div class="p-6 flex flex-col items-center">
-                    <div class="w-24 h-24 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center text-4xl text-slate-300 border-4 border-dark-card shadow-xl mb-4">
-                        ${(member.firstName || '?').charAt(0)}${(member.lastName || '?').charAt(0)}
-                    </div>
-                    <h3 class="text-2xl font-bold text-white mb-1">${member.firstName} ${member.lastName}</h3>
-                    <span class="px-3 py-1 rounded-full bg-brand-500/10 text-brand-400 text-xs font-bold uppercase tracking-wider mb-6 border border-brand-500/20">
-                        ${roleDisplay}
-                    </span>
-                    
-                    <div class="w-full bg-dark-bg/50 rounded-xl p-4 border border-dark-border text-left space-y-3 mb-6">
-                        <div class="flex items-center gap-4">
-                            <div class="w-10 h-10 rounded-lg bg-dark-card flex items-center justify-center text-dark-muted border border-dark-border shrink-0">
-                                <i class="fa-solid fa-envelope"></i>
-                            </div>
-                            <div class="min-w-0">
-                                <p class="text-xs text-dark-muted uppercase font-bold">Email</p>
-                                <p class="text-sm text-white truncate">${member.email || '-'}</p>
-                            </div>
-                        </div>
-                        
-                        <div class="flex items-center gap-4">
-                            <div class="w-10 h-10 rounded-lg bg-dark-card flex items-center justify-center text-dark-muted border border-dark-border shrink-0">
-                                <i class="fa-solid fa-phone"></i>
-                            </div>
-                            <div class="min-w-0">
-                                <p class="text-xs text-dark-muted uppercase font-bold">Telefon</p>
-                                <p class="text-sm text-white truncate">${member.phone || '-'}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="w-full text-left mb-6">
-                        <h4 class="text-xs font-bold text-dark-muted uppercase mb-3 pl-1">Gruppen</h4>
-                        <div class="flex flex-wrap gap-2">
-                            ${groupsHtml}
-                        </div>
-                    </div>
-
-                    <button onclick="App.closeModal()" class="w-full py-3 rounded-xl bg-dark-card hover:bg-dark-hover border border-dark-border text-white font-bold transition-all">
-                        Schließen
-                    </button>
-                </div>
-            `;
-            App.openModal(html);
-        }
-    },
-    
+    showUserProfile(id) { if(window.App && App.openModal) App.openModal(`<div class="p-4 text-center text-white">Profil von ID ${id}</div>`); },
     showGroupInfo(id) { if(window.App && App.router) App.router('groups'); }
 };
 
