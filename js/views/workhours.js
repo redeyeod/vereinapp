@@ -182,7 +182,12 @@ const WorkHoursView = {
             const target = (m.workTarget) ? parseInt(m.workTarget) : 6;
 
             return { ...m, hours, roleDisplay, target };
-        }).sort((a,b) => a.hours - b.hours); // Wenigste Stunden zuerst
+        }).sort((a, b) => {
+            // Sortiere alphabetisch nach Vorname + Nachname
+            const nameA = ((a.firstName || '') + ' ' + (a.lastName || '')).toLowerCase();
+            const nameB = ((b.firstName || '') + ' ' + (b.lastName || '')).toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
 
         return `
             <div class="space-y-8 pb-4">
