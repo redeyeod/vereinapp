@@ -129,7 +129,7 @@ const CalendarView = {
 
         const html = `
             <div class="p-6 md:p-8 h-full flex flex-col">
-                <!-- Header -->
+                <!-- Header (Fixed) -->
                 <div class="flex justify-between items-start mb-6 border-b border-dark-border pb-4 flex-shrink-0">
                     <div class="pr-4">
                         <div class="flex items-center gap-2 mb-2">
@@ -140,6 +140,8 @@ const CalendarView = {
                     <button onclick="App.closeModal()" class="w-8 h-8 rounded-full bg-dark-bg text-dark-muted hover:text-white flex items-center justify-center transition-colors flex-shrink-0"><i class="fa-solid fa-times text-lg"></i></button>
                 </div>
                 
+                <!-- Content (Scrollable) -->
+                <!-- WICHTIG: Kein 'max-h' auf dem inneren Container, das scrollen übernimmt dieser Wrapper -->
                 <div class="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-6">
                     
                     <!-- Info Grid -->
@@ -171,18 +173,19 @@ const CalendarView = {
                         </div>` : ''}
                     </div>
 
-                    <!-- Beschreibung (Lang & Scrollbar) -->
+                    <!-- Beschreibung -->
                     <div>
                         <div class="flex justify-between items-center mb-3">
                             <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider">Beschreibung & Details</h4>
                         </div>
-                        <div class="bg-dark-bg p-5 rounded-2xl border border-dark-border text-dark-text leading-relaxed text-sm shadow-inner min-h-[100px] max-h-[400px] overflow-y-auto custom-scrollbar">
+                        <!-- FIX: Kein max-h und kein overflow-y hier! Das macht das Scrollen auf Mobile kaputt (nested scroll) -->
+                        <div class="bg-dark-bg p-5 rounded-2xl border border-dark-border text-dark-text leading-relaxed text-sm shadow-inner min-h-[100px]">
                             ${formatDescription(e.description)}
                         </div>
                     </div>
                 </div>
 
-                <!-- Footer Actions (Admin only) -->
+                <!-- Footer Actions (Admin only - Fixed at Bottom) -->
                 ${canManage ? `
                 <div class="mt-6 pt-6 border-t border-dark-border flex gap-3 flex-shrink-0">
                     <button onclick="CalendarView.openEditModal(${e.id})" class="flex-1 btn-primary text-sm">
@@ -201,12 +204,16 @@ const CalendarView = {
         const modalContainer = document.getElementById('modal-content');
         if(modalContainer) {
             modalContainer.classList.remove('max-w-md');
-            modalContainer.classList.add('max-w-3xl', 'w-full', 'max-h-[90vh]');
+            // WICHTIG: Flex und Overflow Hidden auf den Container, damit der Inhalt scrollt
+            modalContainer.classList.add('max-w-3xl', 'w-full', 'h-[85vh]', 'max-h-[90vh]', 'flex', 'flex-col', 'overflow-hidden');
         }
     },
 
     delete(id) {
-        if(!App.can('manage_events')) return;
+        // --- BERECHTIGUNGS FIX ---
+        const user = App.state.currentUser;
+        const isVorstand = user && ((Array.isArray(user.roles) && user.roles.includes('Vorstand')) || user.role === 'Vorstand');
+        if(!isVorstand && !App.can('manage_events')) return;
 
         if(confirm("Termin wirklich löschen?")) {
             Store.remove('events', id);
@@ -218,7 +225,10 @@ const CalendarView = {
     // --- ADD / EDIT FORM MODALS ---
 
     openAddModal() {
-        if(!App.can('manage_events')) return;
+        // --- BERECHTIGUNGS FIX ---
+        const user = App.state.currentUser;
+        const isVorstand = user && ((Array.isArray(user.roles) && user.roles.includes('Vorstand')) || user.role === 'Vorstand');
+        if(!isVorstand && !App.can('manage_events')) return;
 
         const html = `
             <div class="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
@@ -274,7 +284,10 @@ const CalendarView = {
     },
 
     openEditModal(id) {
-        if(!App.can('manage_events')) return;
+        // --- BERECHTIGUNGS FIX ---
+        const user = App.state.currentUser;
+        const isVorstand = user && ((Array.isArray(user.roles) && user.roles.includes('Vorstand')) || user.role === 'Vorstand');
+        if(!isVorstand && !App.can('manage_events')) return;
 
         const e = Store.state.events.find(ev => ev.id === id);
         if(!e) return;
