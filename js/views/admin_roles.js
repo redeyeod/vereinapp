@@ -6,22 +6,27 @@
  */
 
 const AdminRolesView = {
-    // Globale System-Rechte
+    // Globale System-Rechte - HIER FEHLTE 'manage_roles'
     systemPermissions: [
         { key: 'admin_global', label: '👑 Super-Admin (Alles erlaubt)' },
+        { key: 'manage_roles', label: '🛡️ Rollen & Rechte verwalten' }, // NEU: Damit man auch ohne Super-Admin Rechte vergeben kann
         { key: 'manage_members', label: '👥 Mitglieder verwalten' },
         { key: 'manage_workhours', label: '⏱️ Arbeitsstunden verwalten' },
-        { key: 'manage_all_groups', label: '🌐 Alle Gruppen bearbeiten (Vorstand)' },
+        { key: 'manage_all_groups', label: '🌐 Alle Gruppen bearbeiten' },
+        { key: 'manage_events', label: '📅 Termine verwalten' },
         { key: 'manage_news', label: '📰 News & Events erstellen' },
         { key: 'manage_docs', label: '📁 Dokumente hochladen' },
     ],
 
     render(container) {
-        if (!App.can('admin_global')) {
+        // RECHTE-CHECK: Rein basierend auf Permissions, keine Namen mehr hardcodiert
+        const canManage = App.can('manage_roles') || App.can('admin_global');
+
+        if (!canManage) {
             container.innerHTML = `
                 <div class="flex flex-col items-center justify-center py-20 text-center">
-                    <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4 border border-red-500/20">
-                        <i class="fa-solid fa-lock text-2xl text-red-400"></i>
+                    <div class="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-4 text-red-500 border border-red-500/20">
+                        <i class="fa-solid fa-lock text-3xl"></i>
                     </div>
                     <h3 class="text-white font-bold">Zugriff verweigert</h3>
                     <p class="text-dark-muted text-sm mt-1">Du hast keine Berechtigung für diesen Bereich.</p>
@@ -39,7 +44,7 @@ const AdminRolesView = {
                         <h2 class="text-2xl md:text-3xl font-bold text-white">Rollen & Rechte</h2>
                         <p class="text-dark-muted text-sm mt-1">Definiere, wer was darf.</p>
                     </div>
-                    <button onclick="AdminRolesView.openModal()" class="pl-3 pr-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-brand-500/20 transition-all flex items-center gap-2">
+                    <button onclick="AdminRolesView.openAddRoleModal()" class="pl-3 pr-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-brand-500/20 transition-all flex items-center gap-2">
                         <i class="fa-solid fa-plus"></i> <span class="hidden sm:inline">Neue Rolle</span><span class="sm:hidden">Neu</span>
                     </button>
                 </div>
@@ -68,7 +73,7 @@ const AdminRolesView = {
         this.systemPermissions.forEach(sp => {
             if(perms.includes(sp.key)) {
                 if(badgeCount < 5) {
-                    badges.push(`<span class="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">${sp.label.split(' ')[0]}</span>`);
+                    badges.push(`<span class="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20">${sp.label.split(' ')[0].replace(/[^a-zA-ZäöüÄÖÜ]/g, '')}</span>`);
                     badgeCount++;
                 }
             }
@@ -86,6 +91,9 @@ const AdminRolesView = {
 
         const moreCount = perms.length - badgeCount;
 
+        // Systemrollen schützen (optional, hier nur visuell)
+        const isSystemRole = ['Mitglied'].includes(role.name); 
+
         return `
             <div class="bg-dark-card hover:bg-dark-hover border border-dark-border p-5 rounded-2xl flex flex-col justify-between h-full group transition-all relative overflow-hidden">
                 <!-- Top Actions -->
@@ -94,9 +102,11 @@ const AdminRolesView = {
                         <h4 class="font-bold text-white text-lg leading-tight">${role.name}</h4>
                         <p class="text-[10px] text-dark-muted uppercase font-bold tracking-wider mt-1">${perms.length} Berechtigungen</p>
                     </div>
+                    
+                    ${!isSystemRole ? `
                     <button onclick="AdminRolesView.deleteRole('${role.id}')" class="text-dark-muted hover:text-red-400 p-2 -mr-2 -mt-2 rounded-lg hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100">
                         <i class="fa-regular fa-trash-can"></i>
-                    </button>
+                    </button>` : '<span class="text-[10px] bg-dark-bg border border-dark-border text-dark-muted px-2 py-1 rounded uppercase font-bold tracking-wider">System</span>'}
                 </div>
                 
                 <!-- Badges Area -->
@@ -109,17 +119,50 @@ const AdminRolesView = {
                 </div>
 
                 <!-- Footer Action -->
-                <button onclick="AdminRolesView.openModal('${role.id}')" class="w-full py-2 bg-dark-bg hover:bg-brand-500/10 border border-dark-border hover:border-brand-500/30 rounded-xl text-sm text-dark-muted hover:text-brand-400 font-bold transition-all flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-pen text-xs"></i> Bearbeiten
+                <button onclick="AdminRolesView.openEditPermissionsModal('${role.id}')" class="w-full py-2 bg-dark-bg hover:bg-brand-500/10 border border-dark-border hover:border-brand-500/30 rounded-xl text-sm text-dark-muted hover:text-brand-400 font-bold transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-list-check text-xs"></i> Rechte bearbeiten
                 </button>
             </div>
         `;
     },
 
-    openModal(roleId = null) {
-        const isEdit = !!roleId;
-        const role = roleId ? Store.state.roles.find(r => r.id == roleId) : { name: '', permissions: [] };
-        if (roleId && !role) return;
+    openAddRoleModal() {
+        const html = `
+            <div class="p-6">
+                <h3 class="text-xl font-bold text-white mb-6">Neue Rolle erstellen</h3>
+                <form onsubmit="AdminRolesView.handleAddRole(event)">
+                    <label class="block text-xs font-bold text-dark-muted uppercase mb-2">Bezeichnung</label>
+                    <input type="text" name="name" required class="form-input mb-6" placeholder="z.B. Kassenwart">
+                    <button type="submit" class="btn-primary w-full">Erstellen</button>
+                </form>
+            </div>
+        `;
+        App.openModal(html);
+    },
+
+    async handleAddRole(e) {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const newRole = {
+            name: fd.get('name'),
+            permissions: []
+        };
+        await Store.add('roles', newRole);
+        App.closeModal();
+        this.render(document.getElementById('content'));
+    },
+
+    async deleteRole(id) {
+        if(confirm("Rolle wirklich löschen? Dies kann Auswirkungen auf bestehende Mitglieder haben.")) {
+            await Store.remove('roles', id);
+            this.render(document.getElementById('content'));
+            App.showToast("Rolle gelöscht");
+        }
+    },
+
+    openEditPermissionsModal(roleId) {
+        const role = Store.state.roles.find(r => r.id == roleId);
+        if(!role) return;
 
         const currentPerms = role.permissions || [];
         const groups = Store.state.groups || [];
@@ -150,16 +193,14 @@ const AdminRolesView = {
         const html = `
             <div class="p-6 md:p-8 max-h-[85vh] overflow-y-auto custom-scrollbar flex flex-col">
                 <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 sticky top-0 bg-dark-card z-10">
-                    <h3 class="text-xl font-bold text-white">${isEdit ? 'Rolle bearbeiten' : 'Neue Rolle erstellen'}</h3>
-                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
+                    <div>
+                        <h3 class="text-xl font-bold text-white">Rechte: ${role.name}</h3>
+                        <p class="text-xs text-dark-muted mt-1">Wähle die Berechtigungen für diese Rolle.</p>
+                    </div>
+                    <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
                 
-                <form onsubmit="AdminRolesView.save(event, '${roleId || ''}')" class="space-y-6">
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Rollen-Name</label>
-                        <input type="text" name="name" value="${role.name}" class="form-input" placeholder="z.B. Abteilungsleiter" required>
-                    </div>
-
+                <form onsubmit="AdminRolesView.savePermissions(event, '${roleId}')" class="space-y-6">
                     <div class="space-y-6">
                         <!-- System Rechte -->
                         <div>
@@ -193,43 +234,44 @@ const AdminRolesView = {
         `;
         App.openModal(html);
         
-        // Modal Größe anpassen
         const modalContainer = document.getElementById('modal-content');
         if(modalContainer) {
-            modalContainer.classList.remove('max-w-md');
-            modalContainer.classList.add('max-w-2xl', 'w-full', 'max-h-[90vh]');
+            modalContainer.classList.add('max-w-2xl', 'max-h-[85vh]');
         }
     },
 
-    async save(e, id) {
+    async savePermissions(e, roleId) {
         e.preventDefault();
-        const fd = new FormData(e.target);
-        
-        const perms = [];
-        e.target.querySelectorAll('input[name="perms"]:checked').forEach(cb => perms.push(cb.value));
+        const form = e.target;
+        const checkboxes = form.querySelectorAll('input[name="perms"]:checked');
+        const newPerms = Array.from(checkboxes).map(cb => cb.value);
 
-        const roleData = {
-            name: fd.get('name'),
-            permissions: perms
-        };
-
-        if (id) {
-            roleData.id = id;
-            await Store.update('roles', roleData);
-        } else {
-            await Store.add('roles', roleData);
-        }
-
-        App.closeModal();
-        App.showToast("Rolle gespeichert");
-        this.render(document.getElementById('content'));
-    },
-
-    async deleteRole(id) {
-        if(confirm("Rolle wirklich löschen? Dies kann Auswirkungen auf bestehende Mitglieder haben.")) {
-            await Store.remove('roles', id);
+        const role = Store.state.roles.find(r => r.id == roleId);
+        if(role) {
+            const updatedRole = { ...role, permissions: newPerms };
+            
+            // Safe update logic
+            if (typeof supabase !== 'undefined') {
+                const sessionStr = localStorage.getItem('vm_supabase_session');
+                if(sessionStr) {
+                    const token = JSON.parse(sessionStr).access_token;
+                    const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, { global: { headers: { Authorization: `Bearer ${token}` } } });
+                    
+                    const payload = { ...updatedRole };
+                    delete payload.id;
+                    await client.from('roles').update(payload).eq('id', roleId);
+                }
+            } else {
+                await Store.update('roles', updatedRole);
+            }
+            
+            // Local update
+            const idx = Store.state.roles.indexOf(role);
+            if(idx !== -1) Store.state.roles[idx] = updatedRole;
+            
+            App.closeModal();
+            App.showToast("Rechte gespeichert");
             this.render(document.getElementById('content'));
-            App.showToast("Rolle gelöscht");
         }
     }
 };
