@@ -6,11 +6,8 @@
  */
 
 const WorkHoursView = {
-    // Standard-Zielvorgabe (wird durch Toggle überschrieben)
-    currentListTarget: 6,
-    
-    // Status für den Toggle-Button ('active' = 6h, 'passive' = 22h)
-    listMode: 'active', 
+    // Standard-Zielvorgabe (Fallback)
+    DEFAULT_TARGET: 6,
 
     /**
      * Haupt-Render Funktion
@@ -57,8 +54,9 @@ const WorkHoursView = {
         const entries = Store.state.work_entries || [];
         const myEntries = entries.filter(e => e.memberId == myId);
         
-        // Persönliches Ziel (Standard 6h, könnte man später auch pro User speichern)
-        const PERSONAL_TARGET = 6; 
+        // Persönliches Ziel laden (oder Standard 6h)
+        const me = Store.state.members ? Store.state.members.find(m => m.id == myId) : null;
+        const PERSONAL_TARGET = (me && me.workTarget) ? parseInt(me.workTarget) : this.DEFAULT_TARGET;
 
         // Berechne genehmigte Stunden
         const approvedHours = myEntries
@@ -162,13 +160,6 @@ const WorkHoursView = {
     // ADMIN ANSICHT
     // =========================================================================
     
-    // Toggle Funktion für den Admin-Bereich
-    setListTarget(mode) {
-        this.listMode = mode;
-        this.currentListTarget = (mode === 'active') ? 6 : 22;
-        this.render(document.getElementById('content'));
-    },
-
     renderAdminView() {
         const entries = Store.state.work_entries || [];
         const members = Store.state.members || [];
@@ -187,7 +178,10 @@ const WorkHoursView = {
             if (Array.isArray(m.roles) && m.roles.length > 0) roleDisplay = m.roles.join(', ');
             else if (m.role) roleDisplay = m.role;
 
-            return { ...m, hours, roleDisplay };
+            // Individuelles Ziel oder Standard (6h)
+            const target = (m.workTarget) ? parseInt(m.workTarget) : 6;
+
+            return { ...m, hours, roleDisplay, target };
         }).sort((a,b) => a.hours - b.hours); // Wenigste Stunden zuerst
 
         return `
@@ -213,16 +207,6 @@ const WorkHoursView = {
                 <div>
                     <div class="flex flex-col sm:flex-row justify-between items-end sm:items-center mb-4 gap-4">
                         <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider">Mitglieder Übersicht</h4>
-                        
-                        <!-- Toggle Buttons für Ziel-Stunden -->
-                        <div class="flex bg-dark-card p-1 rounded-xl border border-dark-border">
-                            <button onclick="WorkHoursView.setListTarget('active')" class="px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${this.listMode === 'active' ? 'bg-brand-600 text-white shadow-md' : 'text-dark-muted hover:text-white'}">
-                                Bühnenaktiv (6h)
-                            </button>
-                            <button onclick="WorkHoursView.setListTarget('passive')" class="px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${this.listMode === 'passive' ? 'bg-brand-600 text-white shadow-md' : 'text-dark-muted hover:text-white'}">
-                                Passiv (22h)
-                            </button>
-                        </div>
                     </div>
                     
                     <div class="bg-dark-card rounded-2xl border border-dark-border overflow-hidden shadow-sm">
@@ -233,14 +217,16 @@ const WorkHoursView = {
                                         <th class="p-4">Name</th>
                                         <th class="p-4 hidden sm:table-cell">Rolle</th>
                                         <th class="p-4 text-right">Stunden</th>
-                                        <th class="p-4 text-right w-32">Status (Ziel: ${this.currentListTarget}h)</th>
+                                        <th class="p-4 text-center w-32">Status / Ziel</th>
                                         <th class="p-4 text-right w-10"></th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-dark-border text-white text-xs md:text-sm">
                                     ${memberStats.map(m => {
-                                        const isDone = m.hours >= this.currentListTarget;
-                                        const percent = Math.min(100, (m.hours / this.currentListTarget) * 100);
+                                        const target = m.target;
+                                        const isDone = m.hours >= target;
+                                        const percent = Math.min(100, (m.hours / target) * 100);
+                                        const isActiveTarget = target === 6;
                                         
                                         return `
                                         <tr class="hover:bg-dark-hover/30 transition-colors group">
@@ -255,12 +241,17 @@ const WorkHoursView = {
                                             <td class="p-4 text-dark-muted text-xs hidden sm:table-cell truncate max-w-[150px]">${m.roleDisplay}</td>
                                             <td class="p-4 text-right font-mono">
                                                 <span class="${isDone ? 'text-emerald-400' : 'text-white'} font-bold">${m.hours.toFixed(1)}</span>
-                                                <span class="text-dark-muted text-[10px]">/${this.currentListTarget}</span>
-                                            </td>
-                                            <td class="p-4 text-right">
-                                                <div class="w-24 h-1.5 bg-dark-bg rounded-full ml-auto overflow-hidden border border-dark-border/50">
+                                                <span class="text-dark-muted text-[10px]">/${target}</span>
+                                                <div class="w-16 h-1 bg-dark-bg rounded-full ml-auto mt-1 overflow-hidden border border-dark-border/50">
                                                     <div class="h-full ${isDone ? 'bg-emerald-500' : 'bg-brand-500'} rounded-full" style="width: ${percent}%"></div>
                                                 </div>
+                                            </td>
+                                            <td class="p-4 text-center">
+                                                <!-- Toggle Button -->
+                                                <button onclick="WorkHoursView.toggleMemberTarget(${m.id}, ${target})" 
+                                                    class="px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${isActiveTarget ? 'bg-brand-500/10 text-brand-400 border-brand-500/20 hover:bg-brand-500/20' : 'bg-slate-700/30 text-slate-400 border-slate-600/30 hover:bg-slate-700/50'}">
+                                                    ${isActiveTarget ? 'Aktiv (6h)' : 'Passiv (22h)'}
+                                                </button>
                                             </td>
                                             <td class="p-4 text-right">
                                                 <button onclick="WorkHoursView.openMemberDetails(${m.id})" class="text-dark-muted hover:text-brand-400 p-2 rounded-lg hover:bg-dark-bg transition-colors" title="Details">
@@ -320,13 +311,40 @@ const WorkHoursView = {
     },
 
     // =========================================================================
-    // ADMIN ACTIONS (MODAL)
+    // ADMIN ACTIONS (MODAL & LOGIC)
     // =========================================================================
     
+    // Toggle Member Target Logic (6h <-> 22h)
+    async toggleMemberTarget(memberId, currentTarget) {
+        const newTarget = (currentTarget === 6) ? 22 : 6;
+        
+        // UI Optimistic Update (für schnelles Feedback)
+        const memberIdx = Store.state.members.findIndex(m => m.id == memberId);
+        if(memberIdx !== -1) {
+            Store.state.members[memberIdx].workTarget = newTarget;
+            this.render(document.getElementById('content')); // Re-render table
+        }
+
+        // DB Update
+        const updates = { workTarget: newTarget };
+        const error = await this.safeMemberUpdate(memberId, updates);
+        
+        if (error) {
+            console.error("Fehler beim Speichern des Ziels:", error);
+            App.showToast("Fehler beim Speichern", "error");
+            // Revert on error
+            if(memberIdx !== -1) {
+                Store.state.members[memberIdx].workTarget = currentTarget;
+                this.render(document.getElementById('content'));
+            }
+        }
+    },
+
     openMemberDetails(memberId) {
         const member = Store.state.members.find(m => m.id == memberId);
         if(!member) return;
 
+        const target = member.workTarget ? parseInt(member.workTarget) : 6;
         const entries = (Store.state.work_entries || []).filter(e => e.memberId == memberId).sort((a,b) => new Date(b.date) - new Date(a.date));
         const total = entries.filter(e => e.status === 'approved').reduce((sum, e) => sum + parseFloat(e.hours), 0);
 
@@ -335,7 +353,7 @@ const WorkHoursView = {
                 <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 text-start">
                     <div>
                         <h3 class="text-xl font-bold text-white">${member.firstName} ${member.lastName}</h3>
-                        <p class="text-sm text-brand-400 font-mono font-bold mt-1">${total} / ${this.currentListTarget} Std. genehmigt</p>
+                        <p class="text-sm text-brand-400 font-mono font-bold mt-1">${total} / ${target} Std. genehmigt</p>
                     </div>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
@@ -363,7 +381,7 @@ const WorkHoursView = {
     // GENERAL ACTIONS
     // =========================================================================
 
-    // NEU: Garantierte Update-Funktion (Kopie der Logik aus members.js)
+    // Update für Work Entries
     async safeUpdate(id, updates) {
         if(typeof supabase === 'undefined') return { message: "Supabase fehlt" };
         const sessionStr = localStorage.getItem('vm_supabase_session');
@@ -375,29 +393,40 @@ const WorkHoursView = {
                 global: { headers: { Authorization: `Bearer ${token}` } }
             });
             
-            // WICHTIG: Erstelle eine Kopie und lösche 'id' explizit raus!
             const cleanUpdates = { ...updates };
             if ('id' in cleanUpdates) delete cleanUpdates.id;
 
-            // .select() um zu prüfen ob wirklich was geändert wurde
             const { data, error } = await client.from('work_entries').update(cleanUpdates).eq('id', id).select();
             
             if (error) return error;
-            if (!data || data.length === 0) {
-                return { message: "Keine Daten geändert. Fehlende Berechtigung oder Eintrag nicht gefunden." };
-            }
-            
+            if (!data || data.length === 0) return { message: "Keine Daten geändert." };
             return null;
-        } catch(e) {
-            return e;
-        }
+        } catch(e) { return e; }
+    },
+
+    // NEU: Update für Member Data (z.B. Ziel-Stunden)
+    async safeMemberUpdate(id, updates) {
+        if(typeof supabase === 'undefined') return { message: "Supabase fehlt" };
+        const sessionStr = localStorage.getItem('vm_supabase_session');
+        if (!sessionStr) return { message: "Nicht eingeloggt" };
+        
+        try {
+            const token = JSON.parse(sessionStr).access_token;
+            const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, {
+                global: { headers: { Authorization: `Bearer ${token}` } }
+            });
+            
+            const cleanUpdates = { ...updates };
+            if ('id' in cleanUpdates) delete cleanUpdates.id;
+
+            const { error } = await client.from('members').update(cleanUpdates).eq('id', id);
+            return error;
+        } catch(e) { return e; }
     },
 
     deleteEntry(id) {
         if(confirm("Diesen Eintrag wirklich unwiderruflich löschen?")) {
             Store.remove('work_entries', id);
-            
-            // Views aktualisieren
             setTimeout(() => this.render(document.getElementById('content')), 100);
             
             const modal = document.getElementById('modal-content');
@@ -416,11 +445,10 @@ const WorkHoursView = {
             
             if (error) {
                 console.error("Genehmigung gescheitert:", error);
-                App.showToast("Fehler beim Speichern: " + (error.message || "Unbekannt"), "error");
+                App.showToast("Fehler beim Speichern", "error");
                 return;
             }
             
-            // Lokales Update für sofortiges Feedback
             const idx = Store.state.work_entries.indexOf(entry);
             if(idx !== -1) Store.state.work_entries[idx] = { ...entry, status };
 
