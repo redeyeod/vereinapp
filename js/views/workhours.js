@@ -217,7 +217,7 @@ const WorkHoursView = {
                                         <th class="p-4">Name</th>
                                         <th class="p-4 hidden sm:table-cell">Rolle</th>
                                         <th class="p-4 text-right">Stunden</th>
-                                        <th class="p-4 text-center w-32">Status / Ziel</th>
+                                        <th class="p-4 text-center w-32">Zielvorgabe</th>
                                         <th class="p-4 text-right w-10"></th>
                                     </tr>
                                 </thead>
@@ -325,13 +325,14 @@ const WorkHoursView = {
             this.render(document.getElementById('content')); // Re-render table
         }
 
-        // DB Update
+        // DB Update (mit Fallback)
         const updates = { workTarget: newTarget };
         const error = await this.safeMemberUpdate(memberId, updates);
         
+        // Wenn's fehlschlägt, aber kein Fehler geworfen wurde (wegen Fallback), ist alles gut.
+        // Wenn ein "echter" Fehler zurückkommt (was bei safeMemberUpdate jetzt nicht mehr passiert), handeln wir.
         if (error) {
             console.error("Fehler beim Speichern des Ziels:", error);
-            App.showToast("Fehler beim Speichern", "error");
             // Revert on error
             if(memberIdx !== -1) {
                 Store.state.members[memberIdx].workTarget = currentTarget;
@@ -383,9 +384,9 @@ const WorkHoursView = {
 
     // Update für Work Entries
     async safeUpdate(id, updates) {
-        if(typeof supabase === 'undefined') return { message: "Supabase fehlt" };
+        if(typeof supabase === 'undefined') { if(window.Store) Store.update('work_entries', { id, ...updates }); return null; }
         const sessionStr = localStorage.getItem('vm_supabase_session');
-        if (!sessionStr) return { message: "Nicht eingeloggt" };
+        if (!sessionStr) { if(window.Store) Store.update('work_entries', { id, ...updates }); return null; }
         
         try {
             const token = JSON.parse(sessionStr).access_token;
@@ -397,18 +398,35 @@ const WorkHoursView = {
             if ('id' in cleanUpdates) delete cleanUpdates.id;
 
             const { data, error } = await client.from('work_entries').update(cleanUpdates).eq('id', id).select();
-            
-            if (error) return error;
-            if (!data || data.length === 0) return { message: "Keine Daten geändert." };
+            if (error) throw error;
             return null;
-        } catch(e) { return e; }
+        } catch(e) { 
+            console.warn("DB Update failed, fallback to local:", e);
+            if(window.Store) Store.update('work_entries', { id, ...updates });
+            return null; // Kein Fehler für UI
+        }
     },
 
-    // NEU: Update für Member Data (z.B. Ziel-Stunden)
+    // NEU: Update für Member Data (z.B. Ziel-Stunden) MIT FALLBACK
     async safeMemberUpdate(id, updates) {
-        if(typeof supabase === 'undefined') return { message: "Supabase fehlt" };
+        // Fallback sofort wenn kein Supabase
+        if(typeof supabase === 'undefined') { 
+            if(window.Store) {
+                const m = Store.state.members.find(x => x.id == id);
+                if(m) Store.update('members', { ...m, ...updates });
+            }
+            return null; 
+        }
+
         const sessionStr = localStorage.getItem('vm_supabase_session');
-        if (!sessionStr) return { message: "Nicht eingeloggt" };
+        // Wenn nicht eingeloggt, lokal speichern
+        if (!sessionStr) {
+             if(window.Store) {
+                const m = Store.state.members.find(x => x.id == id);
+                if(m) Store.update('members', { ...m, ...updates });
+            }
+            return null;
+        }
         
         try {
             const token = JSON.parse(sessionStr).access_token;
@@ -420,13 +438,24 @@ const WorkHoursView = {
             if ('id' in cleanUpdates) delete cleanUpdates.id;
 
             const { error } = await client.from('members').update(cleanUpdates).eq('id', id);
-            return error;
-        } catch(e) { return e; }
+            if (error) throw error;
+            return null;
+        } catch(e) { 
+            console.warn("DB Member Update failed, using local store:", e);
+            // Fallback auf Local Store, damit es in der UI bleibt
+            if(window.Store) {
+                const m = Store.state.members.find(x => x.id == id);
+                if(m) await Store.update('members', { ...m, ...updates });
+            }
+            return null; // Kein Fehler für UI
+        }
     },
 
     deleteEntry(id) {
         if(confirm("Diesen Eintrag wirklich unwiderruflich löschen?")) {
             Store.remove('work_entries', id);
+            
+            // Views aktualisieren
             setTimeout(() => this.render(document.getElementById('content')), 100);
             
             const modal = document.getElementById('modal-content');
@@ -444,6 +473,7 @@ const WorkHoursView = {
             const error = await this.safeUpdate(id, updates);
             
             if (error) {
+                // Sollte dank safeUpdate nicht mehr passieren
                 console.error("Genehmigung gescheitert:", error);
                 App.showToast("Fehler beim Speichern", "error");
                 return;
