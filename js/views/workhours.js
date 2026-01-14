@@ -6,8 +6,11 @@
  */
 
 const WorkHoursView = {
-    // Zielvorgabe pro Jahr
-    TARGET_HOURS: 6,
+    // Standard-Zielvorgabe (wird durch Toggle überschrieben)
+    currentListTarget: 6,
+    
+    // Status für den Toggle-Button ('active' = 6h, 'passive' = 22h)
+    listMode: 'active', 
 
     /**
      * Haupt-Render Funktion
@@ -54,6 +57,9 @@ const WorkHoursView = {
         const entries = Store.state.work_entries || [];
         const myEntries = entries.filter(e => e.memberId == myId);
         
+        // Persönliches Ziel (Standard 6h, könnte man später auch pro User speichern)
+        const PERSONAL_TARGET = 6; 
+
         // Berechne genehmigte Stunden
         const approvedHours = myEntries
             .filter(e => e.status === 'approved')
@@ -63,8 +69,8 @@ const WorkHoursView = {
             .filter(e => e.status === 'pending')
             .reduce((sum, e) => sum + parseFloat(e.hours), 0);
 
-        const progressPercent = Math.min(100, (approvedHours / this.TARGET_HOURS) * 100);
-        const progressColor = approvedHours >= this.TARGET_HOURS ? 'bg-emerald-500' : 'bg-brand-500';
+        const progressPercent = Math.min(100, (approvedHours / PERSONAL_TARGET) * 100);
+        const progressColor = approvedHours >= PERSONAL_TARGET ? 'bg-emerald-500' : 'bg-brand-500';
 
         return `
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
@@ -82,7 +88,7 @@ const WorkHoursView = {
                             
                             <div class="flex items-baseline gap-2 mb-4">
                                 <span class="text-5xl font-bold text-white tracking-tighter">${approvedHours}</span>
-                                <span class="text-sm text-dark-muted font-medium">/ ${this.TARGET_HOURS} Std.</span>
+                                <span class="text-sm text-dark-muted font-medium">/ ${PERSONAL_TARGET} Std.</span>
                             </div>
 
                             <!-- Progress Bar -->
@@ -90,9 +96,9 @@ const WorkHoursView = {
                                 <div class="h-full ${progressColor} transition-all duration-1000 shadow-[0_0_10px_rgba(59,130,246,0.4)]" style="width: ${progressPercent}%"></div>
                             </div>
                             
-                            ${approvedHours >= this.TARGET_HOURS 
+                            ${approvedHours >= PERSONAL_TARGET 
                                 ? '<p class="text-emerald-400 text-xs font-bold flex items-center gap-1.5"><i class="fa-solid fa-circle-check"></i> Soll erfüllt!</p>'
-                                : `<p class="text-amber-400 text-xs font-bold flex items-center gap-1.5"><i class="fa-solid fa-circle-info"></i> Noch ${(this.TARGET_HOURS - approvedHours).toFixed(1)} Std. offen</p>`
+                                : `<p class="text-amber-400 text-xs font-bold flex items-center gap-1.5"><i class="fa-solid fa-circle-info"></i> Noch ${(PERSONAL_TARGET - approvedHours).toFixed(1)} Std. offen</p>`
                             }
                             
                             ${pendingHours > 0 ? `<div class="mt-4 pt-3 border-t border-dark-border/50 text-xs text-dark-muted flex items-center gap-1.5"><i class="fa-regular fa-clock text-brand-400"></i> + ${pendingHours} Std. in Prüfung</div>` : ''}
@@ -155,6 +161,14 @@ const WorkHoursView = {
     // =========================================================================
     // ADMIN ANSICHT
     // =========================================================================
+    
+    // Toggle Funktion für den Admin-Bereich
+    setListTarget(mode) {
+        this.listMode = mode;
+        this.currentListTarget = (mode === 'active') ? 6 : 22;
+        this.render(document.getElementById('content'));
+    },
+
     renderAdminView() {
         const entries = Store.state.work_entries || [];
         const members = Store.state.members || [];
@@ -167,7 +181,13 @@ const WorkHoursView = {
             const hours = entries
                 .filter(e => e.memberId == m.id && e.status === 'approved')
                 .reduce((sum, e) => sum + parseFloat(e.hours), 0);
-            return { ...m, hours };
+            
+            // ROLES FIX: Korrekte Rolle ermitteln (wie im Profil)
+            let roleDisplay = 'Mitglied';
+            if (Array.isArray(m.roles) && m.roles.length > 0) roleDisplay = m.roles.join(', ');
+            else if (m.role) roleDisplay = m.role;
+
+            return { ...m, hours, roleDisplay };
         }).sort((a,b) => a.hours - b.hours); // Wenigste Stunden zuerst
 
         return `
@@ -191,10 +211,17 @@ const WorkHoursView = {
 
                 <!-- 2. Gesamtübersicht Liste -->
                 <div>
-                    <div class="flex justify-between items-end mb-4">
+                    <div class="flex flex-col sm:flex-row justify-between items-end sm:items-center mb-4 gap-4">
                         <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider">Mitglieder Übersicht</h4>
-                        <div class="text-[10px] text-dark-muted bg-dark-card border border-dark-border px-2 py-1 rounded font-mono">
-                            Ziel: <span class="text-white">${this.TARGET_HOURS}h</span>
+                        
+                        <!-- Toggle Buttons für Ziel-Stunden -->
+                        <div class="flex bg-dark-card p-1 rounded-xl border border-dark-border">
+                            <button onclick="WorkHoursView.setListTarget('active')" class="px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${this.listMode === 'active' ? 'bg-brand-600 text-white shadow-md' : 'text-dark-muted hover:text-white'}">
+                                Bühnenaktiv (6h)
+                            </button>
+                            <button onclick="WorkHoursView.setListTarget('passive')" class="px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${this.listMode === 'passive' ? 'bg-brand-600 text-white shadow-md' : 'text-dark-muted hover:text-white'}">
+                                Passiv (22h)
+                            </button>
                         </div>
                     </div>
                     
@@ -206,14 +233,14 @@ const WorkHoursView = {
                                         <th class="p-4">Name</th>
                                         <th class="p-4 hidden sm:table-cell">Rolle</th>
                                         <th class="p-4 text-right">Stunden</th>
-                                        <th class="p-4 text-right w-32">Status</th>
+                                        <th class="p-4 text-right w-32">Status (Ziel: ${this.currentListTarget}h)</th>
                                         <th class="p-4 text-right w-10"></th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-dark-border text-white text-xs md:text-sm">
                                     ${memberStats.map(m => {
-                                        const isDone = m.hours >= this.TARGET_HOURS;
-                                        const percent = Math.min(100, (m.hours / this.TARGET_HOURS) * 100);
+                                        const isDone = m.hours >= this.currentListTarget;
+                                        const percent = Math.min(100, (m.hours / this.currentListTarget) * 100);
                                         
                                         return `
                                         <tr class="hover:bg-dark-hover/30 transition-colors group">
@@ -225,10 +252,10 @@ const WorkHoursView = {
                                                     <span class="font-bold">${m.firstName} ${m.lastName}</span>
                                                 </div>
                                             </td>
-                                            <td class="p-4 text-dark-muted text-xs hidden sm:table-cell">${m.role}</td>
+                                            <td class="p-4 text-dark-muted text-xs hidden sm:table-cell truncate max-w-[150px]">${m.roleDisplay}</td>
                                             <td class="p-4 text-right font-mono">
                                                 <span class="${isDone ? 'text-emerald-400' : 'text-white'} font-bold">${m.hours.toFixed(1)}</span>
-                                                <span class="text-dark-muted text-[10px]">/${this.TARGET_HOURS}</span>
+                                                <span class="text-dark-muted text-[10px]">/${this.currentListTarget}</span>
                                             </td>
                                             <td class="p-4 text-right">
                                                 <div class="w-24 h-1.5 bg-dark-bg rounded-full ml-auto overflow-hidden border border-dark-border/50">
@@ -308,7 +335,7 @@ const WorkHoursView = {
                 <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 text-start">
                     <div>
                         <h3 class="text-xl font-bold text-white">${member.firstName} ${member.lastName}</h3>
-                        <p class="text-sm text-brand-400 font-mono font-bold mt-1">${total} / ${this.TARGET_HOURS} Std. genehmigt</p>
+                        <p class="text-sm text-brand-400 font-mono font-bold mt-1">${total} / ${this.currentListTarget} Std. genehmigt</p>
                     </div>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
