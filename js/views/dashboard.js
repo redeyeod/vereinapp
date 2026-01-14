@@ -40,7 +40,10 @@ const DashboardView = {
         // Wir prüfen sowohl memberId als auch Strings/Numbers sicherheitshalber
         const myWorkEntries = workEntries.filter(e => e.memberId == myId && e.status === 'approved');
         const myHours = myWorkEntries.reduce((sum, e) => sum + parseFloat(e.hours || 0), 0);
-        const hoursTarget = 6;
+        
+        // DYNAMISCHES ZIEL: Prüfen ob User ein individuelles Ziel hat, sonst Standard 6h
+        const hoursTarget = (userObj && userObj.workTarget) ? parseInt(userObj.workTarget) : 6;
+        
         const percent = Math.min(100, (myHours / hoursTarget) * 100);
 
         // Begrüßung nach Tageszeit
