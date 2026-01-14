@@ -173,7 +173,7 @@ const WorkHoursView = {
                 .filter(e => e.memberId == m.id && e.status === 'approved')
                 .reduce((sum, e) => sum + parseFloat(e.hours), 0);
             
-            // ROLES FIX: Korrekte Rolle ermitteln (wie im Profil)
+            // ROLES FIX: Korrekte Rolle ermitteln
             let roleDisplay = 'Mitglied';
             if (Array.isArray(m.roles) && m.roles.length > 0) roleDisplay = m.roles.join(', ');
             else if (m.role) roleDisplay = m.role;
@@ -207,6 +207,14 @@ const WorkHoursView = {
                 <div>
                     <div class="flex flex-col sm:flex-row justify-between items-end sm:items-center mb-4 gap-4">
                         <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider">Mitglieder Übersicht</h4>
+                        
+                        <!-- Actions -->
+                        <div class="flex gap-2">
+                            <!-- Excel Export Button -->
+                            <button onclick="WorkHoursView.downloadExcel()" class="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-dark-card border border-dark-border text-dark-muted hover:text-white hover:border-brand-500/50 transition-colors flex items-center gap-2 shadow-sm">
+                                <i class="fa-solid fa-file-csv text-brand-500"></i> Export
+                            </button>
+                        </div>
                     </div>
                     
                     <div class="bg-dark-card rounded-2xl border border-dark-border overflow-hidden shadow-sm">
@@ -217,7 +225,7 @@ const WorkHoursView = {
                                         <th class="p-4">Name</th>
                                         <th class="p-4 hidden sm:table-cell">Rolle</th>
                                         <th class="p-4 text-right">Stunden</th>
-                                        <th class="p-4 text-center w-32">Status / Ziel</th>
+                                        <th class="p-4 text-center w-32">Zielvorgabe</th>
                                         <th class="p-4 text-right w-10"></th>
                                     </tr>
                                 </thead>
@@ -247,7 +255,7 @@ const WorkHoursView = {
                                                 </div>
                                             </td>
                                             <td class="p-4 text-center">
-                                                <!-- Switch Button mit Anführungszeichen um ID -->
+                                                <!-- Switch Button -->
                                                 <div onclick="WorkHoursView.toggleMemberTarget('${m.id}', ${target})" 
                                                      class="flex items-center justify-center gap-2 cursor-pointer group select-none">
                                                     
@@ -320,6 +328,59 @@ const WorkHoursView = {
                 </div>
             </div>
         `;
+    },
+
+    // =========================================================================
+    // EXPORT FUNCTION (CSV)
+    // =========================================================================
+    downloadExcel() {
+        const entries = Store.state.work_entries || [];
+        const members = Store.state.members || [];
+        
+        // Daten für Export vorbereiten
+        const data = members.map(m => {
+            const hours = entries
+                .filter(e => e.memberId == m.id && e.status === 'approved')
+                .reduce((sum, e) => sum + parseFloat(e.hours), 0);
+            
+            let roleDisplay = 'Mitglied';
+            if (Array.isArray(m.roles) && m.roles.length > 0) roleDisplay = m.roles.join(', ');
+            else if (m.role) roleDisplay = m.role;
+
+            const target = (m.workTarget) ? parseInt(m.workTarget) : 6;
+            const status = hours >= target ? 'Erfüllt' : 'Offen';
+
+            // CSV kompatibel formatieren (Semikolon für Excel, Komma ersetzen)
+            return {
+                firstName: m.firstName || '',
+                lastName: m.lastName || '',
+                role: roleDisplay,
+                hours: hours.toFixed(1).replace('.', ','), 
+                target: target,
+                status: status
+            };
+        });
+
+        // CSV Header
+        let csvContent = "Vorname;Nachname;Rolle;Genehmigte Stunden;Zielvorgabe;Status\n";
+
+        // CSV Rows
+        data.forEach(row => {
+            csvContent += `${row.firstName};${row.lastName};${row.role};${row.hours};${row.target};${row.status}\n`;
+        });
+
+        // UTF-8 BOM für Excel hinzufügen (\uFEFF)
+        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        
+        link.setAttribute("href", url);
+        link.setAttribute("download", `arbeitsstunden_export_${new Date().getFullYear()}.csv`);
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     },
 
     // =========================================================================
@@ -483,6 +544,7 @@ const WorkHoursView = {
             const error = await this.safeUpdate(id, updates);
             
             if (error) {
+                // Sollte dank safeUpdate nicht mehr passieren
                 console.error("Genehmigung gescheitert:", error);
                 App.showToast("Fehler beim Speichern", "error");
                 return;
