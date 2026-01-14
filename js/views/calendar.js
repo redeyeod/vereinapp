@@ -126,10 +126,11 @@ const CalendarView = {
             return formatted.replace(/\n/g, '<br>');
         };
 
+        // Layout: Flex-Column mit fixiertem Header und Footer, scrollbarer Inhalt
         const html = `
-            <div class="p-6 md:p-8 h-full flex flex-col">
-                <!-- Header -->
-                <div class="flex justify-between items-start mb-6 border-b border-dark-border pb-4 flex-shrink-0">
+            <div class="flex flex-col h-full max-h-full">
+                <!-- Header (Fixed) -->
+                <div class="p-6 md:p-8 pb-4 flex justify-between items-start border-b border-dark-border bg-dark-card z-10 shrink-0">
                     <div class="pr-4">
                         <div class="flex items-center gap-2 mb-2">
                             <span class="bg-brand-500/10 text-brand-400 text-[10px] font-bold px-2 py-0.5 rounded border border-brand-500/20 uppercase tracking-wider">Event</span>
@@ -139,7 +140,8 @@ const CalendarView = {
                     <button onclick="App.closeModal()" class="w-8 h-8 rounded-full bg-dark-bg text-dark-muted hover:text-white flex items-center justify-center transition-colors flex-shrink-0"><i class="fa-solid fa-times text-lg"></i></button>
                 </div>
                 
-                <div class="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-6">
+                <!-- Content (Scrollable) -->
+                <div class="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8 pt-4 space-y-6">
                     
                     <!-- Info Grid -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 flex-shrink-0">
@@ -170,37 +172,40 @@ const CalendarView = {
                         </div>` : ''}
                     </div>
 
-                    <!-- Beschreibung (Lang & Scrollbar) -->
+                    <!-- Beschreibung -->
                     <div>
                         <div class="flex justify-between items-center mb-3">
                             <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider">Beschreibung & Details</h4>
                         </div>
-                        <div class="bg-dark-bg p-5 rounded-2xl border border-dark-border text-dark-text leading-relaxed text-sm shadow-inner min-h-[100px] max-h-[400px] overflow-y-auto custom-scrollbar">
+                        <div class="bg-dark-bg p-5 rounded-2xl border border-dark-border text-dark-text leading-relaxed text-sm shadow-inner min-h-[100px] overflow-visible">
                             ${formatDescription(e.description)}
                         </div>
                     </div>
                 </div>
 
-                <!-- Footer Actions (Admin only) -->
+                <!-- Footer Actions (Admin only - Fixed at Bottom) -->
                 ${canManage ? `
-                <div class="mt-6 pt-6 border-t border-dark-border flex gap-3 flex-shrink-0">
-                    <button onclick="CalendarView.openEditModal(${e.id})" class="flex-1 btn-primary text-sm">
-                        <i class="fa-solid fa-pen mr-2"></i> Bearbeiten
-                    </button>
-                    <button onclick="CalendarView.delete(${e.id}); App.closeModal()" class="flex-1 py-3 bg-dark-bg hover:bg-red-500/10 border border-dark-border hover:border-red-500/30 rounded-xl text-red-400 font-bold transition-all text-sm">
-                        <i class="fa-regular fa-trash-can mr-2"></i> Löschen
-                    </button>
+                <div class="p-6 md:p-8 pt-4 border-t border-dark-border bg-dark-card z-10 shrink-0">
+                    <div class="flex gap-3">
+                        <button onclick="CalendarView.openEditModal(${e.id})" class="flex-1 btn-primary text-sm shadow-lg">
+                            <i class="fa-solid fa-pen mr-2"></i> Bearbeiten
+                        </button>
+                        <button onclick="CalendarView.delete(${e.id}); App.closeModal()" class="flex-1 py-3 bg-dark-bg hover:bg-red-500/10 border border-dark-border hover:border-red-500/30 rounded-xl text-red-400 font-bold transition-all text-sm">
+                            <i class="fa-regular fa-trash-can mr-2"></i> Löschen
+                        </button>
+                    </div>
                 </div>` : ''}
             </div>
         `;
         
         App.openModal(html);
         
-        // Modal Größe anpassen
+        // Modal Größe und Flex-Verhalten anpassen
         const modalContainer = document.getElementById('modal-content');
         if(modalContainer) {
-            modalContainer.classList.remove('max-w-md');
-            modalContainer.classList.add('max-w-3xl', 'w-full', 'max-h-[90vh]');
+            modalContainer.classList.remove('max-w-md', 'p-0'); // Reset padding if any
+            // WICHTIG: Flex und Overflow Hidden auf den Container, damit der Inhalt scrollt
+            modalContainer.classList.add('max-w-3xl', 'w-full', 'h-[85vh]', 'max-h-[90vh]', 'flex', 'flex-col', 'overflow-hidden');
         }
     },
 
@@ -220,56 +225,63 @@ const CalendarView = {
         if(!App.can('manage_events')) return;
 
         const html = `
-            <div class="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 sticky top-0 bg-dark-card z-10">
+            <div class="flex flex-col h-full max-h-full">
+                <div class="flex justify-between items-center p-6 border-b border-dark-border bg-dark-card shrink-0">
                     <h3 class="text-xl font-bold text-white">Neuer Termin</h3>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
                 
-                <form onsubmit="CalendarView.handleAdd(event)" class="space-y-5">
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Titel</label>
-                        <input type="text" name="title" required class="form-input" placeholder="z.B. Sommerfest">
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-4">
+                <div class="flex-1 overflow-y-auto custom-scrollbar p-6">
+                    <form onsubmit="CalendarView.handleAdd(event)" class="space-y-5">
                         <div>
-                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Start</label>
-                            <input type="date" name="date" id="startDateInput" required class="form-input dark-date" onchange="document.getElementById('endDateInput').min = this.value; if(!document.getElementById('endDateInput').value) document.getElementById('endDateInput').value = this.value;">
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Titel</label>
+                            <input type="text" name="title" required class="form-input" placeholder="z.B. Sommerfest">
                         </div>
-                        <div>
-                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ende (Optional)</label>
-                            <input type="date" name="endDate" id="endDateInput" class="form-input dark-date">
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Start</label>
+                                <input type="date" name="date" id="startDateInput" required class="form-input dark-date" onchange="document.getElementById('endDateInput').min = this.value; if(!document.getElementById('endDateInput').value) document.getElementById('endDateInput').value = this.value;">
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ende (Optional)</label>
+                                <input type="date" name="endDate" id="endDateInput" class="form-input dark-date">
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="grid grid-cols-2 gap-4 items-end">
-                        <div>
-                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Uhrzeit</label>
-                            <input type="time" name="time" id="eventTimeInput" required class="form-input dark-date">
+                        <div class="grid grid-cols-2 gap-4 items-end">
+                            <div>
+                                <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Uhrzeit</label>
+                                <input type="time" name="time" id="eventTimeInput" required class="form-input dark-date">
+                            </div>
+                            <label class="flex items-center gap-3 p-3 bg-dark-bg/50 border border-dark-border rounded-xl cursor-pointer hover:border-brand-500/50 transition-colors h-[46px]">
+                                <input type="checkbox" name="allDay" id="eventAllDay" class="w-5 h-5 rounded border-dark-border bg-dark-bg text-brand-600 focus:ring-brand-500" 
+                                    onchange="const t = document.getElementById('eventTimeInput'); t.disabled = this.checked; if(this.checked) t.value = ''; else t.focus(); t.required = !this.checked;">
+                                <span class="text-sm font-medium text-white">Ganztägig</span>
+                            </label>
                         </div>
-                        <label class="flex items-center gap-3 p-3 bg-dark-bg/50 border border-dark-border rounded-xl cursor-pointer hover:border-brand-500/50 transition-colors h-[46px]">
-                            <input type="checkbox" name="allDay" id="eventAllDay" class="w-5 h-5 rounded border-dark-border bg-dark-bg text-brand-600 focus:ring-brand-500" 
-                                onchange="const t = document.getElementById('eventTimeInput'); t.disabled = this.checked; if(this.checked) t.value = ''; else t.focus(); t.required = !this.checked;">
-                            <span class="text-sm font-medium text-white">Ganztägig</span>
-                        </label>
-                    </div>
-                    
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ort</label>
-                        <input type="text" name="location" class="form-input" placeholder="z.B. Vereinsheim">
-                    </div>
+                        
+                        <div>
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ort</label>
+                            <input type="text" name="location" class="form-input" placeholder="z.B. Vereinsheim">
+                        </div>
 
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Details / Beschreibung</label>
-                        <textarea name="description" rows="4" class="form-input resize-none custom-scrollbar" placeholder="Details zum Event..."></textarea>
-                    </div>
-                    
-                    <button type="submit" class="btn-primary w-full mt-4">Termin erstellen</button>
-                </form>
+                        <div>
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Details / Beschreibung</label>
+                            <textarea name="description" rows="4" class="form-input resize-none custom-scrollbar" placeholder="Details zum Event..."></textarea>
+                        </div>
+                        
+                        <button type="submit" class="btn-primary w-full mt-4 py-3">Termin erstellen</button>
+                    </form>
+                </div>
             </div>
         `;
         App.openModal(html);
+        
+        const modalContainer = document.getElementById('modal-content');
+        if(modalContainer) {
+            modalContainer.classList.add('max-h-[85vh]', 'flex', 'flex-col', 'overflow-hidden');
+        }
     },
 
     openEditModal(id) {
@@ -283,56 +295,63 @@ const CalendarView = {
         const timeDisabled = e.allDay ? 'disabled' : '';
 
         const html = `
-            <div class="p-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 sticky top-0 bg-dark-card z-10">
+            <div class="flex flex-col h-full max-h-full">
+                <div class="flex justify-between items-center p-6 border-b border-dark-border bg-dark-card shrink-0">
                     <h3 class="text-xl font-bold text-white">Termin bearbeiten</h3>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
                 
-                <form onsubmit="CalendarView.handleUpdate(event, ${id})" class="space-y-5">
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Titel</label>
-                        <input type="text" name="title" value="${e.title}" required class="form-input">
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-4">
+                <div class="flex-1 overflow-y-auto custom-scrollbar p-6">
+                    <form onsubmit="CalendarView.handleUpdate(event, ${id})" class="space-y-5">
                         <div>
-                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Start</label>
-                            <input type="date" name="date" value="${e.date}" id="editStartDateInput" required class="form-input dark-date" onchange="document.getElementById('editEndDateInput').min = this.value">
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Titel</label>
+                            <input type="text" name="title" value="${e.title}" required class="form-input">
                         </div>
-                        <div>
-                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ende</label>
-                            <input type="date" name="endDate" value="${e.endDate || ''}" id="editEndDateInput" class="form-input dark-date">
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Start</label>
+                                <input type="date" name="date" value="${e.date}" id="editStartDateInput" required class="form-input dark-date" onchange="document.getElementById('editEndDateInput').min = this.value">
+                            </div>
+                            <div>
+                                <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ende</label>
+                                <input type="date" name="endDate" value="${e.endDate || ''}" id="editEndDateInput" class="form-input dark-date">
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="grid grid-cols-2 gap-4 items-end">
-                        <div>
-                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Uhrzeit</label>
-                            <input type="time" name="time" value="${timeValue}" id="editEventTimeInput" ${timeDisabled} required class="form-input dark-date">
+                        <div class="grid grid-cols-2 gap-4 items-end">
+                            <div>
+                                <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Uhrzeit</label>
+                                <input type="time" name="time" value="${timeValue}" id="editEventTimeInput" ${timeDisabled} required class="form-input dark-date">
+                            </div>
+                            <label class="flex items-center gap-3 p-3 bg-dark-bg/50 border border-dark-border rounded-xl cursor-pointer hover:border-brand-500/50 transition-colors h-[46px]">
+                                <input type="checkbox" name="allDay" id="editEventAllDay" ${allDayChecked} class="w-5 h-5 rounded border-dark-border bg-dark-bg text-brand-600 focus:ring-brand-500" 
+                                    onchange="const t = document.getElementById('editEventTimeInput'); t.disabled = this.checked; if(this.checked) t.value = ''; else t.focus(); t.required = !this.checked;">
+                                <span class="text-sm font-medium text-white">Ganztägig</span>
+                            </label>
                         </div>
-                        <label class="flex items-center gap-3 p-3 bg-dark-bg/50 border border-dark-border rounded-xl cursor-pointer hover:border-brand-500/50 transition-colors h-[46px]">
-                            <input type="checkbox" name="allDay" id="editEventAllDay" ${allDayChecked} class="w-5 h-5 rounded border-dark-border bg-dark-bg text-brand-600 focus:ring-brand-500" 
-                                onchange="const t = document.getElementById('editEventTimeInput'); t.disabled = this.checked; if(this.checked) t.value = ''; else t.focus(); t.required = !this.checked;">
-                            <span class="text-sm font-medium text-white">Ganztägig</span>
-                        </label>
-                    </div>
-                    
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ort</label>
-                        <input type="text" name="location" value="${e.location || ''}" class="form-input">
-                    </div>
+                        
+                        <div>
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ort</label>
+                            <input type="text" name="location" value="${e.location || ''}" class="form-input">
+                        </div>
 
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Details / Beschreibung</label>
-                        <textarea name="description" rows="5" class="form-input resize-none custom-scrollbar">${e.description || ''}</textarea>
-                    </div>
-                    
-                    <button type="submit" class="btn-primary w-full mt-4">Änderungen speichern</button>
-                </form>
+                        <div>
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Details / Beschreibung</label>
+                            <textarea name="description" rows="5" class="form-input resize-none custom-scrollbar">${e.description || ''}</textarea>
+                        </div>
+                        
+                        <button type="submit" class="btn-primary w-full mt-4 py-3">Änderungen speichern</button>
+                    </form>
+                </div>
             </div>
         `;
         App.openModal(html);
+        
+        const modalContainer = document.getElementById('modal-content');
+        if(modalContainer) {
+            modalContainer.classList.add('max-h-[85vh]', 'flex', 'flex-col', 'overflow-hidden');
+        }
     },
 
     handleAdd(e) {
