@@ -420,9 +420,6 @@ const MessengerView = {
                      <button onclick="MessengerView.toggleChatSearch()" class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/5 text-dark-muted hover:text-white transition-colors">
                         <i class="fa-solid fa-search"></i>
                      </button>
-                     <button class="w-9 h-9 flex items-center justify-center rounded-full hover:bg-white/5 text-dark-muted hover:text-white transition-colors">
-                        <i class="fa-solid fa-ellipsis-vertical"></i>
-                     </button>
                 </div>
                 ${this.state.showChatSearch ? `
                 <div class="absolute top-0 left-0 w-full h-16 bg-dark-card z-40 flex items-center px-4 animate-msg border-b border-white/5">
@@ -769,7 +766,70 @@ const MessengerView = {
         }
     },
 
-    showUserProfile(id) { if(window.App && App.openModal) App.openModal(`<div class="p-4 text-center text-white">Profil von ID ${id}</div>`); },
+    showUserProfile(id) { 
+        if(window.App && App.openModal) {
+            const member = Store.state.members.find(m => m.id == id);
+            if(!member) return;
+            
+            // Format roles
+            let roleDisplay = 'Mitglied';
+            if (Array.isArray(member.roles) && member.roles.length > 0) roleDisplay = member.roles.join(', ');
+            else if (member.role) roleDisplay = member.role;
+
+            // Format groups
+            let groupsHtml = '<span class="text-xs text-dark-muted italic">Keine Gruppen</span>';
+            if (Array.isArray(member.groups) && member.groups.length > 0) {
+                groupsHtml = member.groups.map(g => `<span class="bg-brand-500/10 text-brand-400 px-2 py-1 rounded text-xs border border-brand-500/20">${g}</span>`).join('');
+            }
+
+            const html = `
+                <div class="p-6 flex flex-col items-center">
+                    <div class="w-24 h-24 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center text-4xl text-slate-300 border-4 border-dark-card shadow-xl mb-4">
+                        ${(member.firstName || '?').charAt(0)}${(member.lastName || '?').charAt(0)}
+                    </div>
+                    <h3 class="text-2xl font-bold text-white mb-1">${member.firstName} ${member.lastName}</h3>
+                    <span class="px-3 py-1 rounded-full bg-brand-500/10 text-brand-400 text-xs font-bold uppercase tracking-wider mb-6 border border-brand-500/20">
+                        ${roleDisplay}
+                    </span>
+                    
+                    <div class="w-full bg-dark-bg/50 rounded-xl p-4 border border-dark-border text-left space-y-3 mb-6">
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-lg bg-dark-card flex items-center justify-center text-dark-muted border border-dark-border shrink-0">
+                                <i class="fa-solid fa-envelope"></i>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-xs text-dark-muted uppercase font-bold">Email</p>
+                                <p class="text-sm text-white truncate">${member.email || '-'}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-lg bg-dark-card flex items-center justify-center text-dark-muted border border-dark-border shrink-0">
+                                <i class="fa-solid fa-phone"></i>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-xs text-dark-muted uppercase font-bold">Telefon</p>
+                                <p class="text-sm text-white truncate">${member.phone || '-'}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="w-full text-left mb-6">
+                        <h4 class="text-xs font-bold text-dark-muted uppercase mb-3 pl-1">Gruppen</h4>
+                        <div class="flex flex-wrap gap-2">
+                            ${groupsHtml}
+                        </div>
+                    </div>
+
+                    <button onclick="App.closeModal()" class="w-full py-3 rounded-xl bg-dark-card hover:bg-dark-hover border border-dark-border text-white font-bold transition-all">
+                        Schließen
+                    </button>
+                </div>
+            `;
+            App.openModal(html);
+        }
+    },
+    
     showGroupInfo(id) { if(window.App && App.router) App.router('groups'); }
 };
 
