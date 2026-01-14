@@ -20,7 +20,7 @@ const App = {
     ],
 
     async init() {
-        console.log("App: Init v2.4 (Fixes & Bubbles)...");
+        console.log("App: Init v2.5 (Role Visibility Fix)...");
         this.injectStyles();
         this.loadCurrentUser();
 
@@ -56,6 +56,8 @@ const App = {
             if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
                 this.router(Store.state.currentView || localStorage.getItem('vm_last_view') || 'dashboard');
             }
+            // Auch UI Header updaten (z.B. wenn sich Rechte ändern)
+            this.updateHeaderUI();
         };
 
         if (this.state.currentUser) {
@@ -131,6 +133,9 @@ const App = {
         } else {
             if(container) container.innerHTML = `<div class="p-10 text-center opacity-50">Lade ${viewName}...</div>`;
         }
+        
+        // Header UI auch beim Routen-Wechsel prüfen
+        this.updateHeaderUI();
     },
 
     // WICHTIG: Steuert Header, Padding und Footer-Animation
@@ -238,7 +243,7 @@ const App = {
         if (user.email.toLowerCase() === 'admin@gmail.com') {
             const currentRoles = this.getUserRoles(user);
             if(!currentRoles.includes('Vorstand')) {
-                 if(user.roles) user.roles.push('Vorstand'); else user.roles = ['Vorstand'];
+                 if(Array.isArray(user.roles)) user.roles.push('Vorstand'); else user.roles = ['Vorstand'];
             }
         }
         localStorage.setItem('vm_current_user_id', user.id);
@@ -275,7 +280,7 @@ const App = {
             if (email === 'admin@gmail.com') {
                  const r = this.getUserRoles(user);
                  if(!r.includes('Vorstand')) {
-                      if(Array.isArray(user.roles)) user.roles.push('Vorstand'); else user.roles = ['Vorstand'];
+                       if(Array.isArray(user.roles)) user.roles.push('Vorstand'); else user.roles = ['Vorstand'];
                  }
             }
             this.state.currentUser = user;
@@ -304,11 +309,16 @@ const App = {
         const rIds = ['current-user-role', 'mobile-user-role'];
         rIds.forEach(id => { const el = document.getElementById(id); if(el) el.textContent = roleStr; });
 
-        const isAdmin = this.can('admin_global');
+        // --- ADMIN BUTTON SICHTBARKEIT FIX ---
+        // Prüft jetzt nicht nur auf admin_global, sondern auch auf Vorstand oder manage_roles
+        const isVorstand = (Array.isArray(user.roles) && user.roles.includes('Vorstand')) || user.role === 'Vorstand';
+        const showAdmin = isVorstand || this.can('admin_global') || this.can('manage_roles');
+
         const adminBtn = document.getElementById('nav-btn-roles');
         const mobileAdmin = document.getElementById('mobile-admin-section');
-        if(adminBtn) isAdmin ? adminBtn.classList.remove('hidden') : adminBtn.classList.add('hidden');
-        if(mobileAdmin) isAdmin ? mobileAdmin.classList.remove('hidden') : mobileAdmin.classList.add('hidden');
+        
+        if(adminBtn) showAdmin ? adminBtn.classList.remove('hidden') : adminBtn.classList.add('hidden');
+        if(mobileAdmin) showAdmin ? mobileAdmin.classList.remove('hidden') : mobileAdmin.classList.add('hidden');
     },
 
     can(action, context = null) {
