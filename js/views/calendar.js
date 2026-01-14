@@ -129,7 +129,7 @@ const CalendarView = {
         const html = `
             <div class="p-6 md:p-8 h-full flex flex-col">
                 <!-- Header -->
-                <div class="flex justify-between items-start mb-6 border-b border-dark-border pb-4">
+                <div class="flex justify-between items-start mb-6 border-b border-dark-border pb-4 flex-shrink-0">
                     <div class="pr-4">
                         <div class="flex items-center gap-2 mb-2">
                             <span class="bg-brand-500/10 text-brand-400 text-[10px] font-bold px-2 py-0.5 rounded border border-brand-500/20 uppercase tracking-wider">Event</span>
@@ -142,7 +142,7 @@ const CalendarView = {
                 <div class="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-6">
                     
                     <!-- Info Grid -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 flex-shrink-0">
                         <!-- Zeit & Datum -->
                         <div class="bg-dark-bg/50 p-4 rounded-2xl border border-dark-border flex items-start gap-4">
                             <div class="w-10 h-10 rounded-xl bg-brand-500/10 text-brand-500 flex items-center justify-center text-lg flex-shrink-0">
@@ -170,12 +170,12 @@ const CalendarView = {
                         </div>` : ''}
                     </div>
 
-                    <!-- Beschreibung (Lang) -->
+                    <!-- Beschreibung (Lang & Scrollbar) -->
                     <div>
                         <div class="flex justify-between items-center mb-3">
                             <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider">Beschreibung & Details</h4>
                         </div>
-                        <div class="bg-dark-bg p-5 rounded-2xl border border-dark-border text-dark-text leading-relaxed text-sm shadow-inner min-h-[100px]">
+                        <div class="bg-dark-bg p-5 rounded-2xl border border-dark-border text-dark-text leading-relaxed text-sm shadow-inner min-h-[100px] max-h-[400px] overflow-y-auto custom-scrollbar">
                             ${formatDescription(e.description)}
                         </div>
                     </div>
@@ -183,7 +183,7 @@ const CalendarView = {
 
                 <!-- Footer Actions (Admin only) -->
                 ${canManage ? `
-                <div class="mt-6 pt-6 border-t border-dark-border flex gap-3">
+                <div class="mt-6 pt-6 border-t border-dark-border flex gap-3 flex-shrink-0">
                     <button onclick="CalendarView.openEditModal(${e.id})" class="flex-1 btn-primary text-sm">
                         <i class="fa-solid fa-pen mr-2"></i> Bearbeiten
                     </button>
