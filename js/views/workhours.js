@@ -148,7 +148,7 @@ const WorkHoursView = {
                 <div class="flex items-center gap-3">
                     ${statusBadge}
                     ${allowDelete ? `
-                    <button onclick="WorkHoursView.deleteEntry(${entry.id})" class="text-dark-muted hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100" title="Eintrag löschen">
+                    <button onclick="WorkHoursView.deleteEntry('${entry.id}')" class="text-dark-muted hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100" title="Eintrag löschen">
                         <i class="fa-regular fa-trash-can text-xs"></i>
                     </button>` : ''}
                 </div>
@@ -217,7 +217,7 @@ const WorkHoursView = {
                                         <th class="p-4">Name</th>
                                         <th class="p-4 hidden sm:table-cell">Rolle</th>
                                         <th class="p-4 text-right">Stunden</th>
-                                        <th class="p-4 text-center w-32">Zielvorgabe</th>
+                                        <th class="p-4 text-center w-32">Status / Ziel</th>
                                         <th class="p-4 text-right w-10"></th>
                                     </tr>
                                 </thead>
@@ -247,8 +247,8 @@ const WorkHoursView = {
                                                 </div>
                                             </td>
                                             <td class="p-4 text-center">
-                                                <!-- Switch Button -->
-                                                <div onclick="WorkHoursView.toggleMemberTarget(${m.id}, ${target})" 
+                                                <!-- Switch Button mit Anführungszeichen um ID -->
+                                                <div onclick="WorkHoursView.toggleMemberTarget('${m.id}', ${target})" 
                                                      class="flex items-center justify-center gap-2 cursor-pointer group select-none">
                                                     
                                                     <div class="w-9 h-5 rounded-full relative transition-colors duration-300 ${isActiveTarget ? 'bg-brand-500 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-700 shadow-inner'}">
@@ -266,7 +266,7 @@ const WorkHoursView = {
                                                 </div>
                                             </td>
                                             <td class="p-4 text-right">
-                                                <button onclick="WorkHoursView.openMemberDetails(${m.id})" class="text-dark-muted hover:text-brand-400 p-2 rounded-lg hover:bg-dark-bg transition-colors" title="Details">
+                                                <button onclick="WorkHoursView.openMemberDetails('${m.id}')" class="text-dark-muted hover:text-brand-400 p-2 rounded-lg hover:bg-dark-bg transition-colors" title="Details">
                                                     <i class="fa-solid fa-ellipsis"></i>
                                                 </button>
                                             </td>
@@ -311,10 +311,10 @@ const WorkHoursView = {
                 </div>
                 
                 <div class="mt-auto flex gap-2">
-                    <button onclick="WorkHoursView.decide(${entry.id}, 'approved')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-1.5 hover:-translate-y-0.5">
+                    <button onclick="WorkHoursView.decide('${entry.id}', 'approved')" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-1.5 hover:-translate-y-0.5">
                         <i class="fa-solid fa-check"></i> Ja
                     </button>
-                    <button onclick="WorkHoursView.decide(${entry.id}, 'rejected')" class="flex-1 bg-dark-bg hover:bg-red-500/10 text-red-400 border border-dark-border hover:border-red-500/30 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5">
+                    <button onclick="WorkHoursView.decide('${entry.id}', 'rejected')" class="flex-1 bg-dark-bg hover:bg-red-500/10 text-red-400 border border-dark-border hover:border-red-500/30 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5">
                         <i class="fa-solid fa-xmark"></i> Nein
                     </button>
                 </div>
@@ -341,8 +341,6 @@ const WorkHoursView = {
         const updates = { workTarget: newTarget };
         const error = await this.safeMemberUpdate(memberId, updates);
         
-        // Wenn's fehlschlägt, aber kein Fehler geworfen wurde (wegen Fallback), ist alles gut.
-        // Wenn ein "echter" Fehler zurückkommt (was bei safeMemberUpdate jetzt nicht mehr passiert), handeln wir.
         if (error) {
             console.error("Fehler beim Speichern des Ziels:", error);
             // Revert on error
@@ -485,7 +483,6 @@ const WorkHoursView = {
             const error = await this.safeUpdate(id, updates);
             
             if (error) {
-                // Sollte dank safeUpdate nicht mehr passieren
                 console.error("Genehmigung gescheitert:", error);
                 App.showToast("Fehler beim Speichern", "error");
                 return;
