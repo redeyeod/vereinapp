@@ -247,11 +247,23 @@ const WorkHoursView = {
                                                 </div>
                                             </td>
                                             <td class="p-4 text-center">
-                                                <!-- Toggle Button -->
-                                                <button onclick="WorkHoursView.toggleMemberTarget(${m.id}, ${target})" 
-                                                    class="px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${isActiveTarget ? 'bg-brand-500/10 text-brand-400 border-brand-500/20 hover:bg-brand-500/20' : 'bg-slate-700/30 text-slate-400 border-slate-600/30 hover:bg-slate-700/50'}">
-                                                    ${isActiveTarget ? 'Aktiv (6h)' : 'Passiv (22h)'}
-                                                </button>
+                                                <!-- Switch Button -->
+                                                <div onclick="WorkHoursView.toggleMemberTarget(${m.id}, ${target})" 
+                                                     class="flex items-center justify-center gap-2 cursor-pointer group select-none">
+                                                    
+                                                    <div class="w-9 h-5 rounded-full relative transition-colors duration-300 ${isActiveTarget ? 'bg-brand-500 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-700 shadow-inner'}">
+                                                        <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300 ${isActiveTarget ? 'translate-x-4' : 'translate-x-0'}"></div>
+                                                    </div>
+                                                    
+                                                    <div class="flex flex-col items-start leading-none">
+                                                        <span class="text-[10px] font-bold uppercase ${isActiveTarget ? 'text-brand-400' : 'text-slate-400'} transition-colors">
+                                                            ${isActiveTarget ? 'Aktiv' : 'Passiv'}
+                                                        </span>
+                                                        <span class="text-[9px] text-dark-muted font-mono">
+                                                            ${isActiveTarget ? '6h' : '22h'}
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </td>
                                             <td class="p-4 text-right">
                                                 <button onclick="WorkHoursView.openMemberDetails(${m.id})" class="text-dark-muted hover:text-brand-400 p-2 rounded-lg hover:bg-dark-bg transition-colors" title="Details">
