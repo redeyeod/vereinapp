@@ -69,47 +69,46 @@ const MessengerView = {
             .slide-in-right { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
             @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
-            /* --- MOBILE FULLSCREEN MODES (The "Sticky" Fix) --- */
+            /* --- MOBILE FULLSCREEN MODES (Structure Fix) --- */
             
-            /* Wenn Chat aktiv ist: Alles fixieren, Scrollen nur im Chat-Container erlauben */
+            /* 1. Body & HTML einfrieren */
             html.messenger-mode, body.messenger-mode {
                 overflow: hidden !important;
                 height: 100% !important;
-                height: 100dvh !important;
                 position: fixed !important; 
                 width: 100% !important;
-                top: 0; left: 0;
+                overscroll-behavior: none;
             }
 
             body.messenger-mode #main-header { display: none !important; }
             
-            /* Der Content Container wird zum Viewport */
+            /* 2. Content Container als Flexbox-Wrapper */
             body.messenger-mode #content { 
                 padding: 0 !important; 
-                position: fixed !important; 
+                position: fixed !important; /* Fixed relative to Viewport */
                 top: 0 !important;
                 left: 0 !important;
                 right: 0 !important;
                 bottom: 0 !important;
-                height: 100% !important;
-                height: 100dvh !important;
+                height: 100% !important; 
+                /* height: 100dvh;  <-- Optional, manchmal besser 100% bei fixed body */
                 width: 100% !important;
                 z-index: 100 !important;
                 background-color: #0f172a;
-                overflow: hidden !important; /* Wichtig: Kein Scrollen auf Container-Ebene */
                 
-                /* Wir nutzen Flexbox um Header/Input zu fixieren */
+                /* Das hier ist der Trick: Flexbox Layout */
                 display: flex !important;
                 flex-direction: column !important;
+                overflow: hidden !important;
             }
 
-            /* Footer Navigation verstecken im Chat-Modus */
+            /* A) CHAT ACTIVE: Kein Footer */
             body.messenger-mode.chat-active #mobile-bottom-nav { display: none !important; }
             
-            /* Footer Navigation zeigen in der Liste */
+            /* B) LIST ACTIVE: Footer sichtbar */
             body.messenger-mode.list-active #mobile-bottom-nav { display: flex !important; z-index: 101 !important; }
-            body.messenger-mode.list-active #messenger-list { padding-bottom: 90px !important; } 
             
+            /* Safe Area für Header in Liste */
             body.messenger-mode.list-active .messenger-sidebar-header {
                 padding-top: max(1rem, env(safe-area-inset-top)); 
                 height: auto;
@@ -145,12 +144,10 @@ const MessengerView = {
         }
 
         // Layout Template
-        // WICHTIG: Das Layout wurde für Mobile vereinfacht (reines Flex-Column)
         container.innerHTML = `
-            <div id="messenger-view-root" class="flex h-full w-full max-w-[1800px] mx-auto bg-dark-card/50 backdrop-blur-sm md:rounded-2xl md:border md:border-white/5 shadow-2xl relative md:overflow-hidden">
+            <div id="messenger-view-root" class="flex h-full w-full max-w-[1800px] mx-auto bg-dark-card/50 backdrop-blur-sm md:rounded-2xl md:border md:border-white/5 shadow-2xl relative md:overflow-hidden flex-1 overflow-hidden">
                 
                 <!-- 1. LEFT SIDEBAR (List) -->
-                <!-- Mobile: Nimmt 100% Platz wenn sichtbar -->
                 <div class="${this.state.mobileChatVisible && isMobile ? 'hidden' : 'flex'} w-full md:w-[380px] lg:w-[420px] flex-col border-r border-white/5 bg-dark-card/80 z-20 h-full">
                     
                     <!-- Sidebar Header -->
@@ -171,13 +168,12 @@ const MessengerView = {
                     </div>
 
                     <!-- Chat List -->
-                    <div id="messenger-list" class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+                    <div id="messenger-list" class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1 ${!this.state.mobileChatVisible && isMobile ? 'pb-24' : ''}">
                     </div>
                 </div>
 
                 <!-- 2. RIGHT CHAT AREA -->
-                <!-- Mobile: Nimmt 100% Platz wenn sichtbar -->
-                <!-- WICHTIG: Flex-1 sorgt dafür, dass es den Platz im #content Container füllt -->
+                <!-- Auf Mobile: flex-1 füllt den restlichen Raum im #content Container -->
                 <div id="messenger-chat-area" class="${this.state.mobileChatVisible && isMobile ? 'flex slide-in-right' : 'hidden md:flex'} flex-col flex-1 bg-dark-bg relative w-full h-full overflow-hidden">
                     ${this.renderActiveChat(isMobile)}
                 </div>
@@ -397,10 +393,10 @@ const MessengerView = {
         }
 
         // HEADER
-        // WICHTIG: Flex-None sorgt dafür, dass er nicht schrumpft.
-        // padding-top 'safe' für Notches.
+        // WICHTIG: Kein fixed hier! Wir nutzen Flexbox.
+        // pt-[env(safe-area-inset-top)] ensures header respects notch
         const header = `
-            <div class="h-16 px-4 bg-dark-card/90 backdrop-blur-xl border-b border-white/5 flex items-center justify-between shadow-lg flex-none relative z-50 pt-[env(safe-area-inset-top)]">
+            <div class="h-16 px-4 bg-dark-card/90 backdrop-blur-xl border-b border-white/5 flex items-center justify-between shadow-lg shrink-0 z-30 pt-[env(safe-area-inset-top)] box-content">
                 <div class="flex items-center gap-3 overflow-hidden">
                     <button onclick="MessengerView.closeChat()" class="md:hidden w-8 h-8 flex items-center justify-center text-white/70 hover:text-white rounded-full hover:bg-white/10 -ml-2">
                         <i class="fa-solid fa-arrow-left"></i>
@@ -439,19 +435,20 @@ const MessengerView = {
                </div>`;
 
         // INPUT AREA
-        // WICHTIG: Flex-None sorgt dafür, dass er nicht schrumpft, sondern den darüberliegenden Content verkleinert.
-        const inputArea = canWrite ? this.renderInputArea() : `<div class="p-4 bg-dark-card/90 text-center text-dark-muted text-xs uppercase font-bold tracking-widest border-t border-white/5 flex-none safe-bottom">Nur Lesen</div>`;
+        // WICHTIG: shrink-0 verhindert, dass es kleiner wird.
+        const inputArea = canWrite ? this.renderInputArea() : `<div class="p-4 bg-dark-card/90 text-center text-dark-muted text-xs uppercase font-bold tracking-widest border-t border-white/5 shrink-0 safe-bottom">Nur Lesen</div>`;
 
         // FULL FLEX CONTAINER
-        // Hier ist der Trick: Flex-Column in voller Höhe.
-        // Wenn die Tastatur die Viewport-Höhe verkleinert, passt sich diese Flexbox an.
-        // Der mittlere Teil (msg-scroll-container) hat 'flex-1' und 'overflow-y-auto',
-        // er wird also kleiner, scrollt aber weiter. Header und Footer bleiben stehen.
+        // Hier passiert die Magie: Flex Column, H-Full.
+        // Wenn Keyboard kommt, schrumpft dieser Container.
+        // Header (oben) und Input (unten) haben feste/natürliche Größe.
+        // msg-scroll-container (mitte) hat flex-1 und overflow-y-auto -> er wird kleiner und scrollt.
         return `
             <div class="flex flex-col h-full w-full relative overflow-hidden">
                 ${header}
                 <div id="msg-scroll-container" class="flex-1 overflow-y-auto px-4 space-y-3 msg-bg-pattern chat-scroll pb-2">
                     ${msgsHtml}
+                    <div class="h-2"></div>
                 </div>
                 ${inputArea}
             </div>
@@ -461,11 +458,11 @@ const MessengerView = {
     renderInputArea() {
         const replyMsg = this.state.replyingTo ? this.findMessage(this.state.replyingTo) : null;
         
-        // Input ist flex-none (feste Größe bzw. Content-Größe), damit es nicht gequetscht wird
+        // Input ist jetzt Teil des Flex Flows (shrink-0)
         return `
-            <div class="p-3 md:p-4 bg-dark-card border-t border-white/5 flex-none safe-bottom z-30">
+            <div class="p-3 md:p-4 bg-dark-card border-t border-white/5 shrink-0 safe-bottom z-30">
                 
-                <!-- Helper Menus (Absolute, nach oben öffnend) -->
+                <!-- Helper Menus (Absolute, überlappend) -->
                 ${this.renderAttachMenu()}
 
                 <!-- Reply Preview -->
