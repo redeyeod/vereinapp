@@ -75,8 +75,10 @@ const MessengerView = {
             html.messenger-mode, body.messenger-mode {
                 overflow: hidden !important;
                 height: 100% !important;
+                height: 100dvh !important; /* Dynamic Viewport Height */
                 position: fixed !important; 
                 width: 100% !important;
+                overscroll-behavior: none; /* Prevent pull-to-refresh effects */
             }
 
             body.messenger-mode #main-header { display: none !important; }
@@ -89,6 +91,7 @@ const MessengerView = {
                 left: 0 !important;
                 right: 0 !important;
                 height: 100% !important;
+                height: 100dvh !important;
                 width: 100% !important;
                 overflow: hidden !important; 
                 z-index: 100 !important;
@@ -397,9 +400,15 @@ const MessengerView = {
             messages = messages.filter(m => m.text && m.text.toLowerCase().includes(this.state.chatFilterTerm));
         }
 
-        // HEADER (Fixed Position)
+        // HEADER (Fixed Position with explicit styling for Mobile)
+        // WICHTIG: fixed top-0 w-full sorgt dafür, dass der Header beim Scrollen oder Keyboard-Öffnen oben bleibt.
+        // Nur auf Mobile anwenden (via media query oder isMobile check, hier im Kontext des Flex layouts).
+        // Im 'messenger-mode' ist #content fixed, daher ist absolute top-0 relativ zum #content ausreichend.
+        // Wenn die Tastatur den Viewport verkleinert, bleibt top-0 oben.
+        const headerStyle = isMobile ? 'absolute top-0 left-0 right-0 z-50' : 'relative z-30';
+
         const header = `
-            <div class="h-16 px-4 bg-dark-card/90 backdrop-blur-xl border-b border-white/5 flex items-center justify-between shadow-lg z-30 shrink-0 relative">
+            <div class="${headerStyle} h-16 px-4 bg-dark-card/90 backdrop-blur-xl border-b border-white/5 flex items-center justify-between shadow-lg shrink-0">
                 <div class="flex items-center gap-3 overflow-hidden">
                     <button onclick="MessengerView.closeChat()" class="md:hidden w-8 h-8 flex items-center justify-center text-white/70 hover:text-white rounded-full hover:bg-white/10 -ml-2">
                         <i class="fa-solid fa-arrow-left"></i>
@@ -422,7 +431,7 @@ const MessengerView = {
                      </button>
                 </div>
                 ${this.state.showChatSearch ? `
-                <div class="absolute top-0 left-0 w-full h-16 bg-dark-card z-40 flex items-center px-4 animate-msg border-b border-white/5">
+                <div class="absolute top-0 left-0 w-full h-16 bg-dark-card z-50 flex items-center px-4 animate-msg border-b border-white/5">
                     <button onclick="MessengerView.toggleChatSearch()" class="mr-3 text-dark-muted hover:text-white"><i class="fa-solid fa-arrow-left"></i></button>
                     <input type="text" placeholder="In diesem Chat suchen..." value="${this.state.chatFilterTerm}" onkeyup="MessengerView.handleChatFilter(this.value)" class="flex-1 bg-transparent border-none text-white focus:outline-none placeholder-dark-muted" autoFocus>
                 </div>` : ''}
@@ -441,10 +450,11 @@ const MessengerView = {
         const inputArea = canWrite ? this.renderInputArea() : `<div class="p-4 bg-dark-card/90 text-center text-dark-muted text-xs uppercase font-bold tracking-widest border-t border-white/5 shrink-0">Nur Lesen</div>`;
 
         // FULL FLEX CONTAINER
+        // pt-16 für den fixierten Header
         return `
-            <div class="flex flex-col h-full w-full">
+            <div class="flex flex-col h-full w-full relative">
                 ${header}
-                <div id="msg-scroll-container" class="flex-1 overflow-y-auto px-4 py-4 space-y-3 msg-bg-pattern chat-scroll">
+                <div id="msg-scroll-container" class="flex-1 overflow-y-auto px-4 space-y-3 msg-bg-pattern chat-scroll pt-20 pb-4">
                     ${msgsHtml}
                     <div class="h-2"></div>
                 </div>
