@@ -168,16 +168,18 @@ const MembersView = {
         `;
 
         const footerHtml = canManage ? `
-            <div class="mt-8 pt-6 border-t border-dark-border flex gap-3">
+            <div class="mt-auto pt-6 border-t border-dark-border flex gap-3 flex-shrink-0">
                 <button onclick="MembersView.openEditModal('${m.id}')" class="btn-primary flex-1">Bearbeiten</button>
                 <button onclick="MembersView.delete('${m.id}'); App.closeModal()" class="flex-1 py-3 bg-dark-bg hover:bg-red-500/10 border border-dark-border hover:border-red-500/30 rounded-xl text-red-400 font-bold transition-all">Löschen</button>
             </div>
         ` : '';
 
+        // FIX: Flex-Layout für den Modal-Inhalt (Header oben, Content scrollbar, Footer unten)
         const html = `
-            <div class="p-6 md:p-8 relative">
+            <div class="p-6 md:p-8 flex flex-col h-full">
                 <!-- Header -->
-                <div class="text-center mb-6">
+                <div class="text-center mb-6 flex-shrink-0 relative">
+                    <button onclick="App.closeModal()" class="absolute top-0 right-0 w-8 h-8 flex items-center justify-center rounded-full bg-dark-bg text-dark-muted hover:text-white transition-colors"><i class="fa-solid fa-times"></i></button>
                     <div class="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-brand-500 to-indigo-600 flex items-center justify-center text-2xl font-bold text-white shadow-glow mb-4">
                         ${(m.firstName || '?').charAt(0)}${(m.lastName || '?').charAt(0)}
                     </div>
@@ -185,7 +187,8 @@ const MembersView = {
                     <p class="text-brand-500 font-bold text-sm mt-1 bg-brand-500/10 inline-block px-3 py-1 rounded-full border border-brand-500/20">${roleDisplay}</p>
                 </div>
 
-                <div class="space-y-4">
+                <!-- Scrollable Content -->
+                <div class="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-4">
                     <div class="bg-dark-bg/50 p-4 rounded-2xl border border-dark-border">
                         <h4 class="text-xs font-bold text-dark-muted uppercase tracking-wider mb-3">Kontakt</h4>
                         ${contactHtml}
@@ -199,16 +202,17 @@ const MembersView = {
                         <div class="flex flex-wrap gap-2">${groupsHtml}</div>
                     </div>
                 </div>
+                
                 ${footerHtml}
-                <button onclick="App.closeModal()" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-dark-bg text-dark-muted hover:text-white transition-colors"><i class="fa-solid fa-times"></i></button>
             </div>
         `;
         App.openModal(html);
         
+        // Modal Container anpassen
         const modalContainer = document.getElementById('modal-content');
         if(modalContainer) {
             modalContainer.classList.remove('max-w-md');
-            modalContainer.classList.add('max-w-4xl', 'w-full', 'max-h-[90vh]', 'overflow-y-auto', 'custom-scrollbar');
+            modalContainer.classList.add('max-w-4xl', 'w-full', 'h-[90vh]', 'max-h-[90vh]', 'flex', 'flex-col', 'overflow-hidden');
         }
     },
 
@@ -251,69 +255,77 @@ const MembersView = {
             `;
         }).join('');
 
+        // FIX: Layout mit festem Header und scrollbarem Content
         const html = `
-            <div class="p-6 md:p-8 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div class="flex justify-between items-center mb-6 border-b border-dark-border pb-4 sticky top-0 bg-dark-card z-10">
+            <div class="flex flex-col h-full max-h-full">
+                <!-- Fixed Header -->
+                <div class="flex justify-between items-center p-6 border-b border-dark-border bg-dark-card shrink-0 rounded-t-2xl z-10">
                     <h3 class="text-xl font-bold text-white">${title}</h3>
                     <button onclick="App.closeModal()" class="text-dark-muted hover:text-white p-2 transition-colors"><i class="fa-solid fa-times text-xl"></i></button>
                 </div>
-                <form onsubmit="${handler}" class="space-y-6">
-                    <!-- Names -->
-                    <div class="grid grid-cols-2 gap-4">
-                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Vorname *</label><input type="text" name="firstName" value="${data.firstName||''}" required class="form-input" placeholder="Max"></div>
-                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Nachname *</label><input type="text" name="lastName" value="${data.lastName||''}" required class="form-input" placeholder="Mustermann"></div>
-                    </div>
-                    
-                    <!-- Address -->
-                    <div>
-                        <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mb-3">Adresse</h4>
-                        <div class="grid grid-cols-3 gap-3 mb-3">
-                            <div class="col-span-2"><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Straße</label><input type="text" name="street" value="${data.street||''}" class="form-input"></div>
-                            <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Nr.</label><input type="text" name="houseNumber" value="${data.houseNumber||''}" class="form-input"></div>
+                
+                <!-- Scrollable Form -->
+                <div class="flex-1 overflow-y-auto custom-scrollbar p-6">
+                    <form onsubmit="${handler}" class="space-y-6">
+                        <!-- Names -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Vorname *</label><input type="text" name="firstName" value="${data.firstName||''}" required class="form-input" placeholder="Max"></div>
+                            <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Nachname *</label><input type="text" name="lastName" value="${data.lastName||''}" required class="form-input" placeholder="Mustermann"></div>
                         </div>
-                        <div class="grid grid-cols-3 gap-3">
-                            <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">PLZ</label><input type="text" name="zip" value="${data.zip||''}" class="form-input"></div>
-                            <div class="col-span-2"><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ort</label><input type="text" name="city" value="${data.city||''}" class="form-input"></div>
+                        
+                        <!-- Address -->
+                        <div>
+                            <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mb-3">Adresse</h4>
+                            <div class="grid grid-cols-3 gap-3 mb-3">
+                                <div class="col-span-2"><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Straße</label><input type="text" name="street" value="${data.street||''}" class="form-input"></div>
+                                <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Nr.</label><input type="text" name="houseNumber" value="${data.houseNumber||''}" class="form-input"></div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-3">
+                                <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">PLZ</label><input type="text" name="zip" value="${data.zip||''}" class="form-input"></div>
+                                <div class="col-span-2"><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Ort</label><input type="text" name="city" value="${data.city||''}" class="form-input"></div>
+                            </div>
                         </div>
-                    </div>
 
-                    <!-- Contact -->
-                    <div>
-                        <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mb-3">Kontakt</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-                            <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Email (Login) *</label><input type="email" name="email" value="${data.email||''}" required class="form-input"></div>
-                            <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Telefon</label><input type="tel" name="phone" value="${data.phone||''}" class="form-input"></div>
+                        <!-- Contact -->
+                        <div>
+                            <h4 class="text-xs font-bold text-white uppercase tracking-wider border-b border-dark-border pb-1 mb-3">Kontakt</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                                <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Email (Login) *</label><input type="email" name="email" value="${data.email||''}" required class="form-input"></div>
+                                <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Telefon</label><input type="tel" name="phone" value="${data.phone||''}" class="form-input"></div>
+                            </div>
+                            <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Geburtsdatum</label><input type="date" name="birthdate" value="${data.birthdate||''}" class="form-input dark-date"></div>
                         </div>
-                        <div><label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Geburtsdatum</label><input type="date" name="birthdate" value="${data.birthdate||''}" class="form-input dark-date"></div>
-                    </div>
 
-                    <!-- Role & Status -->
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-2 block">Rollen (Rechte)</label>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto custom-scrollbar bg-dark-bg/30 p-2 rounded-xl border border-dark-border">
-                            ${roleCheckboxes}
+                        <!-- Role & Status -->
+                        <div>
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-2 block">Rollen (Rechte)</label>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto custom-scrollbar bg-dark-bg/30 p-2 rounded-xl border border-dark-border">
+                                ${roleCheckboxes}
+                            </div>
+                            <p class="text-[10px] text-dark-muted mt-2">Mehrfachauswahl möglich.</p>
                         </div>
-                        <p class="text-[10px] text-dark-muted mt-2">Mehrfachauswahl möglich.</p>
-                    </div>
-                    
-                    ${isEdit ? `
-                    <div>
-                        <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Status</label>
-                        <select name="status" class="form-input cursor-pointer">
-                            <option value="active" ${data.status === 'active' ? 'selected' : ''}>Aktiv</option>
-                            <option value="inactive" ${data.status === 'inactive' ? 'selected' : ''}>Inaktiv</option>
-                        </select>
-                    </div>` : ''}
-                    
-                    ${!isEdit ? `<div class="bg-blue-500/10 p-4 rounded-xl text-xs text-blue-300 border border-blue-500/20 flex gap-3 items-start"><i class="fa-solid fa-key mt-0.5 text-blue-400"></i> Ein sicheres Passwort wird automatisch generiert und im nächsten Schritt angezeigt.</div>` : ''}
-                    
-                    <button type="submit" class="btn-primary w-full mt-4 shadow-lg shadow-brand-500/20">${btnText}</button>
-                </form>
+                        
+                        ${isEdit ? `
+                        <div>
+                            <label class="text-xs font-bold text-dark-muted uppercase mb-1 block">Status</label>
+                            <select name="status" class="form-input cursor-pointer">
+                                <option value="active" ${data.status === 'active' ? 'selected' : ''}>Aktiv</option>
+                                <option value="inactive" ${data.status === 'inactive' ? 'selected' : ''}>Inaktiv</option>
+                            </select>
+                        </div>` : ''}
+                        
+                        ${!isEdit ? `<div class="bg-blue-500/10 p-4 rounded-xl text-xs text-blue-300 border border-blue-500/20 flex gap-3 items-start"><i class="fa-solid fa-key mt-0.5 text-blue-400"></i> Ein sicheres Passwort wird automatisch generiert und im nächsten Schritt angezeigt.</div>` : ''}
+                        
+                        <div class="pt-4 border-t border-dark-border">
+                            <button type="submit" class="btn-primary w-full shadow-lg shadow-brand-500/20 py-3">${btnText}</button>
+                        </div>
+                    </form>
+                </div>
             </div>
         `;
         App.openModal(html);
         const modalContainer = document.getElementById('modal-content');
-        if(modalContainer) modalContainer.classList.add('max-h-[90vh]', 'overflow-y-auto', 'custom-scrollbar');
+        if(modalContainer) modalContainer.classList.add('max-h-[90vh]', 'flex', 'flex-col', 'overflow-hidden');
     },
 
     getSelectedRoles(form) {
