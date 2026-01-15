@@ -139,8 +139,19 @@ const ProfileView = {
     openCredentialsModal() {
         const currentUserId = localStorage.getItem('vm_current_user_id');
         const members = (typeof Store !== 'undefined' && Store.state && Store.state.members) ? Store.state.members : [];
-        const user = members.find(m => m.id == currentUserId);
-        if(!user) return;
+        
+        let user = members.find(m => m.id == currentUserId);
+        
+        // FALLBACK: Wenn User nicht in der Liste (z.B. System Admin), versuche App State
+        if (!user && typeof App !== 'undefined' && App.state.currentUser && App.state.currentUser.id == currentUserId) {
+             user = App.state.currentUser;
+        }
+
+        if(!user) {
+             console.warn("Profil-Fehler: User ID nicht gefunden", currentUserId);
+             if(typeof App !== 'undefined') App.showToast("Benutzerprofil nicht gefunden. Bitte neu laden.", "error");
+             return;
+        }
 
         const html = `
             <div class="p-6 md:p-8">
@@ -189,9 +200,16 @@ const ProfileView = {
         
         const currentUserId = localStorage.getItem('vm_current_user_id');
         const members = (typeof Store !== 'undefined' && Store.state && Store.state.members) ? Store.state.members : [];
-        const user = members.find(m => m.id == currentUserId);
+        let user = members.find(m => m.id == currentUserId);
         
-        if (!user) return;
+        if (!user && typeof App !== 'undefined' && App.state.currentUser && App.state.currentUser.id == currentUserId) {
+             user = App.state.currentUser;
+        }
+        
+        if (!user) {
+            App.showToast("Fehler: Benutzer nicht gefunden.", "error");
+            return;
+        }
 
         const btn = e.target.querySelector('button[type="submit"]');
         const originalText = btn.innerText;
@@ -235,7 +253,6 @@ const ProfileView = {
                 
                 if (sessionError) {
                     console.warn("Session Refresh Error:", sessionError);
-                    // Wir versuchen es trotzdem weiter, vielleicht ist der Token noch gültig
                 }
 
                 // Jetzt updateUser aufrufen - das geht an auth.users
@@ -265,13 +282,8 @@ const ProfileView = {
                 // Fallback ohne Supabase (nur lokal / Demo Mode)
                 if (emailChanged) user.email = newEmail;
                 
-                // Wir simulieren das Update im Store (ohne ID Konflikt, da wir die Referenz ändern)
-                if(Store.update) {
-                    // Store update erwartet oft das ganze Objekt, aber wir haben es ja referenziert
-                    // Hier machen wir nichts weiter, da user.email schon gesetzt ist und Store.state.members das Objekt hält.
-                    // Nur Persistenz triggern falls nötig.
-                }
-                
+                // Wir simulieren das Update im Store (ohne ID Konflikt)
+                // Hier machen wir nichts weiter, da user.email schon gesetzt ist und Store.state.members das Objekt hält.
                 App.showToast('Lokal aktualisiert (Kein Backend)');
             }
             
