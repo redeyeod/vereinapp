@@ -325,7 +325,11 @@ const MembersView = {
         `;
         App.openModal(html);
         const modalContainer = document.getElementById('modal-content');
-        if(modalContainer) modalContainer.classList.add('max-h-[90vh]', 'flex', 'flex-col', 'overflow-hidden');
+        // WICHTIG: Flexbox-Klassen und Höhe für den Container setzen
+        if(modalContainer) {
+            modalContainer.classList.remove('max-w-md'); // Remove standard width constraint if present
+            modalContainer.classList.add('w-full', 'max-w-2xl', 'h-[90vh]', 'flex', 'flex-col', 'overflow-hidden');
+        }
     },
 
     getSelectedRoles(form) {
