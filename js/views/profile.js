@@ -219,6 +219,7 @@ const ProfileView = {
         btn.disabled = true;
 
         try {
+            // Objekt für Auth Update vorbereiten
             const updates = {};
             let emailChanged = false;
 
@@ -237,23 +238,24 @@ const ProfileView = {
                 return;
             }
 
-            // 1. Supabase Auth Update
+            // 1. Supabase Auth Update durchführen
             if (typeof supabase !== 'undefined') {
                 const sessionStr = localStorage.getItem('vm_supabase_session');
-                if (!sessionStr) throw new Error("Sitzung abgelaufen. Bitte neu einloggen.");
+                
+                if (!sessionStr) throw new Error("Keine aktive Sitzung. Bitte neu einloggen.");
                 const session = JSON.parse(sessionStr);
 
+                // WICHTIG: Client erstellen und Session explizit setzen!
                 const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
                 
-                // Session erneuern/setzen für Auth-Kontext
                 const { error: sessionError } = await client.auth.setSession({
                     access_token: session.access_token,
                     refresh_token: session.refresh_token
                 });
                 if (sessionError) console.warn("Session Refresh Warning:", sessionError);
 
-                // Auth Update
-                const { data, error } = await client.auth.updateUser(updates);
+                // Auth Update - Jetzt mit Redirect URL, damit der User nach Klick wieder in der App landet
+                const { data, error } = await client.auth.updateUser(updates, { emailRedirectTo: window.location.href });
                 if (error) throw error;
 
                 // 2. Mitglieder-Tabelle updaten (NUR E-Mail, und KEINE ID mitsenden)
@@ -261,11 +263,11 @@ const ProfileView = {
                     const { error: dbError } = await client.from('members').update({ email: newEmail }).eq('id', currentUserId);
                     if (dbError) throw dbError;
                     
-                    // Lokal: Nur E-Mail setzen, nicht das ganze Objekt neu laden
+                    // Lokalen User aktualisieren
                     user.email = newEmail;
                     
-                    // Store aktualisieren (Laden erzwingen)
-                    if (Store.fetchTable) await Store.fetchTable('members');
+                    // Trigger refresh
+                    if (Store.fetchTable) Store.fetchTable('members');
                 }
 
                 if (emailChanged) {
@@ -292,7 +294,13 @@ const ProfileView = {
 
         } catch (err) {
             console.error(err);
-            App.showToast("Fehler: " + err.message, "error");
+            
+            // Spezifische Fehlerbehandlung für den falschen ID-Typ in der Datenbank
+            if (err.message && err.message.includes("invalid input syntax for type bigint")) {
+                alert("Datenbank-Fehler:\n\nDie Tabelle 'members' verwendet 'bigint' (Zahlen) für die Spalte 'id', aber das System verwendet UUIDs.\n\nBitte führe in Supabase folgenden SQL-Befehl aus:\nALTER TABLE members ALTER COLUMN id TYPE text;");
+            } else {
+                App.showToast("Fehler: " + err.message, "error");
+            }
         } finally {
             if(btn) {
                 btn.innerText = originalText;
