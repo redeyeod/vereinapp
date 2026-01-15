@@ -115,7 +115,7 @@ const ProfileView = {
                     <div class="bg-dark-card rounded-2xl border border-dark-border p-5 md:p-6 shadow-sm md:col-span-2 flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div>
                             <p class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-layer-group text-brand-500"></i> VereinsManager App</p>
-                            <p class="text-xs text-dark-muted mt-1">Version 2.1.0 • Authenticated</p>
+                            <p class="text-xs text-dark-muted mt-1">Version 2.2.0 • Authenticated</p>
                         </div>
                         <button onclick="if(confirm('Wirklich alle lokalen Daten löschen?')) { localStorage.clear(); location.reload(); }" class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3 py-2 rounded-lg transition-colors flex items-center gap-2 border border-transparent hover:border-red-500/20">
                             <i class="fa-solid fa-trash-can"></i> App zurücksetzen & Cache leeren
@@ -140,16 +140,17 @@ const ProfileView = {
         const currentUserId = localStorage.getItem('vm_current_user_id');
         const members = (typeof Store !== 'undefined' && Store.state && Store.state.members) ? Store.state.members : [];
         
+        // Versuche User in der Liste zu finden
         let user = members.find(m => m.id == currentUserId);
         
-        // FALLBACK: Wenn User nicht in der Liste (z.B. System Admin), versuche App State
+        // FALLBACK: Wenn User nicht in der Liste (z.B. System Admin oder spezielle ID), versuche App State
         if (!user && typeof App !== 'undefined' && App.state.currentUser && App.state.currentUser.id == currentUserId) {
              user = App.state.currentUser;
         }
 
         if(!user) {
              console.warn("Profil-Fehler: User ID nicht gefunden", currentUserId);
-             if(typeof App !== 'undefined') App.showToast("Benutzerprofil nicht gefunden. Bitte neu laden.", "error");
+             if(typeof App !== 'undefined') App.showToast("Benutzerprofil nicht geladen. Bitte Seite aktualisieren.", "error");
              return;
         }
 
@@ -202,12 +203,13 @@ const ProfileView = {
         const members = (typeof Store !== 'undefined' && Store.state && Store.state.members) ? Store.state.members : [];
         let user = members.find(m => m.id == currentUserId);
         
+        // Fallback für den User-Objekt (falls nicht in Liste)
         if (!user && typeof App !== 'undefined' && App.state.currentUser && App.state.currentUser.id == currentUserId) {
              user = App.state.currentUser;
         }
-        
+
         if (!user) {
-            App.showToast("Fehler: Benutzer nicht gefunden.", "error");
+            App.showToast("Fehler: Benutzerkontext verloren.", "error");
             return;
         }
 
@@ -217,7 +219,6 @@ const ProfileView = {
         btn.disabled = true;
 
         try {
-            // Objekt für Auth Update vorbereiten
             const updates = {};
             let emailChanged = false;
 
@@ -236,54 +237,53 @@ const ProfileView = {
                 return;
             }
 
-            // 1. Supabase Auth Update durchführen
+            // 1. Supabase Auth Update
             if (typeof supabase !== 'undefined') {
                 const sessionStr = localStorage.getItem('vm_supabase_session');
-                
-                if (!sessionStr) throw new Error("Keine aktive Sitzung. Bitte neu einloggen.");
+                if (!sessionStr) throw new Error("Sitzung abgelaufen. Bitte neu einloggen.");
                 const session = JSON.parse(sessionStr);
 
-                // WICHTIG: Client erstellen und Session explizit setzen!
                 const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
                 
+                // Session erneuern/setzen für Auth-Kontext
                 const { error: sessionError } = await client.auth.setSession({
                     access_token: session.access_token,
                     refresh_token: session.refresh_token
                 });
-                
-                if (sessionError) {
-                    console.warn("Session Refresh Error:", sessionError);
-                }
+                if (sessionError) console.warn("Session Refresh Warning:", sessionError);
 
-                // Jetzt updateUser aufrufen - das geht an auth.users
+                // Auth Update
                 const { data, error } = await client.auth.updateUser(updates);
-
                 if (error) throw error;
 
-                // 2. Wenn Email geändert wurde, auch in der Mitglieder-Tabelle updaten (für die Anzeige)
+                // 2. Mitglieder-Tabelle updaten (NUR E-Mail, und KEINE ID mitsenden)
                 if (emailChanged) {
                     const { error: dbError } = await client.from('members').update({ email: newEmail }).eq('id', currentUserId);
                     if (dbError) throw dbError;
                     
-                    // Lokalen User aktualisieren
+                    // Lokal: Nur E-Mail setzen, nicht das ganze Objekt neu laden
                     user.email = newEmail;
                     
-                    // Trigger refresh
-                    if (Store.fetchTable) Store.fetchTable('members');
+                    // Store aktualisieren (Laden erzwingen)
+                    if (Store.fetchTable) await Store.fetchTable('members');
                 }
 
                 if (emailChanged) {
-                    alert(`Bestätigungs-Email gesendet an: ${newEmail}\n\nBitte klicken Sie den Link in der E-Mail an, um die Änderung abzuschließen. Bis dahin gilt für den Login weiterhin die alte E-Mail.`);
+                    alert(`Bestätigungs-Email gesendet an: ${newEmail}\n\nBitte klicken Sie den Link in der E-Mail an, um die Änderung abzuschließen.`);
                 } else {
                     App.showToast('Zugangsdaten erfolgreich aktualisiert');
                 }
 
             } else {
-                // Fallback ohne Supabase (nur lokal / Demo Mode)
+                // Lokaler Fallback
                 if (emailChanged) user.email = newEmail;
-                
-                // Wir simulieren das Update im Store (ohne ID Konflikt)
-                // Hier machen wir nichts weiter, da user.email schon gesetzt ist und Store.state.members das Objekt hält.
+                // Simuliertes Update im Store
+                if(Store.update) {
+                    // Wir rufen Store.update NICHT auf, wenn es ein Supabase-Backend gibt, um ID-Konflikte zu vermeiden.
+                    // Nur im reinen LocalStorage-Modus machen wir das.
+                    // Da wir hier im 'else' Block sind (kein Supabase), ist das OK.
+                    await Store.update('members', user);
+                }
                 App.showToast('Lokal aktualisiert (Kein Backend)');
             }
             
@@ -294,8 +294,10 @@ const ProfileView = {
             console.error(err);
             App.showToast("Fehler: " + err.message, "error");
         } finally {
-            btn.innerText = originalText;
-            btn.disabled = false;
+            if(btn) {
+                btn.innerText = originalText;
+                btn.disabled = false;
+            }
         }
     },
 
