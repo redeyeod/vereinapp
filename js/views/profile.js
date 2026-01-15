@@ -115,7 +115,7 @@ const ProfileView = {
                     <div class="bg-dark-card rounded-2xl border border-dark-border p-5 md:p-6 shadow-sm md:col-span-2 flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div>
                             <p class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-layer-group text-brand-500"></i> VereinsManager App</p>
-                            <p class="text-xs text-dark-muted mt-1">Version 2.0.0 • Clean Edition</p>
+                            <p class="text-xs text-dark-muted mt-1">Version 2.1.0 • Authenticated</p>
                         </div>
                         <button onclick="if(confirm('Wirklich alle lokalen Daten löschen?')) { localStorage.clear(); location.reload(); }" class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3 py-2 rounded-lg transition-colors flex items-center gap-2 border border-transparent hover:border-red-500/20">
                             <i class="fa-solid fa-trash-can"></i> App zurücksetzen & Cache leeren
@@ -151,18 +151,19 @@ const ProfileView = {
                 
                 <form onsubmit="ProfileView.handleCredentialsUpdate(event)" class="space-y-5">
                     <div>
-                        <label class="block text-xs font-bold text-dark-muted uppercase mb-2">E-Mail Adresse</label>
+                        <label class="block text-xs font-bold text-dark-muted uppercase mb-2">Neue E-Mail Adresse</label>
                         <input type="email" name="email" value="${user.email || ''}" required class="form-input">
                     </div>
                     
                     <div>
                         <label class="block text-xs font-bold text-dark-muted uppercase mb-2">Neues Passwort</label>
                         <input type="password" name="password" placeholder="Leer lassen zum Beibehalten" class="form-input">
+                        <p class="text-[10px] text-dark-muted mt-1">Mindestens 6 Zeichen.</p>
                     </div>
 
                     <div class="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex gap-3 items-start">
                         <i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5 text-sm"></i>
-                        <p class="text-xs text-amber-500/90 leading-relaxed">Achtung: Nach dem Ändern müssen Sie sich beim nächsten Mal mit den neuen Daten anmelden.</p>
+                        <p class="text-xs text-amber-500/90 leading-relaxed">Achtung: Bei Änderung der E-Mail müssen Sie diese ggf. erneut bestätigen. Beim nächsten Login gelten die neuen Daten.</p>
                     </div>
                     
                     <button type="submit" class="btn-primary w-full mt-2 shadow-lg shadow-brand-500/20">
@@ -187,18 +188,78 @@ const ProfileView = {
         const members = (typeof Store !== 'undefined' && Store.state && Store.state.members) ? Store.state.members : [];
         const user = members.find(m => m.id == currentUserId);
         
-        if(user) {
-            const updatedUser = { ...user, email: newEmail };
-            // Passwort-Update Logik müsste in Supabase eigentlich über auth.updateUser laufen, 
-            // hier aktualisieren wir der Vollständigkeit halber das Profil-Objekt.
-            if(newPass && newPass.trim() !== "") {
-                updatedUser.password = newPass;
+        if (!user) return;
+
+        const btn = e.target.querySelector('button[type="submit"]');
+        const originalText = btn.innerText;
+        btn.innerText = "Speichere...";
+        btn.disabled = true;
+
+        try {
+            // Objekt für Auth Update vorbereiten
+            const updates = {};
+            let emailChanged = false;
+
+            if (newEmail && newEmail !== user.email) {
+                updates.email = newEmail;
+                emailChanged = true;
+            }
+            if (newPass && newPass.trim() !== "") {
+                if (newPass.length < 6) throw new Error("Passwort muss mindestens 6 Zeichen lang sein.");
+                updates.password = newPass;
+            }
+
+            if (Object.keys(updates).length === 0) {
+                App.showToast('Keine Änderungen vorgenommen.');
+                App.closeModal();
+                return;
+            }
+
+            // 1. Supabase Auth Update durchführen
+            if (typeof supabase !== 'undefined') {
+                const sessionStr = localStorage.getItem('vm_supabase_session');
+                const headers = {};
+                if (sessionStr) { 
+                    const session = JSON.parse(sessionStr); 
+                    if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`; 
+                }
+                const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, { global: { headers } });
+
+                const { data, error } = await client.auth.updateUser(updates);
+
+                if (error) throw error;
+
+                // 2. Wenn Email geändert wurde, auch in der Mitglieder-Tabelle updaten
+                if (emailChanged) {
+                    const { error: dbError } = await client.from('members').update({ email: newEmail }).eq('id', currentUserId);
+                    if (dbError) throw dbError;
+                    
+                    // Lokalen Store aktualisieren
+                    user.email = newEmail;
+                    if(Store.update) Store.update('members', user);
+                }
+
+                App.showToast('Zugangsdaten erfolgreich aktualisiert');
+                if (emailChanged) App.showToast('Bitte bestätige ggf. die neue E-Mail.', 'info');
+
+            } else {
+                // Fallback ohne Supabase (nur lokal)
+                if (emailChanged) user.email = newEmail;
+                if (updates.password) user.password = updates.password; // Mock
+                
+                await Store.update('members', user);
+                App.showToast('Lokal aktualisiert (Kein Backend)');
             }
             
-            await Store.update('members', updatedUser);
             App.closeModal();
-            App.showToast('Zugangsdaten erfolgreich aktualisiert');
             this.render(document.getElementById('content'));
+
+        } catch (err) {
+            console.error(err);
+            App.showToast("Fehler: " + err.message, "error");
+        } finally {
+            btn.innerText = originalText;
+            btn.disabled = false;
         }
     },
 
