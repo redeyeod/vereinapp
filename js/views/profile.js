@@ -163,7 +163,10 @@ const ProfileView = {
 
                     <div class="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex gap-3 items-start">
                         <i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5 text-sm"></i>
-                        <p class="text-xs text-amber-500/90 leading-relaxed">Achtung: Bei Änderung der E-Mail müssen Sie diese ggf. erneut bestätigen. Beim nächsten Login gelten die neuen Daten.</p>
+                        <p class="text-xs text-amber-500/90 leading-relaxed">
+                            <strong>Wichtig:</strong> Wenn Sie die E-Mail-Adresse ändern, sendet das System eine Bestätigungs-Mail an die <em>neue</em> Adresse. 
+                            Die Änderung wird erst wirksam (Login möglich), nachdem Sie den Link in dieser E-Mail angeklickt haben.
+                        </p>
                     </div>
                     
                     <button type="submit" class="btn-primary w-full mt-2 shadow-lg shadow-brand-500/20">
@@ -218,38 +221,57 @@ const ProfileView = {
             // 1. Supabase Auth Update durchführen
             if (typeof supabase !== 'undefined') {
                 const sessionStr = localStorage.getItem('vm_supabase_session');
-                const headers = {};
-                if (sessionStr) { 
-                    const session = JSON.parse(sessionStr); 
-                    if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`; 
-                }
-                const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, { global: { headers } });
+                
+                if (!sessionStr) throw new Error("Keine aktive Sitzung. Bitte neu einloggen.");
+                const session = JSON.parse(sessionStr);
 
+                // WICHTIG: Client erstellen und Session explizit setzen!
+                const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+                
+                const { error: sessionError } = await client.auth.setSession({
+                    access_token: session.access_token,
+                    refresh_token: session.refresh_token
+                });
+                
+                if (sessionError) {
+                    console.warn("Session Refresh Error:", sessionError);
+                    // Wir versuchen es trotzdem weiter, vielleicht ist der Token noch gültig
+                }
+
+                // Jetzt updateUser aufrufen - das geht an auth.users
                 const { data, error } = await client.auth.updateUser(updates);
 
                 if (error) throw error;
 
-                // 2. Wenn Email geändert wurde, auch in der Mitglieder-Tabelle updaten
+                // 2. Wenn Email geändert wurde, auch in der Mitglieder-Tabelle updaten (für die Anzeige)
                 if (emailChanged) {
                     const { error: dbError } = await client.from('members').update({ email: newEmail }).eq('id', currentUserId);
                     if (dbError) throw dbError;
                     
-                    // Lokalen Store aktualisieren (Reference Update)
+                    // Lokalen User aktualisieren
                     user.email = newEmail;
                     
-                    // Trigger refresh to be safe
+                    // Trigger refresh
                     if (Store.fetchTable) Store.fetchTable('members');
                 }
 
-                App.showToast('Zugangsdaten erfolgreich aktualisiert');
-                if (emailChanged) App.showToast('Bitte bestätige ggf. die neue E-Mail.', 'info');
+                if (emailChanged) {
+                    alert(`Bestätigungs-Email gesendet an: ${newEmail}\n\nBitte klicken Sie den Link in der E-Mail an, um die Änderung abzuschließen. Bis dahin gilt für den Login weiterhin die alte E-Mail.`);
+                } else {
+                    App.showToast('Zugangsdaten erfolgreich aktualisiert');
+                }
 
             } else {
-                // Fallback ohne Supabase (nur lokal)
+                // Fallback ohne Supabase (nur lokal / Demo Mode)
                 if (emailChanged) user.email = newEmail;
-                if (updates.password) user.password = updates.password; // Mock
                 
-                await Store.update('members', user);
+                // Wir simulieren das Update im Store (ohne ID Konflikt, da wir die Referenz ändern)
+                if(Store.update) {
+                    // Store update erwartet oft das ganze Objekt, aber wir haben es ja referenziert
+                    // Hier machen wir nichts weiter, da user.email schon gesetzt ist und Store.state.members das Objekt hält.
+                    // Nur Persistenz triggern falls nötig.
+                }
+                
                 App.showToast('Lokal aktualisiert (Kein Backend)');
             }
             
