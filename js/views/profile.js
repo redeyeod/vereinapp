@@ -234,9 +234,11 @@ const ProfileView = {
                     const { error: dbError } = await client.from('members').update({ email: newEmail }).eq('id', currentUserId);
                     if (dbError) throw dbError;
                     
-                    // Lokalen Store aktualisieren
+                    // Lokalen Store aktualisieren (Reference Update)
                     user.email = newEmail;
-                    if(Store.update) Store.update('members', user);
+                    
+                    // Trigger refresh to be safe
+                    if (Store.fetchTable) Store.fetchTable('members');
                 }
 
                 App.showToast('Zugangsdaten erfolgreich aktualisiert');
