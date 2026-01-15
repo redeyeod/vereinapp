@@ -115,7 +115,7 @@ const ProfileView = {
                     <div class="bg-dark-card rounded-2xl border border-dark-border p-5 md:p-6 shadow-sm md:col-span-2 flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div>
                             <p class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-layer-group text-brand-500"></i> VereinsManager App</p>
-                            <p class="text-xs text-dark-muted mt-1">Version 2.2.0 • Authenticated</p>
+                            <p class="text-xs text-dark-muted mt-1">Version 2.3.0 • Authenticated</p>
                         </div>
                         <button onclick="if(confirm('Wirklich alle lokalen Daten löschen?')) { localStorage.clear(); location.reload(); }" class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3 py-2 rounded-lg transition-colors flex items-center gap-2 border border-transparent hover:border-red-500/20">
                             <i class="fa-solid fa-trash-can"></i> App zurücksetzen & Cache leeren
@@ -258,16 +258,21 @@ const ProfileView = {
                 const { data, error } = await client.auth.updateUser(updates, { emailRedirectTo: window.location.href });
                 if (error) throw error;
 
-                // 2. Mitglieder-Tabelle updaten (NUR E-Mail, und KEINE ID mitsenden)
+                // 2. Wenn Email geändert wurde, auch in der Mitglieder-Tabelle updaten (für die Anzeige)
                 if (emailChanged) {
+                    // WICHTIG: Manuelles Update der Mitglieder-Tabelle ohne Store.update, um ID-Konflikte zu vermeiden
                     const { error: dbError } = await client.from('members').update({ email: newEmail }).eq('id', currentUserId);
-                    if (dbError) throw dbError;
                     
-                    // Lokalen User aktualisieren
+                    if (dbError) {
+                        console.error("Fehler beim DB-Update der Email:", dbError);
+                        throw dbError;
+                    }
+                    
+                    // Lokalen User aktualisieren (damit es sofort in der UI sichtbar ist)
                     user.email = newEmail;
                     
-                    // Trigger refresh
-                    if (Store.fetchTable) Store.fetchTable('members');
+                    // Trigger refresh (Daten neu vom Server laden)
+                    if (Store.fetchTable) await Store.fetchTable('members');
                 }
 
                 if (emailChanged) {
@@ -277,13 +282,10 @@ const ProfileView = {
                 }
 
             } else {
-                // Lokaler Fallback
+                // Lokaler Fallback (ohne Supabase)
                 if (emailChanged) user.email = newEmail;
                 // Simuliertes Update im Store
                 if(Store.update) {
-                    // Wir rufen Store.update NICHT auf, wenn es ein Supabase-Backend gibt, um ID-Konflikte zu vermeiden.
-                    // Nur im reinen LocalStorage-Modus machen wir das.
-                    // Da wir hier im 'else' Block sind (kein Supabase), ist das OK.
                     await Store.update('members', user);
                 }
                 App.showToast('Lokal aktualisiert (Kein Backend)');
